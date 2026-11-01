@@ -1,5 +1,5 @@
 /* Correspondance — service worker : appli hors cache réseau + cache des photos aériennes */
-const APP = 'corr-app-v3';
+const APP = 'corr-app-v4';
 const TILES = 'corr-tiles-v1';
 const MAX_TILES = 3000;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
@@ -34,9 +34,10 @@ self.addEventListener('fetch', (e) => {
     }));
     return;
   }
-  // appli : réseau d'abord (mises à jour), cache en secours
+  // appli : toujours la version en ligne la plus récente (sans cache HTTP), cache en secours hors connexion
   if (url.origin === location.origin || url.hostname === 'cdnjs.cloudflare.com' || url.hostname.endsWith('gstatic.com') || url.hostname === 'fonts.googleapis.com') {
-    e.respondWith(fetch(req).then((res) => {
+    const fresh = url.origin === location.origin ? fetch(req, { cache: 'no-store' }) : fetch(req);
+    e.respondWith(fresh.then((res) => {
       if (res.ok || res.type === 'opaque') { const cl = res.clone(); caches.open(APP).then((c) => c.put(req, cl)); }
       return res;
     }).catch(() => caches.match(req).then((r) => r || caches.match('./index.html'))));

@@ -3105,7 +3105,7 @@ const SHEETS = {
       ${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
-      ${section('Données')}<p class="sub">Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
+      ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
     };
   },
 };
@@ -3318,6 +3318,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
+const APP_VERSION = '1.2.1';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -3472,7 +3473,7 @@ const StartScreen = {
           <button class="btn ${lm ? '' : 'primary'} big" data-act="stNew">Nouvelle partie</button>
           ${slots.some((s) => s.meta) ? '<button class="btn big" data-act="stLoad">Charger une partie</button>' : ''}
         </div>
-        <p class="credits">Photos et données IGN (BD TOPO) · Signalisation © OpenStreetMap · Connexion internet requise</p>`;
+        <p class="credits">Version ${APP_VERSION} · Photos et données IGN (BD TOPO) · Signalisation © OpenStreetMap · Connexion internet requise</p>`;
     } else if (view === 'new') {
       if (!this.slot || slots[this.slot - 1].meta) { const free = slots.find((s) => !s.meta); this.slot = free ? free.n : this.slot || 1; }
       box.innerHTML = `<div class="plate big">Nouvelle partie</div>
@@ -3693,7 +3694,21 @@ function boot() {
   UI.showStart();
   document.addEventListener('visibilitychange', () => { if (document.hidden && G.ready) Save.auto(); });
   window.addEventListener('pagehide', () => { if (G.ready) Save.auto(); });
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    // mise à jour automatique : on vérifie à chaque ouverture et on recharge quand une nouvelle version prend la main
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      if (G.ready) Save.auto();
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+      reg.update().catch(() => { });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => { }); });
+    }).catch(() => { });
+  }
   requestAnimationFrame(frame);
 }
 document.addEventListener('DOMContentLoaded', boot);

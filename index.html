@@ -1,0 +1,3124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Correspondance</title>
+<meta name="description" content="Jeu de gestion de transports sur la vraie carte de France">
+<meta name="theme-color" content="#13294F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* Signalétique de métro : plaques émaillées bleu nuit, lettrage condensé blanc cassé, jaune ligne 1 pour l'action */
+:root{
+  --enamel:#13294F; --enamel-2:#1B3666; --enamel-3:#274677; --ink:#0B1834;
+  --paper:#F5F2E9; --muted:#A7B5D1; --line:rgba(245,242,233,.16);
+  --yellow:#FFCD00; --ok:#3DDC84; --warn:#FFB020; --bad:#F0483E;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow Semi Condensed","Segoe UI",Roboto,Arial,sans-serif;
+  --r:6px; --nav-h:58px;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--ink);color:var(--paper);font:15px/1.35 var(--f-body);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+[hidden]{display:none!important}
+.ic{width:22px;height:22px;flex:none}
+small{font-size:12.5px;color:var(--muted)}
+.neg{color:var(--bad)!important}.pos{color:var(--ok)!important}
+
+/* pictogrammes et badges */
+.pict{display:inline-grid;place-items:center;flex:none;font:700 13px/1 var(--f-display);color:var(--enamel);background:var(--paper);height:24px;min-width:24px;border-radius:5px;padding:0 4px;letter-spacing:.02em}
+.pict-metro{border-radius:50%;width:24px;padding:0;font-size:16px}
+.pict-boat{border-radius:50%;width:24px;padding:0;font-size:17px}
+.pict-ter{font-size:11.5px}
+.pict-bus{font-size:11px}
+.lbadge{display:inline-grid;place-items:center;flex:none;font:700 15px/1 var(--f-display);height:26px;min-width:26px;padding:0 6px;border-radius:5px;margin-left:4px;box-shadow:0 0 0 1.5px rgba(245,242,233,.7)}
+.lb-metro{border-radius:50%;width:26px;padding:0}
+.plate{display:inline-flex;align-items:center;gap:8px;background:var(--enamel);color:var(--paper);font:600 17px/1.1 var(--f-display);padding:6px 12px;border-radius:4px;box-shadow:inset 0 0 0 2px var(--enamel),inset 0 0 0 3.5px rgba(245,242,233,.85);text-wrap:balance}
+.plate.big{font-size:21px;padding:9px 14px;margin-bottom:6px}
+.plate .ic{width:20px;height:20px}
+
+/* écran d'accueil */
+#start{position:fixed;inset:0;overflow:auto;background:
+  repeating-linear-gradient(90deg,transparent 0 58px,rgba(245,242,233,.025) 58px 60px),
+  radial-gradient(120% 70% at 50% 0%,#1E3B70 0%,var(--enamel) 45%,var(--ink) 100%);
+  padding:calc(24px + var(--sat)) max(16px,var(--sar)) calc(24px + var(--sab)) max(16px,var(--sal))}
+#startBox{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.logo{display:flex;align-items:center;gap:12px;margin-top:6vh}
+.logo .pict{width:52px;height:52px;font-size:34px;background:var(--yellow);color:var(--ink)}
+.logo h1{font:700 clamp(24px,8.2vw,46px)/1 var(--f-display);margin:0;letter-spacing:0;text-transform:uppercase;min-width:0}
+.tagline{font-size:17px;color:var(--paper);opacity:.88;margin:4px 0 18px;max-width:30ch}
+.stack{display:flex;flex-direction:column;gap:10px}
+.credits{margin-top:28px;font-size:12px;color:var(--muted)}
+.lab{font:600 13px/1 var(--f-display);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:8px}
+.inp{width:100%;font:inherit;font-size:16px;color:var(--paper);background:var(--enamel-2);border:1.5px solid var(--line);border-radius:var(--r);padding:12px}
+.cityres{display:flex;flex-direction:column;gap:4px}
+.cityrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 12px;border-radius:var(--r);background:var(--enamel-2);text-align:left}
+.cityrow.on{box-shadow:inset 0 0 0 2px var(--yellow)}
+.chosen{display:flex;align-items:center;gap:8px;color:var(--ok)}
+.chosen b{color:var(--paper)}
+.loadbox{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:10vh;text-align:center}
+
+/* boutons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 14px;border-radius:var(--r);background:var(--enamel-3);color:var(--paper);font:600 16px/1.1 var(--f-display);letter-spacing:.02em;text-align:center}
+.btn.primary{background:var(--yellow);color:var(--ink)}
+.btn.danger{background:transparent;box-shadow:inset 0 0 0 1.5px var(--bad);color:#FF8A82}
+.btn.big{min-height:56px;font-size:19px;flex-direction:column;gap:2px}
+.btn.big small{color:inherit;opacity:.75;font-family:var(--f-body)}
+.btn.sm{min-height:36px;padding:6px 10px;font-size:14.5px}
+.btn.wide{width:100%;margin-top:10px}
+.btn.on{box-shadow:inset 0 0 0 2px var(--yellow)}
+.btn .ic{width:18px;height:18px}
+.icon-b{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--r);color:var(--paper)}
+.row2{display:flex;gap:8px;margin-top:10px}.row2>*{flex:1}
+.row2.tight{margin:0;flex:none;gap:6px}.row2.tight>*{flex:none}
+.seg{display:flex;gap:4px;background:var(--ink);padding:3px;border-radius:var(--r);flex-wrap:nowrap}
+.seg.wrap{flex-wrap:wrap;margin:6px 0}
+.seg button{flex:1;min-height:34px;padding:4px 8px;border-radius:4px;font:600 14px/1 var(--f-display);color:var(--muted);white-space:nowrap}
+.seg button.on{background:var(--paper);color:var(--ink)}
+
+/* jeu */
+#game{position:fixed;inset:0}
+#map{position:absolute;inset:0;z-index:0;background:#0d1a33}
+.leaflet-container{font-family:var(--f-body);background:#0d1a33}
+.leaflet-control-attribution{background:rgba(11,24,52,.7)!important;color:var(--muted)!important;font-size:10px!important;margin-bottom:calc(var(--nav-h) + var(--sab) + 2px)!important}
+.leaflet-control-attribution a{color:var(--paper)!important}
+.ov{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}
+.ov-s{z-index:410}.ov-d{z-index:420}
+
+#top{position:absolute;left:0;right:0;top:0;z-index:900;display:flex;align-items:stretch;gap:6px;padding:calc(6px + var(--sat)) max(8px,var(--sar)) 6px max(8px,var(--sal));background:linear-gradient(var(--enamel),rgba(19,41,79,.92));box-shadow:0 2px 0 rgba(245,242,233,.75),0 4px 14px rgba(0,0,0,.35)}
+#top .icon-b{width:40px;height:44px}
+.tplate{display:flex;flex-direction:column;justify-content:center;padding:2px 10px;border-radius:4px;background:var(--ink);min-width:0}
+.tplate b{font:700 19px/1.05 var(--f-display);white-space:nowrap}
+.tplate small{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cash{flex:1.15}#clock{flex:1}
+#wx{display:grid;place-items:center;width:30px;color:var(--yellow)}
+#wx .ic{width:22px;height:22px}
+.speed{display:flex;gap:2px;background:var(--ink);border-radius:4px;padding:2px}
+.speed button{width:38px;display:grid;place-items:center;border-radius:3px;font:700 15px/1 var(--f-display)}
+.speed button .ic{width:18px;height:18px}
+#btnSpeed{color:var(--yellow)}
+
+#chip{position:absolute;z-index:880;top:calc(64px + var(--sat));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:var(--ink);border:1px solid var(--line);padding:6px 12px;border-radius:20px;font-size:13px;white-space:nowrap}
+.spin{width:14px;height:14px;border:2px solid rgba(245,242,233,.25);border-top-color:var(--yellow);border-radius:50%;animation:sp 0.8s linear infinite}
+.spin.big{width:36px;height:36px;border-width:3px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+#toasts{position:absolute;z-index:1300;top:calc(64px + var(--sat));left:max(10px,var(--sal));right:max(10px,var(--sar));display:flex;flex-direction:column;gap:6px;pointer-events:none;align-items:center}
+.toast{max-width:460px;width:100%;background:rgba(19,41,79,.96);border-left:4px solid var(--muted);padding:6px 10px;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.4);font-size:13.5px;line-height:1.3;animation:tin .25s ease-out}
+.t-ok{border-color:var(--ok)}.t-warn{border-color:var(--warn)}.t-bad{border-color:var(--bad)}.t-info{border-color:var(--yellow)}
+.toast.out{opacity:0;transform:translateY(-6px);transition:.35s}
+@keyframes tin{from{opacity:0;transform:translateY(-8px)}}
+
+#nav{position:absolute;z-index:900;left:0;right:0;bottom:0;display:flex;background:var(--enamel);padding:0 max(4px,var(--sar)) var(--sab) max(4px,var(--sal));box-shadow:0 -2px 0 rgba(245,242,233,.75)}
+#nav.dim{opacity:.35;pointer-events:none}
+.nav-b{position:relative;flex:1;height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:600 12px/1 var(--f-display);letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.nav-b.on{color:var(--paper)}
+.nav-b.on::after{content:"";position:absolute;bottom:4px;width:22px;height:3px;border-radius:2px;background:var(--yellow)}
+.nav-b .ic{width:26px;height:26px}
+.nav-build .ic{background:var(--yellow);color:var(--ink);border-radius:50%;padding:3px}
+.dot{position:absolute;top:8px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--enamel)}
+
+#sheet{position:absolute;z-index:950;left:0;right:0;bottom:calc(var(--nav-h) + var(--sab));max-height:min(74%,calc(100% - 140px - var(--sat)));display:flex;flex-direction:column;background:var(--enamel);border-radius:12px 12px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,.45);animation:up .22s ease-out}
+@keyframes up{from{transform:translateY(30px);opacity:.4}}
+.sheet-h{display:flex;align-items:center;gap:8px;padding:10px max(10px,var(--sar)) 8px max(16px,var(--sal));border-bottom:1px solid var(--line)}
+.sheet-h h2{flex:1;min-width:0;display:flex;align-items:center;gap:4px;margin:0;font:700 21px/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.02em}
+.sheet-h h2 span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:none;margin-left:6px;font-size:18px}
+.sheet-b{overflow-y:auto;overscroll-behavior:contain;padding:8px max(16px,var(--sar)) 18px max(16px,var(--sal))}
+
+#card{position:absolute;z-index:940;left:max(10px,var(--sal));right:max(10px,var(--sar));bottom:calc(var(--nav-h) + var(--sab) + 10px);max-width:460px;margin:0 auto;background:var(--enamel);border-radius:10px;padding:10px 12px 12px;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 0 0 1px var(--line);animation:up .18s ease-out;max-height:55%;overflow:auto}
+.card-h{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.card-t{flex:1;min-width:0;display:flex;flex-direction:column;margin-left:4px}
+.card-t b{font:700 18px/1.1 var(--f-display)}
+.card-h .plate{flex:1;min-width:0}
+.sub{color:var(--muted);margin:4px 0 8px;font-size:14px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)}
+.kv span{color:var(--muted)}
+.kv b{font-weight:600;text-align:right}
+.fillbar{height:8px;background:var(--ink);border-radius:4px;overflow:hidden;margin:4px 0 6px}
+.fillbar i{display:block;height:100%}
+.note{font-size:13.5px;color:var(--muted);margin:8px 0;padding:8px 10px;background:rgba(11,24,52,.55);border-radius:var(--r)}
+.note.ok{color:var(--ok)}.note.warn{color:var(--warn)}.note.bad{color:#FF8A82}
+
+#buildbar{position:absolute;z-index:960;left:max(10px,var(--sal));right:max(10px,var(--sar));bottom:calc(var(--nav-h) + var(--sab) + 10px);max-width:460px;margin:0 auto;display:flex;align-items:center;gap:8px;justify-content:space-between;background:var(--enamel);padding:8px 8px 8px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 0 0 2px var(--yellow)}
+.bb-t{display:flex;align-items:center;gap:8px;min-width:0}
+.bb-t b{font:700 17px/1.1 var(--f-display);display:block}
+.bb-a{display:flex;align-items:center;gap:2px;flex:none}
+
+#modal{position:fixed;inset:0;z-index:1200;background:rgba(5,12,28,.72);display:flex;align-items:flex-end;justify-content:center;padding:calc(20px + var(--sat)) 0 0}
+.modal-box{width:100%;max-width:520px;max-height:100%;overflow:auto;background:var(--enamel);border-radius:14px 14px 0 0;padding:16px max(16px,var(--sar)) calc(16px + var(--sab)) max(16px,var(--sal));animation:up .22s ease-out}
+.big-num{font:700 40px/1 var(--f-display);margin:10px 0}
+
+/* contenus de panneaux */
+.sec{font:700 13px/1 var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--yellow);margin:18px 0 6px}
+.lrow{display:flex;align-items:center;gap:6px;width:100%;text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}
+.lrow-t{flex:1;min-width:0;display:flex;flex-direction:column;margin-left:6px;font-weight:600;overflow-wrap:anywhere}
+.lrow-t small{font-weight:400}
+.lrow-v{text-align:right;font-size:13px;color:var(--muted);flex:none}
+.lrow-v b{color:var(--paper);font:700 17px/1 var(--f-display)}
+.tag{font-style:normal;font-size:11.5px;padding:1px 6px;border-radius:3px;background:var(--enamel-3);color:var(--paper);margin-left:4px}
+.tag.ok{background:rgba(61,220,132,.18);color:var(--ok)}.tag.warn{background:rgba(255,176,32,.18);color:var(--warn)}.tag.bad{background:rgba(240,72,62,.2);color:#FF8A82}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 4px}
+.kpis>div{background:var(--ink);border-radius:var(--r);padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpis b{font:700 21px/1.1 var(--f-display);overflow-wrap:anywhere}
+.vrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.vrow>div:first-child{min-width:0;display:flex;flex-direction:column}
+.stepper{display:flex;align-items:center;background:var(--ink);border-radius:var(--r);flex:none}
+.stepper button{width:40px;height:38px;font:700 22px/1 var(--f-display);color:var(--yellow)}
+.stepper b{min-width:56px;text-align:center;font:700 16px/1 var(--f-display)}
+.catrow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;margin:4px 0;border-radius:var(--r);background:var(--enamel-2)}
+.catrow span{display:flex;flex-direction:column;min-width:0}
+.catrow em{font:700 16px/1 var(--f-display);font-style:normal;color:var(--yellow);flex:none}
+.catrow.on{box-shadow:inset 0 0 0 2px var(--yellow)}
+details.cat{margin:8px 0}
+details.cat summary{display:flex;align-items:center;gap:6px;font:600 16px/1 var(--f-display);color:var(--yellow);padding:8px 0;cursor:pointer;list-style:none}
+details.cat summary::-webkit-details-marker{display:none}
+select{font:inherit;color:var(--paper);background:var(--ink);border:1px solid var(--line);border-radius:var(--r);padding:8px}
+.tgl{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.tgl input{appearance:none;width:42px;height:24px;border-radius:12px;background:var(--ink);position:relative;flex:none;border:1px solid var(--line);margin:0}
+.tgl input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--muted);transition:.15s}
+.tgl input:checked{background:var(--yellow)}
+.tgl input:checked::after{left:20px;background:var(--ink)}
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.sw{width:32px;height:32px;border-radius:50%;box-shadow:0 0 0 2px rgba(245,242,233,.35)}
+.sw.on{box-shadow:0 0 0 3px var(--paper),0 0 0 5px var(--ink)}
+.stops{display:flex;flex-wrap:wrap;align-items:center;gap:4px 0;font-size:13px;color:var(--muted);margin:2px 0 10px}
+.stops span{display:inline-flex;align-items:center}
+.stops i{display:inline-block;width:14px;height:2px;background:var(--muted);margin:0 6px}
+.modecard{display:flex;gap:12px;align-items:flex-start;width:100%;text-align:left;padding:12px;margin:8px 0;border-radius:8px;background:var(--enamel-2);box-shadow:inset 0 0 0 1px var(--line)}
+.modecard .pict{margin-top:2px;width:auto;min-width:34px;height:30px}
+.modecard .pict-metro,.modecard .pict-boat{width:30px;min-width:30px}
+.modecard>span:last-child{display:flex;flex-direction:column;gap:3px}
+.modecard b{font:700 19px/1 var(--f-display)}
+.empty{text-align:center;padding:16px 0;display:flex;flex-direction:column;align-items:center;gap:10px}
+.zrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.zrow-t{flex:1;min-width:0;text-align:left;display:flex;flex-direction:column}
+.tblw{overflow-x:auto;margin:4px 0}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl th:first-child{text-align:left;font-weight:500;color:var(--muted)}
+.tbl thead th{font:600 12px/1 var(--f-display);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.tbl tr.tot th,.tbl tr.tot td{font:700 16px/1 var(--f-display);color:var(--paper)}
+.tbl.lines tbody tr{cursor:pointer}
+.tbl.mini{margin:10px 0}
+.chart{background:var(--ink);border-radius:var(--r);padding:8px}
+.chart svg{width:100%;height:auto;display:block}
+.chart text{font:600 9px var(--f-display);fill:var(--muted)}
+.chart .axis{stroke:rgba(245,242,233,.3);stroke-width:1}
+.evrow{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.evrow .ic{color:var(--yellow);margin-top:2px}
+.evrow.bad .ic{color:var(--warn)}
+.evrow div{display:flex;flex-direction:column;gap:2px}
+.wxbig{display:flex;gap:12px;align-items:center;background:var(--ink);padding:12px;border-radius:8px}
+.wxbig .ic{width:34px;height:34px;color:var(--yellow)}
+.wxbig div{display:flex;flex-direction:column}
+.wxbig b{font:700 20px/1.1 var(--f-display)}
+.jrow{display:flex;flex-direction:column;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (min-width:700px){#sheet{left:auto;right:16px;width:440px;bottom:calc(var(--nav-h) + var(--sab) + 10px);border-radius:12px}}
+</style>
+</head>
+<body>
+<div id="start"><div id="startBox"></div></div>
+<div id="game" hidden>
+  <div id="map"></div>
+  <header id="top">
+    <button class="icon-b" id="btnMenu" data-act="menu" aria-label="Menu"></button>
+    <div class="tplate" id="cash"></div>
+    <div class="tplate" id="clock"></div>
+    <div id="wx"></div>
+    <div class="speed"><button id="btnPlay" data-act="play" aria-label="Pause"></button><button id="btnSpeed" data-act="speed" aria-label="Vitesse">×1</button></div>
+  </header>
+  <div id="chip" hidden></div>
+  <div id="card" hidden></div>
+  <div id="buildbar" hidden></div>
+  <section id="sheet" hidden><div class="sheet-h"><h2 id="sheetTitle"></h2><button class="icon-b" data-act="closeSheet" aria-label="Fermer"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><div class="sheet-b" id="sheetBody"></div></section>
+  <nav id="nav"></nav>
+</div>
+<div id="modal" hidden><div class="modal-box" id="modalBox"></div></div>
+<div id="toasts"></div>
+<script>
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — cœur : utilitaires, géographie, données réelles,
+   cache, monde (zones + réseaux), itinéraires
+   ===================================================================== */
+
+const EARTH = 40075016.686;
+const G = { s: null, w: null, map: null, speed: 1, paused: false, ready: false };
+
+/* ---------- utilitaires ---------- */
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+function hash32(n) {
+  n = n | 0;
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  return (n ^ (n >>> 16)) >>> 0;
+}
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+const rnd01 = (seed) => hash32(seed) / 4294967296;
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+const lonToMx = (lon) => (lon + 180) / 360;
+function latToMy(lat) {
+  const s = Math.sin((lat * Math.PI) / 180);
+  return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
+}
+const mxToLon = (mx) => mx * 360 - 180;
+function myToLat(my) {
+  const n = Math.PI - 2 * Math.PI * my;
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+const mPerUnit = (lat) => EARTH * Math.cos((lat * Math.PI) / 180);
+/** distance en mètres entre deux points mercator (échelle locale de la partie) */
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by) * G.mpu;
+const meters = (m) => m / G.mpu; // mètres -> unités mercator
+
+function fmtInt(n) { return Math.round(n).toLocaleString('fr-FR'); }
+function fmtEur(n, exact) {
+  const a = Math.abs(n);
+  if (exact || a < 10000) return Math.round(n).toLocaleString('fr-FR') + ' €';
+  if (a < 1e6) return (n / 1e3).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' k€';
+  return (n / 1e6).toLocaleString('fr-FR', { maximumFractionDigits: a < 1e7 ? 2 : 1 }) + ' M€';
+}
+function fmtKm(m) { return (m / 1000).toLocaleString('fr-FR', { maximumFractionDigits: m < 10000 ? 1 : 0 }) + ' km'; }
+function fmtPct(x) { return Math.round(x * 100) + ' %'; }
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* Tas binaire (A*) */
+class Heap {
+  constructor() { this.k = []; this.v = []; }
+  get size() { return this.k.length; }
+  push(key, val) {
+    const k = this.k, v = this.v;
+    let i = k.length; k.push(key); v.push(val);
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (k[p] <= key) break;
+      k[i] = k[p]; v[i] = v[p]; i = p;
+    }
+    k[i] = key; v[i] = val;
+  }
+  pop() {
+    const k = this.k, v = this.v;
+    const top = v[0];
+    const lk = k.pop(), lv = v.pop();
+    if (k.length) {
+      let i = 0; const n = k.length;
+      while (true) {
+        let c = 2 * i + 1;
+        if (c >= n) break;
+        if (c + 1 < n && k[c + 1] < k[c]) c++;
+        if (k[c] >= lk) break;
+        k[i] = k[c]; v[i] = v[c]; i = c;
+      }
+      k[i] = lk; v[i] = lv;
+    }
+    return top;
+  }
+}
+
+/* ---------- cache IndexedDB ---------- */
+const Cache = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    this.db = await new Promise((res, rej) => {
+      const r = indexedDB.open('correspondance', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    return this.db;
+  },
+  async get(key, maxAgeDays = 90) {
+    try {
+      const db = await this.open();
+      const v = await new Promise((res) => {
+        const q = db.transaction('kv').objectStore('kv').get(key);
+        q.onsuccess = () => res(q.result);
+        q.onerror = () => res(undefined);
+      });
+      if (!v) return undefined;
+      if (Date.now() - v.t > maxAgeDays * 864e5) return undefined;
+      return v.d;
+    } catch (e) { return undefined; }
+  },
+  async set(key, d) {
+    try {
+      const db = await this.open();
+      await new Promise((res) => {
+        const tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put({ t: Date.now(), d }, key);
+        tx.oncomplete = res; tx.onerror = res; tx.onabort = res;
+      });
+    } catch (e) { /* stockage plein ou indisponible : on continue sans cache */ }
+  },
+};
+
+/* ---------- accès réseau ---------- */
+async function fetchJSON(url, opts = {}, timeout = 60000) {
+  const ac = new AbortController();
+  const tm = setTimeout(() => ac.abort(), timeout);
+  try {
+    const r = await fetch(url, { ...opts, signal: ac.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(tm); }
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const OVERPASS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+const HW = 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|busway';
+
+const API = {
+  async searchCommunes(q) {
+    const u = 'https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(q) +
+      '&fields=nom,code,codesPostaux,population,centre,codeDepartement&boost=population&limit=8';
+    return fetchJSON(u, {}, 15000);
+  },
+  async communePop(code) {
+    const k = 'pop:' + code;
+    const c = await Cache.get(k, 365);
+    if (c !== undefined) return c;
+    let pop = null;
+    try {
+      const j = await fetchJSON('https://geo.api.gouv.fr/communes/' + code + '?fields=population', {}, 15000);
+      pop = j && j.population;
+    } catch (e) {
+      try {
+        const j = await fetchJSON('https://geo.api.gouv.fr/communes?code=' + code + '&type=arrondissement-municipal&fields=population', {}, 15000);
+        pop = j && j[0] && j[0].population;
+      } catch (e2) { /* pas grave */ }
+    }
+    if (pop) await Cache.set(k, pop);
+    return pop || null;
+  },
+  async irisBBox(s, w, n, e) {
+    const u = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature' +
+      '&TYPENAMES=STATISTICALUNITS.IRIS:contours_iris&OUTPUTFORMAT=application/json&COUNT=3000' +
+      '&BBOX=' + [s, w, n, e].map((x) => x.toFixed(5)).join(',') + ',urn:ogc:def:crs:EPSG::4326';
+    return fetchJSON(u, {}, 60000);
+  },
+  async communesDept(dep) {
+    const u = 'https://geo.api.gouv.fr/departements/' + dep +
+      '/communes?fields=nom,code,population,surface&format=geojson&geometry=contour';
+    return fetchJSON(u, {}, 60000);
+  },
+  async deptAt(lat, lon) {
+    const j = await fetchJSON('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=codeDepartement', {}, 15000);
+    return j && j[0] && j[0].codeDepartement;
+  },
+  async overpass(s, w, n, e) {
+    const bb = [s, w, n, e].map((x) => x.toFixed(5)).join(',');
+    const q = `[out:json][timeout:120][bbox:${bb}];
+(way[highway~"^(${HW})$"];way[railway=rail][!service];way[waterway~"^(river|canal)$"];)->.l;
+.l out body qt;
+.l >;
+out skel qt;
+nwr[railway~"^(station|halt)$"];out center tags qt;
+nwr[amenity~"^(school|college|university|hospital|townhall|marketplace|cinema|theatre|library)$"];out center tags qt;
+nwr[shop~"^(mall|department_store|supermarket)$"];out center tags qt;
+nwr[tourism~"^(attraction|museum)$"];out center tags qt;`;
+    let lastErr;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const ep = OVERPASS[attempt % OVERPASS.length];
+      try {
+        return await fetchJSON(ep, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(q),
+        }, 150000);
+      } catch (e) {
+        lastErr = e;
+        await sleep(1500 + attempt * 2500);
+      }
+    }
+    throw lastErr || new Error('Overpass indisponible');
+  },
+};
+
+/* ---------- grille de chargement ---------- */
+const CH_LAT = 0.03, CH_LON = 0.04;
+const chunkOf = (lat, lon) => [Math.floor(lat / CH_LAT), Math.floor(lon / CH_LON)];
+const chunkBox = (i, j) => ({ s: i * CH_LAT, n: (i + 1) * CH_LAT, w: j * CH_LON, e: (j + 1) * CH_LON });
+function chunksForMercBox(b, pad = 0) {
+  const s = myToLat(b.maxy), n = myToLat(b.miny), w = mxToLon(b.minx), e = mxToLon(b.maxx);
+  const [i0, j0] = chunkOf(s, w), [i1, j1] = chunkOf(n, e);
+  const out = [];
+  for (let i = i0 - pad; i <= i1 + pad; i++) for (let j = j0 - pad; j <= j1 + pad; j++) out.push([i, j]);
+  return out;
+}
+
+/* ---------- réseaux (routes, rail, fleuves) ---------- */
+const GCELL = 2e-6; // ~50 m
+const ROAD_CLS = {
+  motorway: 0, trunk: 0, motorway_link: 0, trunk_link: 0,
+  primary: 1, primary_link: 1, secondary: 2, secondary_link: 2, tertiary: 3, tertiary_link: 3,
+};
+const ROAD_KMH = {
+  motorway: 110, trunk: 90, motorway_link: 60, trunk_link: 50, primary: 50, primary_link: 40,
+  secondary: 50, secondary_link: 40, tertiary: 45, tertiary_link: 40, unclassified: 40,
+  residential: 30, living_street: 15, busway: 45,
+};
+
+class Net {
+  constructor(kind) {
+    this.kind = kind;
+    this.idx = new Map(); this.ids = [];
+    this.x = []; this.y = []; this.adj = [];
+    this.ea = []; this.eb = []; this.len = []; this.cls = []; this.spd = []; this.name = [];
+    this.seen = new Set(); this.pair = new Map(); this.grid = new Map();
+    this.dens = []; this.zone = []; this.noise = []; this.traffic = [];
+    this.version = 0;
+  }
+  get nE() { return this.ea.length; }
+  node(id, mx, my) {
+    let i = this.idx.get(id);
+    if (i !== undefined) return i;
+    i = this.x.length;
+    this.idx.set(id, i); this.ids.push(id); this.x.push(mx); this.y.push(my); this.adj.push([]);
+    const k = Math.floor(mx / GCELL) + ',' + Math.floor(my / GCELL);
+    let c = this.grid.get(k); if (!c) { c = []; this.grid.set(k, c); } c.push(i);
+    return i;
+  }
+  edge(a, b, cls, kmh, name, key) {
+    if (this.seen.has(key) || a === b) return;
+    this.seen.add(key);
+    const e = this.ea.length;
+    this.ea.push(a); this.eb.push(b);
+    this.len.push(dist(this.x[a], this.y[a], this.x[b], this.y[b]));
+    this.cls.push(cls); this.spd.push(kmh / 3.6); this.name.push(name || '');
+    this.dens.push(-1); this.zone.push(null);
+    this.noise.push(0.7 + 0.6 * rnd01(hashStr(key)));
+    this.traffic.push(0.2);
+    this.adj[a].push(e); this.adj[b].push(e);
+    this.pair.set(this.ids[a] + '_' + this.ids[b], e);
+    this.pair.set(this.ids[b] + '_' + this.ids[a], e);
+  }
+  other(e, u) { return this.ea[e] === u ? this.eb[e] : this.ea[e]; }
+  nearest(mx, my, maxM, accept) {
+    const r = Math.ceil(meters(maxM) / GCELL);
+    const cx = Math.floor(mx / GCELL), cy = Math.floor(my / GCELL);
+    let best = -1, bd = Infinity;
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      const c = this.grid.get((cx + dx) + ',' + (cy + dy));
+      if (!c) continue;
+      for (const i of c) {
+        const d = (this.x[i] - mx) ** 2 + (this.y[i] - my) ** 2;
+        if (d < bd && (!accept || accept(i))) { bd = d; best = i; }
+      }
+    }
+    if (best < 0) return -1;
+    return Math.sqrt(bd) * G.mpu <= maxM ? best : -1;
+  }
+}
+
+/** A* (coût = temps pour la route, distance sinon). Renvoie {nodes, edges, len} ou null */
+function route(net, from, to, maxIter = 400000) {
+  if (from === to) return { nodes: [from], edges: [], len: 0 };
+  const n = net.x.length;
+  const g = new Float64Array(n).fill(Infinity);
+  const prevE = new Int32Array(n).fill(-1);
+  const closed = new Uint8Array(n);
+  const tx = net.x[to], ty = net.y[to];
+  const vmax = net.kind === 'road' ? 30 : 1;
+  const h = (i) => (Math.hypot(net.x[i] - tx, net.y[i] - ty) * G.mpu) / vmax;
+  const heap = new Heap();
+  g[from] = 0; heap.push(h(from), from);
+  let it = 0;
+  while (heap.size && it++ < maxIter) {
+    const u = heap.pop();
+    if (closed[u]) continue;
+    if (u === to) break;
+    closed[u] = 1;
+    for (const e of net.adj[u]) {
+      const v = net.other(e, u);
+      if (closed[v]) continue;
+      let c = net.len[e];
+      if (net.kind === 'road') {
+        c = c / net.spd[e];
+        if (net.cls[e] === 0) c *= 1.4; // les bus évitent un peu les voies rapides
+      }
+      const ng = g[u] + c;
+      if (ng < g[v]) { g[v] = ng; prevE[v] = e; heap.push(ng + h(v), v); }
+    }
+  }
+  if (!isFinite(g[to])) return null;
+  const nodes = [to], edges = [];
+  let cur = to, L = 0;
+  while (cur !== from) {
+    const e = prevE[cur];
+    if (e < 0) return null;
+    edges.push(e); L += net.len[e];
+    cur = net.other(e, cur); nodes.push(cur);
+  }
+  nodes.reverse(); edges.reverse();
+  return { nodes, edges, len: L };
+}
+
+/* ---------- géométrie des zones ---------- */
+function ringArea(r) {
+  let a = 0;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] + r[i][0]) * (r[j][1] - r[i][1]);
+  return a / 2;
+}
+function pointInRings(x, y, rings) {
+  let inside = false;
+  for (const r of rings) {
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+const ZCELL = 4e-5; // ~1 km
+const IRIS_TYPES = { H: 'Habitat', A: 'Activité', D: 'Divers', Z: 'Commune' };
+
+/* ---------- le monde ---------- */
+class World {
+  constructor() {
+    this.zones = new Map();
+    this.zgrid = new Map();
+    this.vkeys = new Map();
+    this.road = new Net('road'); this.rail = new Net('rail'); this.water = new Net('water');
+    this.pois = []; this.poiSeen = new Set();
+    this.zoneChunks = new Set(); this.roadChunks = new Set();
+    this.mode = 'iris';
+    this.deptsLoaded = new Set();
+    this.version = 0;
+  }
+
+  addZone(z) {
+    if (this.zones.has(z.code)) return false;
+    let area = 0, minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    let cx = 0, cy = 0, best = 0;
+    z.rings.forEach((r, k) => {
+      const a = ringArea(r);
+      area += z.outer[k] ? Math.abs(a) : -Math.abs(a);
+      for (const p of r) {
+        if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0];
+        if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1];
+      }
+      if (z.outer[k] && Math.abs(a) > best) {
+        best = Math.abs(a);
+        let sx = 0, sy = 0, sa = 0;
+        for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+          const f = r[j][0] * r[i][1] - r[i][0] * r[j][1];
+          sx += (r[j][0] + r[i][0]) * f; sy += (r[j][1] + r[i][1]) * f; sa += f;
+        }
+        if (Math.abs(sa) > 1e-20) { cx = sx / (3 * sa); cy = sy / (3 * sa); }
+        else { cx = r[0][0]; cy = r[0][1]; }
+      }
+    });
+    z.bbox = { minx, miny, maxx, maxy };
+    z.areaKm2 = Math.max(0.01, Math.abs(area) * G.mpu * G.mpu / 1e6);
+    if (!pointInRings(cx, cy, z.rings)) {
+      // centroïde hors du polygone (forme en C) : on prend un sommet intérieur approximatif
+      const r = z.rings[0]; cx = (r[0][0] + r[Math.floor(r.length / 2)][0]) / 2; cy = (r[0][1] + r[Math.floor(r.length / 2)][1]) / 2;
+      if (!pointInRings(cx, cy, z.rings)) { cx = r[0][0]; cy = r[0][1]; }
+    }
+    z.cx = cx; z.cy = cy;
+    z.neighbors = new Set();
+    this.estimate(z);
+    this.zones.set(z.code, z);
+    for (let gx = Math.floor(minx / ZCELL); gx <= Math.floor(maxx / ZCELL); gx++)
+      for (let gy = Math.floor(miny / ZCELL); gy <= Math.floor(maxy / ZCELL); gy++) {
+        const k = gx + ',' + gy; let c = this.zgrid.get(k); if (!c) { c = []; this.zgrid.set(k, c); } c.push(z.code);
+      }
+    for (const r of z.rings) for (let i = 0; i < r.length; i += 1) {
+      const k = Math.round(r[i][0] * 1e6) + ':' + Math.round(r[i][1] * 1e6);
+      let s = this.vkeys.get(k);
+      if (!s) { s = new Set(); this.vkeys.set(k, s); }
+      for (const o of s) if (o !== z.code) { z.neighbors.add(o); const oz = this.zones.get(o); if (oz) oz.neighbors.add(z.code); }
+      s.add(z.code);
+    }
+    return true;
+  }
+
+  estimate(z) {
+    const r = rnd01(hashStr(z.code));
+    if (z.type === 'H') { z.pop = 2300 * (0.75 + 0.5 * r); z.jobs = z.pop * 0.35; }
+    else if (z.type === 'A') { z.pop = 650 * (0.6 + 0.8 * r); z.jobs = 3500 * (0.7 + 0.6 * r); }
+    else if (z.type === 'D') { z.pop = 120 * (0.5 + r); z.jobs = 300 * (0.5 + r); }
+    else { z.pop = z.pop || 1500; z.jobs = z.pop * 0.4; }
+    this.reprice(z);
+  }
+  reprice(z) {
+    z.density = z.pop / z.areaKm2;
+    z.jobDensity = z.jobs / z.areaKm2;
+    const raw = 110000 + z.density * 32 + z.jobDensity * 14 + Math.min(z.pop, 30000) * 18;
+    z.price = Math.round(clamp(raw, 90000, 6e6) * (G.s ? G.s.costMul : 1) / 10000) * 10000;
+  }
+
+  zoneAt(mx, my) {
+    const c = this.zgrid.get(Math.floor(mx / ZCELL) + ',' + Math.floor(my / ZCELL));
+    if (!c) return null;
+    for (const code of c) {
+      const z = this.zones.get(code); const b = z.bbox;
+      if (mx < b.minx || mx > b.maxx || my < b.miny || my > b.maxy) continue;
+      if (pointInRings(mx, my, z.rings)) return z;
+    }
+    return null;
+  }
+  densAt(mx, my) { const z = this.zoneAt(mx, my); return z ? z : null; }
+
+  /* ---- ingestion IRIS ---- */
+  ingestIris(gj) {
+    let added = 0;
+    for (const f of gj.features || []) {
+      const p = f.properties || {}; const g = f.geometry;
+      if (!g || !p.code_iris) continue;
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      const rings = [], outer = [];
+      for (const poly of polys) poly.forEach((ring, k) => {
+        const step = ring.length > 400 ? 2 : 1;
+        const rr = [];
+        for (let i = 0; i < ring.length; i += step) rr.push([lonToMx(ring[i][0]), latToMy(ring[i][1])]);
+        rings.push(rr); outer.push(k === 0);
+      });
+      if (!rings.length) continue;
+      const type = (p.type_iris || 'Z').toUpperCase();
+      const z = {
+        code: p.code_iris, insee: p.code_insee, commune: p.nom_commune || '',
+        name: (type === 'Z' || /non iris/i.test(p.nom_iris || '')) ? (p.nom_commune || p.nom_iris) : (p.nom_iris || p.nom_commune),
+        type: IRIS_TYPES[type] ? type : 'Z', rings, outer, owned: false,
+      };
+      if (this.addZone(z)) added++;
+    }
+    return added;
+  }
+  ingestCommunes(gj) {
+    let added = 0;
+    for (const f of gj.features || []) {
+      const p = f.properties || {}; const g = f.geometry;
+      if (!g) continue;
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      const rings = [], outer = [];
+      for (const poly of polys) poly.forEach((ring, k) => { rings.push(ring.map((c) => [lonToMx(c[0]), latToMy(c[1])])); outer.push(k === 0); });
+      const z = { code: 'C' + p.code, insee: p.code, commune: p.nom, name: p.nom, type: 'Z', pop: p.population || 800, rings, outer, owned: false };
+      if (this.addZone(z)) added++;
+    }
+    return added;
+  }
+
+  /* ---- ingestion OpenStreetMap ---- */
+  ingestOSM(json) {
+    const nodes = new Map();
+    for (const el of json.elements) if (el.type === 'node' && el.lat !== undefined) nodes.set(el.id, el);
+    for (const el of json.elements) {
+      const t = el.tags;
+      if (!t) continue;
+      if (el.type === 'way' && el.nodes) {
+        let net = null, cls = 4, kmh = 30;
+        if (t.highway) {
+          net = this.road;
+          cls = ROAD_CLS[t.highway] ?? 4;
+          kmh = ROAD_KMH[t.highway] || 30;
+          const ms = parseInt(t.maxspeed, 10); if (ms > 4 && ms < 140) kmh = ms;
+        } else if (t.railway === 'rail') {
+          if (t.usage === 'industrial' || t.usage === 'military' || t.usage === 'test') continue;
+          net = this.rail; cls = 0; kmh = 120;
+          const ms = parseInt(t.maxspeed, 10); if (ms > 20 && ms < 330) kmh = ms;
+        } else if (t.waterway) { net = this.water; cls = 0; kmh = 20; }
+        if (!net) continue;
+        const name = t.name || t.ref || '';
+        let prev = -1;
+        for (let k = 0; k < el.nodes.length; k++) {
+          const nd = nodes.get(el.nodes[k]);
+          if (!nd) { prev = -1; continue; }
+          const i = net.node(el.nodes[k], lonToMx(nd.lon), latToMy(nd.lat));
+          if (prev >= 0) net.edge(prev, i, cls, kmh, name, el.id + ':' + k);
+          prev = i;
+        }
+        net.version++;
+      }
+      const isPoi = t.amenity || t.shop || t.tourism || (t.railway === 'station' || t.railway === 'halt');
+      if (isPoi) {
+        const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
+        if (lat === undefined) continue;
+        const key = el.type + el.id;
+        if (this.poiSeen.has(key)) continue;
+        this.poiSeen.add(key);
+        let kind = t.amenity || t.shop || t.tourism || 'station';
+        let train = false;
+        if (t.railway === 'station' || t.railway === 'halt') {
+          kind = 'station';
+          train = t.station !== 'subway' && t.station !== 'light_rail' && t.subway !== 'yes' && t.station !== 'monorail';
+          if (!train) kind = 'metro_station';
+        }
+        this.pois.push({ mx: lonToMx(lon), my: latToMy(lat), kind, name: t.name || '', w: POI_W[kind] || 300, train });
+      }
+    }
+    this.version++;
+  }
+
+  /** Recalcule la densité rattachée à chaque tronçon routier (après ajout de zones ou de routes) */
+  attachDensity(all = false) {
+    const n = this.road;
+    for (let e = 0; e < n.nE; e++) {
+      if (!all && n.dens[e] >= 0) continue;
+      const mx = (n.x[n.ea[e]] + n.x[n.eb[e]]) / 2, my = (n.y[n.ea[e]] + n.y[n.eb[e]]) / 2;
+      const z = this.zoneAt(mx, my);
+      n.dens[e] = z ? z.density + z.jobDensity * 0.5 : 250;
+      n.zone[e] = z ? z.code : null;
+    }
+  }
+
+  poisNear(mx, my, rM) {
+    const r2 = meters(rM) ** 2; const out = [];
+    for (const p of this.pois) if ((p.mx - mx) ** 2 + (p.my - my) ** 2 < r2) out.push(p);
+    return out;
+  }
+  ownedBox() {
+    let b = null;
+    for (const z of this.zones.values()) if (z.owned) {
+      if (!b) b = { ...z.bbox };
+      else { b.minx = Math.min(b.minx, z.bbox.minx); b.miny = Math.min(b.miny, z.bbox.miny); b.maxx = Math.max(b.maxx, z.bbox.maxx); b.maxy = Math.max(b.maxy, z.bbox.maxy); }
+    }
+    return b;
+  }
+  purchasable(z) {
+    if (z.owned) return false;
+    for (const c of z.neighbors) { const o = this.zones.get(c); if (o && o.owned) return true; }
+    return false;
+  }
+}
+
+const POI_W = {
+  station: 2600, metro_station: 900, university: 3000, college: 900, school: 450, hospital: 2000, townhall: 500,
+  marketplace: 600, cinema: 700, theatre: 500, library: 300, mall: 2600, department_store: 1500, supermarket: 450,
+  attraction: 900, museum: 900,
+};
+const POI_LABEL = {
+  station: 'Gare', metro_station: 'Station', university: 'Université', college: 'Collège', school: 'École', hospital: 'Hôpital',
+  townhall: 'Mairie', marketplace: 'Marché', cinema: 'Cinéma', theatre: 'Théâtre', library: 'Bibliothèque',
+  mall: 'Centre commercial', department_store: 'Grand magasin', supermarket: 'Supermarché', attraction: 'Site touristique', museum: 'Musée',
+};
+
+/* ---------- gestionnaire de chargement ---------- */
+const Loader = {
+  busy: 0,
+  failures: 0,
+  listeners: [],
+  status(msg) { for (const f of this.listeners) f(msg); },
+
+  async zonesFor(chunks) {
+    const w = G.w; let added = 0;
+    for (const [i, j] of chunks) {
+      const key = i + ':' + j;
+      if (w.zoneChunks.has(key)) continue;
+      const b = chunkBox(i, j);
+      this.busy++; this.status('Quartiers IGN…');
+      try {
+        if (w.mode === 'iris') {
+          let gj = await Cache.get('iris:' + key);
+          if (!gj) {
+            try { gj = await API.irisBBox(b.s, b.w, b.n, b.e); await Cache.set('iris:' + key, gj); }
+            catch (e) {
+              this.failures++;
+              if (this.failures >= 2 && w.zones.size === 0) { w.mode = 'commune'; }
+              else throw e;
+            }
+          }
+          if (gj) added += w.ingestIris(gj);
+        }
+        if (w.mode === 'commune') {
+          const dep = await API.deptAt((b.s + b.n) / 2, (b.w + b.e) / 2).catch(() => null);
+          if (dep && !w.deptsLoaded.has(dep)) {
+            let gj = await Cache.get('dep:' + dep);
+            if (!gj) { gj = await API.communesDept(dep); await Cache.set('dep:' + dep, gj); }
+            w.deptsLoaded.add(dep);
+            added += w.ingestCommunes(gj);
+          }
+        }
+        w.zoneChunks.add(key);
+      } catch (e) {
+        console.warn('zones', key, e);
+        UI.toast('Quartiers indisponibles pour le moment, nouvel essai plus tard.', 'warn');
+      } finally { this.busy--; }
+    }
+    if (added) {
+      // populations communales pour les communes non découpées
+      for (const z of w.zones.values()) if (z.type === 'Z' && !z.popFetched && w.mode === 'iris') {
+        z.popFetched = true;
+        API.communePop(z.insee).then((p) => { if (p) { z.pop = p; z.jobs = p * 0.4; w.reprice(z); Render.dirty = true; } });
+      }
+      w.attachDensity(true);
+      w.version++;
+      Render.dirty = true;
+    }
+    this.status(null);
+    return added;
+  },
+
+  async roadsFor(chunks) {
+    const w = G.w; let n = 0;
+    for (const [i, j] of chunks) {
+      const key = i + ':' + j;
+      if (w.roadChunks.has(key)) continue;
+      w.roadChunks.add(key);
+      const b = chunkBox(i, j);
+      this.busy++; this.status('Routes OpenStreetMap…');
+      try {
+        let js = await Cache.get('osm:' + key);
+        if (!js) { js = await API.overpass(b.s, b.w, b.n, b.e); await Cache.set('osm:' + key, js); }
+        w.ingestOSM(js);
+        w.attachDensity(false);
+        n++;
+        Render.dirty = true;
+        Sim.onNetworkGrow();
+      } catch (e) {
+        console.warn('osm', key, e);
+        w.roadChunks.delete(key);
+        UI.toast('Routes indisponibles (serveur OpenStreetMap saturé). Nouvel essai dans 1 min.', 'warn');
+        setTimeout(() => Loader.ensureAround(), 60000);
+      } finally { this.busy--; }
+    }
+    this.status(null);
+    return n;
+  },
+
+  /** S'assure que les données autour du territoire possédé sont chargées */
+  async ensureAround() {
+    const w = G.w; const b = w.ownedBox();
+    if (!b) return;
+    await this.zonesFor(chunksForMercBox(b, 1));
+    const roadChunks = [];
+    for (const z of w.zones.values()) if (z.owned) for (const c of chunksForMercBox(z.bbox, 0)) roadChunks.push(c);
+    const uniq = [...new Map(roadChunks.map((c) => [c.join(':'), c])).values()];
+    await this.roadsFor(uniq);
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — simulation : catalogue, lignes, voyageurs,
+   trafic, économie, événements, temps, sauvegardes
+   ===================================================================== */
+
+const MODES = {
+  bus: { label: 'Bus', short: 'Bus', ref: 1.8, K: 0.04, catch: 400, dwell: 14, perPax: 1.1, maxDwell: 70, refKmh: 14, loop: true },
+  metro: { label: 'Métro', short: 'Métro', ref: 2.1, K: 0.1, catch: 650, dwell: 22, perPax: 0.06, maxDwell: 50, refKmh: 30, loop: true },
+  ter: { label: 'TER', short: 'TER', ref: 3.6, K: 0.045, catch: 1200, dwell: 45, perPax: 0.12, maxDwell: 120, refKmh: 60, loop: false },
+  boat: { label: 'Navette fluviale', short: 'Fluvial', ref: 2.5, K: 0.028, catch: 450, dwell: 35, perPax: 0.5, maxDwell: 90, refKmh: 15, loop: false },
+};
+const MODE_ORDER = ['bus', 'metro', 'ter', 'boat'];
+
+const CATALOG = {
+  bus: [
+    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 14 },
+    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 24 },
+    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 15 },
+    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 28 },
+    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 32 },
+    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 40 },
+  ],
+  metro: [
+    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 70 },
+    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 95 },
+    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 45 },
+  ],
+  ter: [
+    { id: 't1', name: 'Régio 1', desc: 'Autorail 1 caisse', cap: 140, kmh: 140, price: 1.6e6, op: 90 },
+    { id: 't4', name: 'Régio 4', desc: 'Automotrice 4 caisses', cap: 310, kmh: 160, price: 3.6e6, op: 140 },
+    { id: 'td', name: 'Régio Duplex', desc: 'Rame à deux niveaux', cap: 560, kmh: 160, price: 5.8e6, op: 190 },
+  ],
+  boat: [
+    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 18, price: 320000, op: 22 },
+    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 22, price: 720000, op: 35 },
+    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 28, price: 1.3e6, op: 50 },
+  ],
+};
+const MODEL = {};
+for (const m of MODE_ORDER) for (const v of CATALOG[m]) { v.mode = m; MODEL[v.id] = v; }
+
+const LINE_COLORS = ['#FFCD00', '#003CA6', '#9F9825', '#6EC4E8', '#C04191', '#F28E42', '#FA9ABA', '#E19BDF',
+  '#B6BD00', '#C9910D', '#704B1C', '#007852', '#62259D', '#00A88F', '#E3051C', '#8D5E2A'];
+
+const PROF_WD = [0.05, 0.03, 0.02, 0.02, 0.04, 0.15, 0.45, 0.95, 1.0, 0.6, 0.45, 0.5, 0.6, 0.55, 0.5, 0.55, 0.75, 0.95, 0.9, 0.6, 0.4, 0.3, 0.2, 0.1];
+const PROF_WE = [0.08, 0.06, 0.04, 0.03, 0.03, 0.06, 0.12, 0.25, 0.4, 0.55, 0.65, 0.7, 0.7, 0.68, 0.65, 0.65, 0.68, 0.7, 0.65, 0.5, 0.4, 0.32, 0.22, 0.14];
+const SUM_WD = PROF_WD.reduce((a, b) => a + b, 0);
+const SUM_WE = PROF_WE.reduce((a, b) => a + b, 0);
+const CLS_F = [1.0, 0.95, 0.85, 0.72, 0.38];
+
+const ADS = {
+  perHour: { bus: [0, 1.2, 2.8], metro: [0, 5, 12], ter: [0, 4, 10], boat: [0, 1.5, 3.5] },
+  perPax: [0, 0.02, 0.05],
+  demand: [1, 0.995, 0.96],
+  label: ['Aucune', 'Discrète', 'Intensive'],
+};
+const MAINT = { busStop: 10, metroKm: 600, metroStation: 250, terKm: 25, terStation: 120, boatStop: 40 };
+const DIFF = {
+  facile: { label: 'Facile', money: 6e6, cost: 0.8 },
+  normal: { label: 'Normal', money: 3.5e6, cost: 1 },
+  difficile: { label: 'Difficile', money: 2e6, cost: 1.25 },
+};
+
+/* ---------- temps ---------- */
+const Time = {
+  date(min) { return new Date(G.s.startMs + min * 60000); },
+  mod(min) { return ((min % 1440) + 1440) % 1440; },
+  hour(min) { return Math.floor(this.mod(min) / 60); },
+  dow(min) { return this.date(min).getUTCDay(); }, // 0 = dimanche
+  weekend(min) { const d = this.dow(min); return d === 0 || d === 6; },
+  night(min) { const h = this.hour(min); return h >= 22 || h < 5; },
+  period(min) { return this.night(min) ? 'night' : this.weekend(min) ? 'weekend' : 'week'; },
+  month(min) { return this.date(min).getUTCMonth(); },
+  label(min) {
+    const d = this.date(min);
+    const j = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'][d.getUTCDay()];
+    const m = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][d.getUTCMonth()];
+    return { day: `${j} ${d.getUTCDate()} ${m}`, time: String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0') };
+  },
+  dayLabel(min) { const d = this.date(min); return `${d.getUTCDate()}/${d.getUTCMonth() + 1}`; },
+  hhmm(m) { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); },
+};
+
+/* ---------- géométrie de ligne ---------- */
+function buildPathMeta(path) {
+  const pts = path.pts, cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  path.cum = cum; path.L = cum[cum.length - 1];
+}
+function pointAt(path, s) {
+  const cum = path.cum, pts = path.pts;
+  if (s <= 0) return [pts[0][0], pts[0][1], 0, 0];
+  if (s >= path.L) { const n = pts.length - 1; return [pts[n][0], pts[n][1], n - 1, 1]; }
+  let lo = 0, hi = cum.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= s) lo = m; else hi = m; }
+  const t = (s - cum[lo]) / Math.max(1e-9, cum[hi] - cum[lo]);
+  return [lerp(pts[lo][0], pts[hi][0], t), lerp(pts[lo][1], pts[hi][1], t), lo, t];
+}
+/** Tracé « plan de métro » : segments à 0/45/90° avec coudes arrondis */
+function octiPath(a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  const sx = Math.sign(dx) || 1, sy = Math.sign(dy) || 1;
+  let corner;
+  if (ax > ay) corner = [a[0] + sx * (ax - ay), a[1]];
+  else corner = [a[0], a[1] + sy * (ay - ax)];
+  const l1 = Math.hypot(corner[0] - a[0], corner[1] - a[1]);
+  const l2 = Math.hypot(b[0] - corner[0], b[1] - corner[1]);
+  if (l1 < 1e-9 || l2 < 1e-9) return [a, b];
+  const r = Math.min(meters(220), l1 * 0.45, l2 * 0.45);
+  const p1 = [corner[0] - ((corner[0] - a[0]) / l1) * r, corner[1] - ((corner[1] - a[1]) / l1) * r];
+  const p2 = [corner[0] + ((b[0] - corner[0]) / l2) * r, corner[1] + ((b[1] - corner[1]) / l2) * r];
+  const out = [a, p1];
+  for (let k = 1; k < 6; k++) {
+    const t = k / 6, u = 1 - t;
+    out.push([u * u * p1[0] + 2 * u * t * corner[0] + t * t * p2[0], u * u * p1[1] + 2 * u * t * corner[1] + t * t * p2[1]]);
+  }
+  out.push(p2, b);
+  return out;
+}
+
+/* ---------- construction de ligne ---------- */
+const Lines = {
+  netFor(mode) { return mode === 'bus' ? G.w.road : mode === 'ter' ? G.w.rail : mode === 'boat' ? G.w.water : null; },
+
+  /** Calcule le tronçon entre deux arrêts. Renvoie {pts, edges(pairs), nodeIds} */
+  segment(mode, A, B) {
+    if (mode === 'metro') {
+      return { pts: octiPath([A.mx, A.my], [B.mx, B.my]), pairs: null };
+    }
+    const net = this.netFor(mode);
+    const r = route(net, A.node, B.node);
+    if (!r) return null;
+    const pts = r.nodes.map((i) => [net.x[i], net.y[i]]);
+    const pairs = r.edges.map((e) => net.ids[net.ea[e]] + '_' + net.ids[net.eb[e]]);
+    return { pts, pairs, len: r.len };
+  },
+
+  /** Assemble le chemin complet depuis les tronçons */
+  assemble(stops, segs, loop) {
+    const pts = [], pairs = [], stopIdx = [0];
+    segs.forEach((sg, k) => {
+      const start = pts.length ? 1 : 0;
+      for (let i = start; i < sg.pts.length; i++) pts.push(sg.pts[i]);
+      if (sg.pairs) {
+        if (k > 0) {/* le premier point du tronçon est le dernier du précédent */ }
+        for (const p of sg.pairs) pairs.push(p);
+      } else for (let i = 1; i < sg.pts.length; i++) pairs.push(null);
+      stopIdx.push(pts.length - 1);
+    });
+    if (!pts.length) pts.push([stops[0].mx, stops[0].my]);
+    const path = { pts, pairs, stopPt: stopIdx };
+    buildPathMeta(path);
+    return path;
+  },
+
+  costOf(mode, stops, path) {
+    const m = G.s.costMul;
+    let infra = 0;
+    const newStops = stops.filter((s) => !s.shared).length;
+    if (mode === 'bus') infra = 5000 + newStops * 8000;
+    else if (mode === 'metro') infra = (path ? path.L / 1000 : 0) * 0.6e6 + newStops * 350000 + (stops.length - newStops) * 120000;
+    else if (mode === 'ter') infra = 80000 + newStops * 40000;
+    else if (mode === 'boat') infra = 30000 + newStops * 60000;
+    return Math.round(infra * m / 1000) * 1000;
+  },
+
+  nextNum(mode) {
+    const used = new Set(G.s.lines.filter((l) => l.mode === mode).map((l) => l.num));
+    let n = 1; while (used.has(n)) n++;
+    return n;
+  },
+  nextColor() {
+    const used = G.s.lines.map((l) => l.color);
+    return LINE_COLORS.find((c) => !used.includes(c)) || pick(LINE_COLORS);
+  },
+
+  create(b, opts) {
+    const s = G.s;
+    const id = s.nextId++;
+    const line = {
+      id, mode: b.mode, num: opts.num || this.nextNum(b.mode), color: opts.color || this.nextColor(),
+      name: '', loop: !!b.loop,
+      stops: b.stops.map((st) => ({ mx: st.mx, my: st.my, name: st.name, nid: st.nid ?? null, shared: !!st.shared })),
+      path: b.path,
+      prices: { week: MODES[b.mode].ref, weekend: MODES[b.mode].ref, night: MODES[b.mode].ref },
+      hours: { start: 330, end: 30 }, night: false, busLane: false, signal: false,
+      status: b.mode === 'metro' ? 'construction' : 'active',
+      buildEnd: b.mode === 'metro' ? s.min + (b.path.L > 4000 ? 2 : 1) * 1440 : 0,
+      rep: 1, created: s.min, veh: [], od: null,
+      today: Lines.blankStats(), hist: [],
+    };
+    line.name = line.stops[0].name + ' ⇄ ' + (line.loop ? line.stops[Math.floor(line.stops.length / 2)].name : line.stops[line.stops.length - 1].name);
+    if (line.loop) line.name = 'Circulaire ' + line.stops[0].name;
+    s.lines.push(line);
+    this.prepare(line);
+    for (let k = 0; k < opts.count; k++) this.addVehicle(line, opts.model, true);
+    this.placeVehicles(line);
+    return line;
+  },
+
+  blankStats() { return { pax: 0, fares: 0, ops: 0, ads: 0, mec: 0, loadSum: 0, loadN: 0, loadMax: 0 }; },
+
+  /** Prépare les structures de simulation d'une ligne (après création ou chargement) */
+  prepare(line) {
+    const n = line.stops.length;
+    buildPathMeta(line.path);
+    const P = line.path;
+    line.stopAt = P.stopPt.map((i) => P.cum[i]);
+    const L = P.L;
+    line.C = line.loop ? L : 2 * L;
+    const ev = [];
+    for (let k = 0; k < n; k++) ev.push({ u: line.stopAt[k], k, d: 0 });
+    if (!line.loop) for (let k = n - 1; k >= 0; k--) ev.push({ u: 2 * L - line.stopAt[k], k, d: 1 });
+    ev.sort((a, b) => a.u - b.u || a.d - b.d);
+    line.ev = ev;
+    line.Wf = new Float64Array(n * n);
+    line.Wb = new Float64Array(n * n);
+    line.segE = null;
+    this.resolveEdges(line);
+    if (!line.od || line.od.length !== n * n) this.computeOD(line);
+    line.qual = 1; line.headway = 10; line.speedAvg = MODES[line.mode].refKmh;
+    line.evMul = new Float64Array(n).fill(1);
+    line.active = false;
+    for (const v of line.veh) { v.on = new Float64Array(n); v.load = 0; }
+  },
+
+  resolveEdges(line) {
+    const net = this.netFor(line.mode);
+    if (!net || !line.path.pairs) return;
+    const segE = new Int32Array(line.path.pts.length).fill(-1);
+    let found = 0;
+    line.path.pairs.forEach((p, i) => {
+      if (!p) return;
+      const e = net.pair.get(p);
+      if (e !== undefined) { segE[i] = e; found++; }
+    });
+    line.segE = segE;
+    line.segFound = found;
+  },
+
+  /** Demande quotidienne origine-destination (lignes indépendantes, modèle gravitaire) */
+  computeOD(line) {
+    const mode = MODES[line.mode], n = line.stops.length, w = G.w;
+    const P = [], A = [];
+    const area = Math.PI * (mode.catch / 1000) ** 2;
+    for (const st of line.stops) {
+      let pop = 0, jobs = 0, cnt = 0;
+      const r = meters(mode.catch * 0.5);
+      for (const [dx, dy] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) {
+        const z = w.zoneAt(st.mx + dx, st.my + dy);
+        if (z) { pop += z.density; jobs += z.jobDensity; }
+        cnt++;
+      }
+      pop = (pop / cnt) * area; jobs = (jobs / cnt) * area;
+      let poi = 0;
+      for (const p of w.poisNear(st.mx, st.my, mode.catch)) {
+        let wgt = p.w;
+        if (line.mode === 'boat' && (p.kind === 'attraction' || p.kind === 'museum')) wgt *= 2.5;
+        if (line.mode === 'ter' && p.kind === 'station') wgt *= 3;
+        poi += wgt;
+      }
+      P.push(pop + jobs * 0.25);
+      A.push(jobs + pop * 0.45 + poi);
+    }
+    const od = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      let d = Math.abs(line.stopAt[j] - line.stopAt[i]) / 1000;
+      if (line.loop) d = Math.min(d, line.path.L / 1000 - d);
+      let g;
+      if (line.mode === 'bus') g = (1 - Math.exp(-d / 0.8)) * Math.exp(-d / 12);
+      else if (line.mode === 'metro') g = (1 - Math.exp(-d / 1.0)) * Math.exp(-d / 25);
+      else if (line.mode === 'ter') g = (1 - Math.exp(-d / 4)) * Math.exp(-d / 150);
+      else g = (1 - Math.exp(-d / 1)) * Math.exp(-d / 15);
+      od[i * n + j] = mode.K * Math.sqrt(P[i] * A[j]) * g;
+    }
+    line.od = od;
+    line.catchPop = P.reduce((a, b) => a + b, 0);
+  },
+
+  addVehicle(line, modelId, free) {
+    const md = MODEL[modelId];
+    if (!free) {
+      const price = Math.round(md.price * G.s.costMul);
+      if (!Eco.spend(price, 'capex')) return false;
+    }
+    const v = { id: G.s.nextId++, model: modelId, u: 0, ev: 0, dwell: 0, on: new Float64Array(line.stops.length), load: 0, hidden: true };
+    line.veh.push(v);
+    if (line.active) this.placeVehicles(line);
+    return true;
+  },
+  sellVehicle(line, modelId) {
+    const i = line.veh.map((v) => v.model).lastIndexOf(modelId);
+    if (i < 0) return;
+    const v = line.veh[i];
+    line.veh.splice(i, 1);
+    Eco.earn(Math.round(MODEL[modelId].price * G.s.costMul * 0.6), 'sales');
+    if (G.ui && G.ui.follow === v) G.ui.follow = null;
+    this.placeVehicles(line);
+  },
+  placeVehicles(line) {
+    const n = line.veh.length;
+    line.veh.forEach((v, k) => {
+      v.u = (line.C * k) / Math.max(1, n);
+      v.ev = 0; v.wrap = false;
+      while (v.ev < line.ev.length && line.ev[v.ev].u < v.u - 1e-6) v.ev++;
+      if (v.ev >= line.ev.length) { v.ev = 0; v.wrap = true; }
+      v.dwell = 0; if (v.on) v.on.fill(0); v.load = 0;
+    });
+  },
+  remove(line) {
+    const s = G.s;
+    s.lines = s.lines.filter((l) => l !== line);
+    let refund = line.veh.reduce((a, v) => a + MODEL[v.model].price * 0.6, 0) * s.costMul;
+    Eco.earn(Math.round(refund), 'sales');
+    if (G.ui && G.ui.follow && line.veh.includes(G.ui.follow)) G.ui.follow = null;
+  },
+
+  posOf(line, v) {
+    const L = line.path.L;
+    let s = v.u;
+    let back = false;
+    if (!line.loop && s > L) { s = 2 * L - s; back = true; }
+    const p = pointAt(line.path, s);
+    return { mx: p[0], my: p[1], seg: p[2], back };
+  },
+  label(line) {
+    if (line.mode === 'metro') return String(line.num);
+    if (line.mode === 'ter') return 'TER ' + line.num;
+    if (line.mode === 'boat') return 'N' + line.num;
+    return String(line.num);
+  },
+  capacity(line) { return line.veh.reduce((a, v) => a + MODEL[v.model].cap, 0); },
+  isActiveAt(line, min) {
+    if (line.status !== 'active') return false;
+    if (Events.halted(line)) return false;
+    if (line.night) return true;
+    const m = Time.mod(min), st = line.hours.start, en = line.hours.end;
+    return en > st ? m >= st && m < en : m >= st || m < en;
+  },
+  price(line, min) { return line.prices[Time.period(min)]; },
+};
+
+/* ---------- trafic routier (simulé) ---------- */
+const Traffic = {
+  update() {
+    const s = G.s, net = G.w.road;
+    const h = Time.hour(s.min), we = Time.weekend(s.min);
+    const prof = (we ? PROF_WE[h] * 0.8 : PROF_WD[h]);
+    const shift = Math.min(0.22, s.modalShift || 0);
+    const wm = Events.weatherTraffic();
+    const evs = Events.trafficEvents();
+    for (let e = 0; e < net.nE; e++) {
+      const d = net.dens[e] < 0 ? 250 : net.dens[e];
+      let c = prof * (0.35 + 0.65 * Math.min(1.7, d / 7000)) * CLS_F[net.cls[e]] * net.noise[e] * wm * (1 - shift);
+      if (evs.length) {
+        const mx = (net.x[net.ea[e]] + net.x[net.eb[e]]) / 2, my = (net.y[net.ea[e]] + net.y[net.eb[e]]) / 2;
+        for (const ev of evs) {
+          if (ev.zone) { if (net.zone[e] === ev.zone) c *= ev.mult; }
+          else if (ev.mx !== undefined) {
+            const dd = dist(mx, my, ev.mx, ev.my);
+            if (dd < ev.r) c *= 1 + (ev.mult - 1) * (1 - dd / ev.r);
+          }
+        }
+      }
+      net.traffic[e] = net.traffic[e] * 0.4 + c * 0.6;
+    }
+    Render.dirty = true;
+  },
+  /** facteur de vitesse d'un bus sur un tronçon */
+  busFactor(e, line) {
+    if (e < 0) return 0.75;
+    const c = G.w.road.traffic[e] ?? 0.3;
+    let f = 1 / (1 + 3 * Math.pow(Math.max(0, c - 0.3), 1.6));
+    f = Math.max(0.22, f);
+    if (line.busLane && G.w.road.cls[e] <= 3) f = 1 - (1 - f) * 0.25;
+    return f;
+  },
+};
+
+/* ---------- économie ---------- */
+const Eco = {
+  spend(amount, cat) {
+    const s = G.s;
+    if (amount > s.money) { UI.toast('Fonds insuffisants : il manque ' + fmtEur(amount - s.money) + '.', 'bad'); return false; }
+    s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount;
+    UI.refreshTop();
+    return true;
+  },
+  charge(amount, cat) { const s = G.s; s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount; },
+  earn(amount, cat) { const s = G.s; s.money += amount; s.today[cat] = (s.today[cat] || 0) + amount; UI.refreshTop(); },
+  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, loanIn: 0, repay: 0, pax: 0, mec: 0 }; },
+  dayProfit(d) { return d.fares + d.ads - d.ops - d.maint - d.interest - d.events; },
+  debt() { return G.s.loans.reduce((a, l) => a + l.amount, 0); },
+  loanOffers() {
+    const m = G.s.costMul;
+    return [
+      { amount: 1e6 * m, rate: 0.04, label: 'Prêt relais' },
+      { amount: 3e6 * m, rate: 0.05, label: 'Prêt d’équipement' },
+      { amount: 8e6 * m, rate: 0.06, label: 'Grand emprunt' },
+    ];
+  },
+  maxDebt() { return 20e6 * G.s.costMul; },
+  borrow(o) {
+    const s = G.s;
+    if (this.debt() + o.amount > this.maxDebt()) { UI.toast('La banque refuse : endettement maximum atteint (' + fmtEur(this.maxDebt()) + ').', 'bad'); return; }
+    s.loans.push({ id: s.nextId++, amount: o.amount, rate: o.rate, taken: s.min });
+    s.money += o.amount; s.today.loanIn += o.amount;
+    UI.toast('Prêt accordé : +' + fmtEur(o.amount) + ' à ' + (o.rate * 100).toFixed(0) + ' %/an.', 'ok');
+    UI.refreshTop();
+  },
+  repay(loan, part) {
+    const s = G.s;
+    const amt = Math.min(loan.amount, part);
+    if (amt > s.money) { UI.toast('Pas assez de trésorerie pour rembourser.', 'bad'); return; }
+    s.money -= amt; loan.amount -= amt; s.today.repay += amt;
+    if (loan.amount < 1) s.loans = s.loans.filter((l) => l !== loan);
+    UI.refreshTop();
+  },
+  /** coûts et recettes horaires */
+  hourly() {
+    const s = G.s;
+    let maint = 0;
+    for (const l of s.lines) {
+      const nStops = l.stops.filter((x) => !x.shared).length;
+      if (l.mode === 'bus') maint += nStops * MAINT.busStop;
+      else if (l.mode === 'metro') maint += (l.path.L / 1000) * MAINT.metroKm + nStops * MAINT.metroStation;
+      else if (l.mode === 'ter') maint += (l.path.L / 1000) * MAINT.terKm + nStops * MAINT.terStation;
+      else maint += nStops * MAINT.boatStop;
+      if (l.busLane) maint += (l.laneKm || 0) * 200;
+    }
+    this.charge((maint * s.costMul) / 24, 'maint');
+    let interest = 0;
+    for (const ln of s.loans) interest += (ln.amount * ln.rate) / 365 / 24;
+    this.charge(interest, 'interest');
+  },
+};
+
+/* ---------- événements ---------- */
+const EV_INFO = {
+  rain: { icon: 'rain', title: 'Pluie' },
+  snow: { icon: 'snow', title: 'Neige' },
+  heat: { icon: 'heat', title: 'Canicule' },
+  storm: { icon: 'wind', title: 'Tempête' },
+  sun: { icon: 'sun', title: 'Beau temps' },
+  strike: { icon: 'strike', title: 'Préavis de grève' },
+  works: { icon: 'works', title: 'Travaux de voirie' },
+  accident: { icon: 'accident', title: 'Accident' },
+  demo: { icon: 'demo', title: 'Manifestation' },
+  big: { icon: 'star', title: 'Grand événement' },
+  failure: { icon: 'alert', title: 'Incident technique' },
+};
+const Events = {
+  active() { const m = G.s.min; return G.s.events.filter((e) => e.start <= m && e.end > m); },
+  upcoming() { const m = G.s.min; return G.s.events.filter((e) => e.start > m); },
+  weather() { return G.s.weather || 'sun'; },
+  weatherTraffic() { const w = this.weather(); return w === 'rain' ? 1.1 : w === 'snow' ? 1.3 : w === 'storm' ? 1.12 : 1; },
+  speedMult(mode) {
+    const w = this.weather();
+    if (mode === 'bus') return w === 'snow' ? 0.6 : w === 'rain' ? 0.92 : 1;
+    if (mode === 'boat') return w === 'storm' ? 0 : 1;
+    if (mode === 'ter') return w === 'snow' ? 0.85 : 1;
+    return 1;
+  },
+  demandMult(mode) {
+    const w = this.weather();
+    const t = { sun: 1, rain: { bus: 1.1, metro: 1.15, ter: 1.05, boat: 0.7 }, snow: { bus: 0.9, metro: 1.2, ter: 1.05, boat: 0.6 }, heat: { bus: 0.9, metro: 0.95, ter: 1, boat: 1.35 }, storm: { bus: 0.95, metro: 1.1, ter: 1, boat: 0 } }[w];
+    return t === 1 || !t ? 1 : t[mode];
+  },
+  trafficEvents() {
+    return this.active().filter((e) => e.traffic).map((e) => e.traffic);
+  },
+  halted(line) {
+    for (const e of this.active()) {
+      if (e.kind === 'strike' && !e.resolved && e.mode === line.mode) return true;
+      if (e.kind === 'failure' && e.lineId === line.id) return true;
+    }
+    if (line.mode === 'boat' && this.weather() === 'storm') return true;
+    return false;
+  },
+  stopMult(line) {
+    const m = line.evMul; m.fill(1);
+    for (const e of this.active()) if (e.kind === 'big') {
+      line.stops.forEach((st, k) => { const d = dist(st.mx, st.my, e.mx, e.my); if (d < 700) m[k] = Math.max(m[k], 1 + 3 * (1 - d / 700)); });
+    }
+  },
+  log(text, kind) {
+    const s = G.s;
+    s.journal.unshift({ t: s.min, text, kind });
+    if (s.journal.length > 60) s.journal.length = 60;
+  },
+  add(e) {
+    e.id = G.s.nextId++;
+    G.s.events.push(e);
+    this.log(e.title + ' — ' + e.desc, e.kind);
+    UI.toast(e.title + ' : ' + e.desc, e.bad ? 'warn' : 'info');
+    Render.dirty = true;
+    UI.refreshInfoBadge();
+  },
+  randomOwnedZone() {
+    const z = [...G.w.zones.values()].filter((z) => z.owned);
+    return z.length ? pick(z) : null;
+  },
+  randomRoadEdge() {
+    const n = G.w.road; if (!n.nE) return -1;
+    for (let k = 0; k < 40; k++) {
+      const e = Math.floor(Math.random() * n.nE);
+      if (n.cls[e] <= 2 && n.zone[e] && G.w.zones.get(n.zone[e])?.owned) return e;
+    }
+    return -1;
+  },
+  daily() {
+    const s = G.s, m = s.min, month = Time.month(m);
+    // météo du jour
+    const r = Math.random();
+    let w = 'sun';
+    const winter = month === 11 || month <= 1, summer = month >= 5 && month <= 7;
+    if (winter && r < 0.1) w = 'snow';
+    else if (summer && r < 0.15) w = 'heat';
+    else if (r < 0.04) w = 'storm';
+    else if (r < 0.3) w = 'rain';
+    s.weather = w;
+    if (w !== 'sun') this.log('Météo : ' + EV_INFO[w].title.toLowerCase() + ' aujourd’hui.', w);
+    if (w === 'storm' && s.lines.some((l) => l.mode === 'boat')) UI.toast('Tempête : les navettes fluviales restent à quai aujourd’hui.', 'warn');
+    if (w === 'snow') UI.toast('Neige : les bus roulent au ralenti.', 'warn');
+    // purge
+    s.events = s.events.filter((e) => e.end > m - 1440);
+    const modes = new Set(s.lines.map((l) => l.mode));
+    const day0 = m - Time.mod(m);
+    // grève (annoncée la veille)
+    if (Math.random() < 0.035 && (modes.has('bus') || modes.has('metro'))) {
+      const mode = modes.has('metro') && Math.random() < 0.5 ? 'metro' : modes.has('bus') ? 'bus' : 'metro';
+      const cost = Math.round((40000 + s.lines.filter((l) => l.mode === mode).reduce((a, l) => a + l.veh.length, 0) * 6000) * s.costMul);
+      this.add({ kind: 'strike', mode, start: day0 + 1440 + 300, end: day0 + 2880, title: 'Préavis de grève', desc: 'les agents ' + (mode === 'bus' ? 'des bus' : 'du métro') + ' cesseront le travail demain.', bad: true, cost, resolved: false, asked: false });
+    }
+    // travaux
+    if (Math.random() < 0.22) {
+      const z = this.randomOwnedZone();
+      if (z) {
+        const len = 2 + Math.floor(Math.random() * 3);
+        this.add({ kind: 'works', start: day0 + 1440 + 420, end: day0 + 1440 * (1 + len), title: 'Travaux de voirie', desc: 'chantier à ' + z.name + ' pendant ' + len + ' jours, circulation difficile.', bad: true, zone: z.code, traffic: { zone: z.code, mult: 1.6 } });
+      }
+    }
+    // grand événement
+    if (Math.random() < 0.2 && s.lines.length) {
+      const l = pick(s.lines); const st = pick(l.stops);
+      const what = pick(['Match de football', 'Concert en plein air', 'Festival', 'Salon', 'Feu d’artifice', 'Marché de nuit']);
+      const st0 = day0 + 1440 + 17 * 60;
+      this.add({ kind: 'big', start: st0, end: st0 + 300, title: what, desc: 'demain soir près de ' + st.name + ', forte affluence attendue.', mx: st.mx, my: st.my, traffic: { mx: st.mx, my: st.my, r: 900, mult: 1.5 } });
+    }
+    // manifestation
+    if (Math.random() < 0.06) {
+      const c = G.s.city;
+      const st0 = day0 + 1440 + 14 * 60;
+      this.add({ kind: 'demo', start: st0, end: st0 + 180, title: 'Manifestation', desc: 'cortège demain après-midi en centre-ville, ralentissements prévus.', bad: true, mx: lonToMx(c.lon), my: latToMy(c.lat), traffic: { mx: lonToMx(c.lon), my: latToMy(c.lat), r: 900, mult: 1.8 } });
+    }
+  },
+  hourly() {
+    const s = G.s, m = s.min, h = Time.hour(m);
+    // accident
+    const peak = (h >= 7 && h <= 9) || (h >= 16 && h <= 19);
+    if (Math.random() < (peak ? 0.08 : 0.025)) {
+      const e = this.randomRoadEdge();
+      if (e >= 0) {
+        const n = G.w.road;
+        const mx = n.x[n.ea[e]], my = n.y[n.ea[e]];
+        const dur = 60 + Math.floor(Math.random() * 120);
+        const where = n.name[e] || G.w.zoneAt(mx, my)?.name || 'centre';
+        this.add({ kind: 'accident', start: m, end: m + dur, title: 'Accident', desc: (n.name[e] ? where : 'secteur ' + where) + ', bouchons pendant ' + Math.round(dur / 60) + ' h environ.', bad: true, mx, my, traffic: { mx, my, r: 550, mult: 2.2 } });
+      }
+    }
+    // incident technique (métro / TER)
+    const rail = s.lines.filter((l) => (l.mode === 'metro' || l.mode === 'ter') && l.status === 'active');
+    if (rail.length && Math.random() < 0.012) {
+      const l = pick(rail); const dur = 60 + Math.floor(Math.random() * 120);
+      this.add({ kind: 'failure', lineId: l.id, start: m, end: m + dur, title: 'Incident technique', desc: 'ligne ' + Lines.label(l) + ' interrompue (' + pick(['panne de signalisation', 'rame en panne', 'colis suspect', 'panne électrique']) + ').', bad: true });
+    }
+    // grève à confirmer
+    for (const e of s.events) if (e.kind === 'strike' && !e.asked && e.start - m < 1200) { e.asked = true; UI.strikeDialog(e); }
+  },
+};
+
+/* ---------- moteur ---------- */
+const Sim = {
+  newState(city, diff, slot) {
+    const d = DIFF[diff];
+    const now = new Date();
+    const startMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    return {
+      v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301,
+      owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun',
+      today: Eco.blankDay(), days: [], ads: { bus: 1, metro: 1, ter: 1, boat: 1 },
+      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, base: 'photo' },
+      modalShift: 0, view: null, lastReal: Date.now(), created: Date.now(), zoneMode: 'iris',
+    };
+  },
+
+  onNetworkGrow() {
+    for (const l of G.s.lines) {
+      if (l.segE && l.segFound >= (l.path.pairs || []).filter(Boolean).length) continue;
+      Lines.resolveEdges(l);
+    }
+  },
+
+  advance(sec) {
+    const s = G.s;
+    let rem = sec;
+    while (rem > 0) {
+      const step = Math.min(rem, 10);
+      rem -= step;
+      s.sec += step;
+      this.moveVehicles(step);
+      while (s.sec >= s.nextMin * 60) { s.min = s.nextMin; this.minute(); s.nextMin++; }
+    }
+  },
+
+  minute() {
+    const s = G.s, m = s.min, mod = Time.mod(m);
+    for (const l of s.lines) this.lineMinute(l, m);
+    if (mod % 10 === 0) {
+      Traffic.update();
+      for (const l of s.lines) this.lineQuality(l);
+    }
+    if (mod % 60 === 0) this.hour();
+    if (mod === 0) this.newDay();
+    if (mod === 300) Events.daily();
+    for (const l of s.lines) if (l.status === 'construction' && m >= l.buildEnd) {
+      l.status = 'active';
+      Events.log('Ligne ' + Lines.label(l) + ' du métro inaugurée.', 'ok');
+      UI.toast('Inauguration : la ligne ' + Lines.label(l) + ' du métro ouvre au public !', 'ok');
+      Render.dirty = true;
+    }
+  },
+
+  lineMinute(l, m) {
+    const was = l.active;
+    l.active = Lines.isActiveAt(l, m);
+    if (l.active && !was) { Lines.placeVehicles(l); for (const v of l.veh) v.hidden = false; Render.dirty = true; }
+    if (!l.active) {
+      if (was) { for (const v of l.veh) { v.hidden = true; v.on.fill(0); v.load = 0; } l.Wf.fill(0); l.Wb.fill(0); }
+      return;
+    }
+    const s = G.s, n = l.stops.length, mode = MODES[l.mode];
+    // coûts d'exploitation
+    let op = 0;
+    for (const v of l.veh) op += MODEL[v.model].op;
+    op = (op * s.costMul) / 60;
+    Eco.charge(op, 'ops'); l.today.ops += op;
+    const adLvl = s.ads[l.mode] || 0;
+    const adH = (ADS.perHour[l.mode][adLvl] * l.veh.length) / 60;
+    if (adH) { s.money += adH; s.today.ads += adH; l.today.ads += adH; }
+    if (!l.veh.length) return;
+    // génération des voyageurs
+    const h = Time.hour(m), we = Time.weekend(m);
+    const prof = we ? (PROF_WE[h] / SUM_WE) * 0.75 : PROF_WD[h] / SUM_WD;
+    const price = Lines.price(l, m);
+    const pf = price <= 0.01 ? 2.2 : clamp(Math.pow(mode.ref / price, 0.55), 0.3, 2.2);
+    const base = (prof / 60) * l.qual * pf * l.rep * Events.demandMult(l.mode) * ADS.demand[adLvl];
+    if (base <= 0) return;
+    const od = l.od, em = l.evMul;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      const r = od[i * n + j] * base * Math.max(em[i], em[j]);
+      if (l.loop || j > i) l.Wf[i * n + j] += r; else l.Wb[i * n + j] += r;
+    }
+    // abandons
+    const rate = clamp(0.003 + Math.max(0, l.headway - 12) * 0.0015, 0.003, 0.05);
+    let lost = 0;
+    for (const W of [l.Wf, l.Wb]) for (let k = 0; k < W.length; k++) if (W[k] > 0) { const x = W[k] * rate; W[k] -= x; lost += x; }
+    l.today.mec += lost; s.today.mec += lost;
+  },
+
+  lineQuality(l) {
+    const mode = MODES[l.mode];
+    Events.stopMult(l);
+    let spd = 0;
+    if (l.mode === 'bus') {
+      let num = 0, den = 0;
+      const P = l.path;
+      for (let i = 0; i < P.pts.length - 1; i++) {
+        const segL = P.cum[i + 1] - P.cum[i];
+        const e = l.segE ? l.segE[i] : -1;
+        const net = G.w.road;
+        const vmax = Math.min(e >= 0 ? net.spd[e] : 8.3, 13.9);
+        num += segL; den += segL / (vmax * Traffic.busFactor(e, l) * (l.signal ? 1.1 : 1) * Events.speedMult('bus'));
+      }
+      spd = den > 0 ? num / den : 6;
+    } else {
+      const v0 = l.veh[0] ? MODEL[l.veh[0].model].kmh / 3.6 : 10;
+      spd = v0 * (l.mode === 'metro' ? 0.6 : l.mode === 'ter' ? 0.7 : 0.85) * (Events.speedMult(l.mode) || 0.01);
+    }
+    const nStopsCycle = l.ev.length;
+    const cycle = l.C / Math.max(1, spd) + nStopsCycle * (mode.dwell + 10);
+    const nA = Math.max(1, l.veh.length);
+    l.headway = cycle / nA / 60;
+    l.cycleMin = cycle / 60;
+    l.speedAvg = (spd * 3.6) * (l.C / Math.max(1, cycle * spd));
+    const qWait = clamp(1.25 - l.headway / 40, 0.25, 1.15);
+    const qSpeed = clamp(Math.pow(l.speedAvg / mode.refKmh, 0.6), 0.55, 1.35);
+    l.qual = l.veh.length ? qWait * qSpeed : 0;
+  },
+
+  vehSpeed(l, v, seg) {
+    const md = MODEL[v.model];
+    const vm = md.kmh / 3.6;
+    const sm = Events.speedMult(l.mode);
+    if (l.mode === 'bus') {
+      const e = l.segE ? l.segE[seg] : -1;
+      const net = G.w.road;
+      const lim = e >= 0 ? net.spd[e] : 8.3;
+      return Math.max(1.2, Math.min(vm, lim * 0.95) * Traffic.busFactor(e, l) * (l.signal ? 1.1 : 1) * sm);
+    }
+    if (l.mode === 'metro') return vm * 0.62;
+    if (l.mode === 'ter') {
+      const e = l.segE ? l.segE[seg] : -1;
+      const lim = e >= 0 ? G.w.rail.spd[e] : vm;
+      return Math.max(3, Math.min(vm, lim) * 0.72 * sm);
+    }
+    return Math.max(0.5, vm * 0.9 * (sm || 0.01));
+  },
+
+  moveVehicles(dt) {
+    for (const l of G.s.lines) {
+      if (!l.active || !l.veh.length) continue;
+      for (const v of l.veh) {
+        let t = dt, guard = 0;
+        while (t > 1e-6 && guard++ < 50) {
+          if (v.dwell > 0) { const d = Math.min(t, v.dwell); v.dwell -= d; t -= d; continue; }
+          const evt = l.ev[v.ev];
+          const target = evt.u + (v.wrap ? l.C : 0);
+          const p = Lines.posOf(l, v);
+          const spd = this.vehSpeed(l, v, p.seg);
+          v.spd = spd;
+          const remain = target - v.u;
+          const need = remain / spd;
+          if (need <= t) {
+            v.u = target; t -= Math.max(0, need);
+            if (v.wrap) { v.u -= l.C; v.wrap = false; if (v.u < 0) v.u = 0; }
+            this.atStop(l, v, evt);
+            v.ev++;
+            if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
+          } else { v.u += spd * t; t = 0; }
+        }
+      }
+    }
+  },
+
+  atStop(l, v, evt) {
+    const s = G.s, n = l.stops.length, k = evt.k, mode = MODES[l.mode];
+    const md = MODEL[v.model];
+    // descente
+    const off = v.on[k]; v.on[k] = 0; v.load = Math.max(0, v.load - off);
+    if (!l.loop && ((evt.d === 0 && k === n - 1) || (evt.d === 1 && k === 0))) { v.on.fill(0); v.load = 0; }
+    // montée
+    const W = evt.d === 0 ? l.Wf : l.Wb;
+    let want = 0;
+    for (let j = 0; j < n; j++) if (j !== k) want += W[k * n + j];
+    const space = Math.max(0, md.cap - v.load);
+    const take = Math.min(space, want);
+    if (want > 0 && take > 0) {
+      const ratio = take / want;
+      for (let j = 0; j < n; j++) {
+        if (j === k) continue;
+        const x = W[k * n + j] * ratio;
+        W[k * n + j] -= x; v.on[j] += x;
+      }
+      v.load += take;
+      const price = Lines.price(l, s.min);
+      const fare = take * price;
+      const adPax = take * ADS.perPax[s.ads[l.mode] || 0];
+      s.money += fare + adPax;
+      s.today.fares += fare; s.today.ads += adPax; s.today.pax += take;
+      l.today.fares += fare; l.today.ads += adPax; l.today.pax += take;
+    }
+    if (want - take > 0.5) {
+      const left = (want - take) * 0.3;
+      l.today.mec += left; s.today.mec += left;
+    }
+    l.today.loadSum += v.load / md.cap; l.today.loadN++;
+    if (v.load / md.cap > (l.today.loadMax || 0)) l.today.loadMax = v.load / md.cap;
+    v.dwell = Math.min(mode.maxDwell, mode.dwell + (take + off) * mode.perPax);
+    v.lastStop = k; v.dir = evt.d;
+  },
+
+  hour() {
+    Eco.hourly();
+    Events.hourly();
+    UI.updateTint();
+    UI.refreshTop();
+    if (G.s.settings && UI.sheetOpen()) UI.refreshSheet();
+  },
+
+  newDay() {
+    const s = G.s;
+    const d = s.today;
+    d.date = s.min - 1440;
+    d.lines = {};
+    for (const l of s.lines) {
+      d.lines[l.id] = { pax: Math.round(l.today.pax), fares: Math.round(l.today.fares), ops: Math.round(l.today.ops), ads: Math.round(l.today.ads), mec: Math.round(l.today.mec), fill: l.today.loadN ? l.today.loadSum / l.today.loadN : 0, peak: l.today.loadMax || 0 };
+      const ratio = l.today.mec / Math.max(1, l.today.pax);
+      l.rep = clamp(l.rep + 0.02 - ratio * 0.6, 0.6, 1.05);
+      l.hist.unshift(d.lines[l.id]); if (l.hist.length > 30) l.hist.length = 30;
+      l.today = Lines.blankStats();
+    }
+    s.days.unshift(d); if (s.days.length > 60) s.days.length = 60;
+    s.today = Eco.blankDay();
+    const servedPop = this.servedPop();
+    s.modalShift = Math.min(0.22, d.pax / Math.max(20000, servedPop * 2.8));
+    if (Eco.dayProfit(d) < 0 && s.money < 0) UI.toast('Trésorerie négative : pensez à un prêt ou à ajuster vos tarifs.', 'bad');
+    Save.auto();
+  },
+
+  servedPop() {
+    let p = 0;
+    for (const z of G.w.zones.values()) if (z.owned) p += z.pop;
+    return p;
+  },
+
+  avgDailyProfit() {
+    const ds = G.s.days.slice(0, 3);
+    if (!ds.length) return 0;
+    return ds.reduce((a, d) => a + Eco.dayProfit(d), 0) / ds.length;
+  },
+
+  /** progression pendant l'absence (mode « idle ») */
+  offline(realSec) {
+    const s = G.s;
+    const gameMin = Math.min(realSec, 5 * 1440); // 1 min de jeu par seconde réelle, plafonné à 5 jours
+    if (gameMin < 30) return null;
+    const perMin = this.avgDailyProfit() / 1440;
+    const gain = perMin * gameMin;
+    const days = Math.floor((Time.mod(s.min) + gameMin) / 1440);
+    s.money += gain;
+    for (let k = 0; k < days; k++) {
+      const d = Eco.blankDay(); d.date = s.min + k * 1440;
+      const ref = s.days[0];
+      if (ref) { d.fares = ref.fares; d.ads = ref.ads; d.ops = ref.ops; d.maint = ref.maint; d.interest = ref.interest; d.pax = ref.pax; d.mec = ref.mec; }
+      d.offline = true;
+      s.days.unshift(d);
+    }
+    if (s.days.length > 60) s.days.length = 60;
+    s.min += Math.floor(gameMin); s.sec = s.min * 60; s.nextMin = s.min + 1;
+    s.events = s.events.filter((e) => e.end > s.min);
+    return { gameMin, gain };
+  },
+};
+
+/* ---------- sauvegardes ---------- */
+const SLOTS = 5;
+const Save = {
+  key: (n) => 'corr.slot.' + n,
+  list() {
+    const out = [];
+    for (let n = 1; n <= SLOTS; n++) {
+      let meta = null;
+      try { const raw = localStorage.getItem('corr.meta.' + n); if (raw) meta = JSON.parse(raw); } catch (e) { }
+      out.push({ n, meta });
+    }
+    return out;
+  },
+  serialize() {
+    const s = G.s;
+    const r6 = (x) => Math.round(x * 1e9) / 1e9;
+    const lines = s.lines.map((l) => ({
+      id: l.id, mode: l.mode, num: l.num, color: l.color, name: l.name, loop: l.loop,
+      stops: l.stops, prices: l.prices, hours: l.hours, night: l.night, busLane: l.busLane, signal: l.signal, laneKm: l.laneKm || 0,
+      status: l.status, buildEnd: l.buildEnd, rep: l.rep, created: l.created, hist: l.hist, today: l.today,
+      veh: l.veh.map((v) => v.model),
+      path: { pts: l.path.pts.map((p) => [r6(p[0]), r6(p[1])]), pairs: l.path.pairs, stopPt: l.path.stopPt },
+      od: Array.from(l.od, (x) => Math.round(x * 100) / 100),
+    }));
+    const owned = [...G.w.zones.values()].filter((z) => z.owned).map((z) => z.code);
+    const c = G.map.getCenter();
+    return JSON.stringify({
+      ...s, lines, owned, view: { lat: c.lat, lng: c.lng, z: G.map.getZoom() }, lastReal: Date.now(),
+      zoneMode: G.w.mode,
+    });
+  },
+  write(n) {
+    if (!G.s) return false;
+    G.s.slot = n;
+    try {
+      localStorage.setItem(this.key(n), this.serialize());
+      const meta = { city: G.s.city.nom, date: Time.label(G.s.min).day, money: G.s.money, lines: G.s.lines.length, real: Date.now(), diff: G.s.diff };
+      localStorage.setItem('corr.meta.' + n, JSON.stringify(meta));
+      localStorage.setItem('corr.last', String(n));
+      return true;
+    } catch (e) {
+      UI.toast('Sauvegarde impossible : stockage du téléphone plein ?', 'bad');
+      return false;
+    }
+  },
+  auto() { if (G.s && G.s.slot) this.write(G.s.slot); },
+  read(n) {
+    try { const raw = localStorage.getItem(this.key(n)); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  },
+  remove(n) { try { localStorage.removeItem(this.key(n)); localStorage.removeItem('corr.meta.' + n); } catch (e) { } },
+  /** Restaure l'état et reconstitue les lignes */
+  hydrate(data) {
+    const s = data;
+    s.lines = s.lines.map((l) => {
+      const line = { ...l, path: { pts: l.path.pts, pairs: l.path.pairs, stopPt: l.path.stopPt }, od: Float64Array.from(l.od || []), veh: [] };
+      line.veh = l.veh.map((m) => ({ id: s.nextId++, model: m, u: 0, ev: 0, dwell: 0, on: null, load: 0, hidden: true }));
+      if (!line.today) line.today = Lines.blankStats();
+      return line;
+    });
+    return s;
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — rendu de la carte (calques canvas au-dessus de Leaflet)
+   ===================================================================== */
+
+const TR_COL = ['#3DDC84', '#FFB020', '#F0483E', '#9B1C1C'];
+
+function lum(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const inkOn = (hex) => (lum(hex) > 0.55 ? '#0B1834' : '#FFFFFF');
+const fillCol = (f) => (f < 0.6 ? '#3DDC84' : f < 0.9 ? '#FFB020' : '#F0483E');
+
+const Render = {
+  dirty: true, last: 0, moving: false, zooming: false, o0: null,
+
+  init() {
+    const map = G.map, c = map.getContainer();
+    this.cvS = document.createElement('canvas'); this.cvS.className = 'ov ov-s';
+    this.cvD = document.createElement('canvas'); this.cvD.className = 'ov ov-d';
+    c.appendChild(this.cvS); c.appendChild(this.cvD);
+    this.ctxS = this.cvS.getContext('2d'); this.ctxD = this.cvD.getContext('2d');
+    this.resize();
+    window.addEventListener('resize', () => { this.resize(); });
+    map.on('resize', () => this.resize());
+    map.on('movestart', () => { this.moving = true; });
+    map.on('move', () => {
+      if (!this.o0 || this.zooming) return;
+      const o = this.origin();
+      if (Math.abs(o.k - this.o0.k) > 1e-6) { this.cvS.style.opacity = '0'; return; }
+      this.cvS.style.transform = `translate(${this.o0.x - o.x}px,${this.o0.y - o.y}px)`;
+    });
+    map.on('moveend', () => { this.moving = false; this.dirty = true; this.drawStatic(); });
+    map.on('zoomstart', () => { this.zooming = true; this.cvS.style.opacity = '0'; this.cvD.style.opacity = '0'; });
+    map.on('zoomend', () => { this.zooming = false; this.cvD.style.opacity = '1'; this.dirty = true; this.drawStatic(); });
+  },
+
+  resize() {
+    const c = G.map.getContainer();
+    this.W = c.clientWidth; this.H = c.clientHeight;
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const cv of [this.cvS, this.cvD]) {
+      cv.width = Math.round(this.W * this.dpr); cv.height = Math.round(this.H * this.dpr);
+      cv.style.width = this.W + 'px'; cv.style.height = this.H + 'px';
+    }
+    this.dirty = true;
+  },
+
+  origin() {
+    const m = G.map, z = m.getZoom();
+    const p = m.project(m.containerPointToLatLng([0, 0]), z);
+    return { x: p.x, y: p.y, k: 256 * Math.pow(2, z), z };
+  },
+
+  tick(now) {
+    if (!G.ready) return;
+    if (this.dirty && !this.moving && !this.zooming && now - this.last > 300) this.drawStatic();
+    if (!this.zooming) this.drawDyn();
+  },
+
+  /* ---------- calque statique : zones, trafic, lignes, arrêts ---------- */
+  drawStatic() {
+    if (!G.ready || this.zooming) return;
+    this.dirty = false; this.last = performance.now();
+    const o = this.origin(); this.o0 = o;
+    const ctx = this.ctxS, W = this.W, H = this.H, s = G.s, w = G.w, z = o.z;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    this.cvS.style.transform = 'translate(0px,0px)'; this.cvS.style.opacity = '1';
+    const vb = { minx: o.x / o.k - 0.05 * W / o.k, maxx: (o.x + W * 1.05) / o.k, miny: o.y / o.k - 0.05 * H / o.k, maxy: (o.y + H * 1.05) / o.k };
+    const X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
+    const inView = (b) => !(b.maxx < vb.minx || b.minx > vb.maxx || b.maxy < vb.miny || b.miny > vb.maxy);
+
+    /* zones */
+    if (s.settings.zones) {
+      const works = new Set(Events.active().filter((e) => e.kind === 'works').map((e) => e.zone));
+      const tags = [];
+      for (const zn of w.zones.values()) {
+        if (!inView(zn.bbox)) continue;
+        const buyable = !zn.owned && w.purchasable(zn);
+        ctx.beginPath();
+        for (const r of zn.rings) {
+          let lx = -1e9, ly = -1e9;
+          r.forEach((p, i) => {
+            const x = X(p[0]), y = Y(p[1]);
+            if (i === 0) { ctx.moveTo(x, y); lx = x; ly = y; }
+            else if (Math.abs(x - lx) + Math.abs(y - ly) > 1.2) { ctx.lineTo(x, y); lx = x; ly = y; }
+          });
+          ctx.closePath();
+        }
+        if (zn.owned) {
+          if (z >= 12) { ctx.strokeStyle = 'rgba(245,242,233,.55)'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke(); }
+          if (works.has(zn.code)) { ctx.strokeStyle = '#FF8A1F'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]); }
+        } else {
+          ctx.fillStyle = buyable ? 'rgba(8,17,40,.38)' : 'rgba(8,17,40,.6)';
+          ctx.fill('evenodd');
+          if (buyable) {
+            ctx.strokeStyle = 'rgba(255,205,0,.75)'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+            if (z >= 14) tags.push(zn);
+          }
+        }
+        if (G.ui.selZone === zn) { ctx.strokeStyle = '#FFCD00'; ctx.lineWidth = 3; ctx.setLineDash([]); ctx.stroke(); }
+      }
+      ctx.font = '600 11px "Barlow Condensed", "Arial Narrow", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const zn of tags) {
+        const x = X(zn.cx), y = Y(zn.cy), t = fmtEur(zn.price);
+        const tw = ctx.measureText(t).width + 10;
+        ctx.fillStyle = '#FFCD00'; this.rr(ctx, x - tw / 2, y - 8, tw, 16, 3); ctx.fill();
+        ctx.fillStyle = '#0B1834'; ctx.fillText(t, x, y + 0.5);
+      }
+    }
+
+    /* trafic routier */
+    const net = w.road;
+    if (s.settings.traffic && net.nE) {
+      const maxCls = z < 11.5 ? 1 : z < 13 ? 2 : z < 14.5 ? 3 : 4;
+      const zf = z >= 17 ? 2 : z >= 16 ? 1.5 : z >= 14 ? 1 : 0.75;
+      const baseW = [4, 3.2, 2.6, 2, 1.3];
+      const buckets = [];
+      for (let k = 0; k < 25; k++) buckets.push([]);
+      const nx = net.x, ny = net.y, ea = net.ea, eb = net.eb, cls = net.cls, tr = net.traffic;
+      for (let e = 0; e < net.nE; e++) {
+        const c = cls[e]; if (c > maxCls) continue;
+        const a = ea[e], b = eb[e];
+        const x1 = nx[a] * o.k - o.x, y1 = ny[a] * o.k - o.y, x2 = nx[b] * o.k - o.x, y2 = ny[b] * o.k - o.y;
+        if ((x1 < -10 && x2 < -10) || (x1 > W + 10 && x2 > W + 10) || (y1 < -10 && y2 < -10) || (y1 > H + 10 && y2 > H + 10)) continue;
+        const t = tr[e];
+        const bk = c === 4 ? 4 : t < 0.45 ? 0 : t < 0.7 ? 1 : t < 0.9 ? 2 : 3;
+        buckets[c * 5 + bk].push(x1, y1, x2, y2);
+      }
+      ctx.lineCap = 'round';
+      for (let c = 4; c >= 0; c--) for (let bk = 0; bk < 5; bk++) {
+        const arr = buckets[c * 5 + bk]; if (!arr.length) continue;
+        ctx.beginPath();
+        for (let i = 0; i < arr.length; i += 4) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i + 2], arr[i + 3]); }
+        ctx.lineWidth = baseW[c] * zf;
+        ctx.strokeStyle = bk === 4 ? 'rgba(255,255,255,.32)' : TR_COL[bk];
+        ctx.globalAlpha = bk === 4 ? 1 : 0.82;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    /* lignes */
+    const zf = z >= 16 ? 1.35 : z >= 14 ? 1 : 0.75;
+    const order = [...s.lines].sort((a, b) => MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode));
+    for (const l of order) {
+      if (!l.bbox) this.lineBox(l);
+      if (!inView(l.bbox)) continue;
+      const P = l.path.pts;
+      ctx.beginPath();
+      let lx = -1e9, ly = -1e9;
+      P.forEach((p, i) => {
+        const x = X(p[0]), y = Y(p[1]);
+        if (i === 0) { ctx.moveTo(x, y); lx = x; ly = y; } else if (Math.abs(x - lx) + Math.abs(y - ly) > 0.8 || i === P.length - 1) { ctx.lineTo(x, y); lx = x; ly = y; }
+      });
+      if (l.loop) ctx.closePath();
+      const lw = ({ metro: 6, ter: 5, bus: 4, boat: 4 }[l.mode]) * zf;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.setLineDash([]);
+      ctx.strokeStyle = l.mode === 'metro' || l.mode === 'ter' ? '#F5F2E9' : l.mode === 'boat' ? '#BDE8FF' : 'rgba(11,24,52,.85)';
+      ctx.lineWidth = lw + 3; ctx.stroke();
+      if (l.status === 'construction') ctx.setLineDash([10, 7]);
+      ctx.strokeStyle = l.color; ctx.lineWidth = lw; ctx.globalAlpha = l.active || l.status !== 'active' ? 1 : 0.55; ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (l.mode === 'ter') { ctx.setLineDash([6, 8]); ctx.strokeStyle = '#F5F2E9'; ctx.lineWidth = 1.4; ctx.stroke(); }
+      ctx.setLineDash([]);
+      if (G.ui.selLine === l) { ctx.strokeStyle = 'rgba(255,205,0,.6)'; ctx.lineWidth = lw + 8; ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1; }
+    }
+
+    /* arrêts + noms */
+    const labels = [];
+    for (const l of order) {
+      if (!inView(l.bbox)) continue;
+      const showNames = s.settings.names && ((l.mode === 'metro' || l.mode === 'ter') ? z >= 14 : z >= 16);
+      l.stops.forEach((st) => {
+        const x = X(st.mx), y = Y(st.my);
+        if (x < -20 || y < -20 || x > W + 20 || y > H + 20) return;
+        ctx.setLineDash([]);
+        if (l.mode === 'metro') {
+          ctx.beginPath(); ctx.arc(x, y, 5.5 * zf, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+          ctx.lineWidth = 2.5; ctx.strokeStyle = '#0B1834'; ctx.stroke();
+        } else if (l.mode === 'ter') {
+          const r = 5.5 * zf; ctx.fillStyle = '#FFFFFF'; this.rr(ctx, x - r, y - r, 2 * r, 2 * r, 2); ctx.fill();
+          ctx.lineWidth = 2.5; ctx.strokeStyle = l.color; ctx.stroke();
+        } else {
+          ctx.beginPath(); ctx.arc(x, y, (l.mode === 'bus' ? 4 : 5) * zf, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+          ctx.lineWidth = 2; ctx.strokeStyle = l.mode === 'boat' ? '#1E88E5' : l.color; ctx.stroke();
+        }
+        if (showNames) labels.push({ x, y, t: st.name, pri: l.mode === 'metro' || l.mode === 'ter' ? 0 : 1 });
+      });
+    }
+    labels.sort((a, b) => a.pri - b.pri);
+    ctx.font = '600 11.5px "Barlow Condensed", "Arial Narrow", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const boxes = [];
+    for (const lb of labels) {
+      const tw = ctx.measureText(lb.t).width + 10;
+      const bx = lb.x + 9, by = lb.y - 9, bw = tw, bh = 18;
+      if (boxes.some((b) => bx < b[0] + b[2] && bx + bw > b[0] && by < b[1] + b[3] && by + bh > b[1])) continue;
+      boxes.push([bx, by, bw, bh]);
+      ctx.fillStyle = '#13294F'; this.rr(ctx, bx, by, bw, bh, 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(245,242,233,.8)'; ctx.lineWidth = 1; this.rr(ctx, bx + 1.5, by + 1.5, bw - 3, bh - 3, 1.5); ctx.stroke();
+      ctx.fillStyle = '#F5F2E9'; ctx.fillText(lb.t, bx + 5, by + bh / 2 + 0.5);
+    }
+
+    /* marqueurs d'événements */
+    for (const e of Events.active()) {
+      if (e.mx === undefined) continue;
+      const x = X(e.mx), y = Y(e.my);
+      if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+      const col = e.kind === 'accident' ? '#F0483E' : e.kind === 'big' ? '#FFCD00' : '#B36BFF';
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fillStyle = col; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+      ctx.fillStyle = e.kind === 'big' ? '#0B1834' : '#FFFFFF';
+      ctx.font = '700 13px "Barlow Condensed", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(e.kind === 'accident' ? '!' : e.kind === 'big' ? '★' : '✊', x, y + 1);
+    }
+  },
+
+  lineBox(l) {
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const p of l.path.pts) { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1]; }
+    l.bbox = { minx, miny, maxx, maxy };
+  },
+
+  /* ---------- calque dynamique : véhicules, construction ---------- */
+  drawDyn() {
+    const o = this.origin();
+    const ctx = this.ctxD, W = this.W, H = this.H, s = G.s, z = o.z;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
+    const zf = z >= 17 ? 1.6 : z >= 15.5 ? 1.25 : z >= 13 ? 1 : 0.8;
+    this.vpos = [];
+    for (const l of s.lines) {
+      if (!l.active) continue;
+      if (l.mode === 'bus' && z < 11.5) continue;
+      for (const v of l.veh) {
+        if (v.hidden) continue;
+        const p = Lines.posOf(l, v);
+        const x = X(p.mx), y = Y(p.my);
+        if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+        const cap = MODEL[v.model].cap, f = v.load / cap;
+        const r = ({ bus: 5, metro: 6.5, ter: 6.5, boat: 6 }[l.mode]) * zf;
+        this.vpos.push({ x, y, l, v });
+        if (s.settings.fill) {
+          ctx.beginPath(); ctx.arc(x, y, r + 3.2, 0, 7); ctx.fillStyle = 'rgba(11,24,52,.75)'; ctx.fill();
+          ctx.beginPath(); ctx.arc(x, y, r + 2.4, -Math.PI / 2, -Math.PI / 2 + Math.max(0.05, Math.min(1, f)) * Math.PI * 2);
+          ctx.strokeStyle = fillCol(f); ctx.lineWidth = 2.6; ctx.stroke();
+        }
+        ctx.beginPath();
+        if (l.mode === 'metro' || l.mode === 'ter') { this.rr(ctx, x - r, y - r, 2 * r, 2 * r, r * 0.45); }
+        else ctx.arc(x, y, r, 0, 7);
+        ctx.fillStyle = l.color; ctx.fill();
+        ctx.lineWidth = 1.4; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+        if (z >= 15.5) {
+          ctx.fillStyle = inkOn(l.color); ctx.font = `700 ${Math.round(r * 1.25)}px "Barlow Condensed", sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(l.mode === 'ter' ? 'T' : l.mode === 'boat' ? 'N' : String(l.num), x, y + 0.5);
+        }
+        if (G.ui.selVeh === v) {
+          ctx.beginPath(); ctx.arc(x, y, r + 8, 0, 7); ctx.strokeStyle = '#FFCD00'; ctx.lineWidth = 2.5; ctx.stroke();
+        }
+      }
+    }
+    /* aperçu de construction */
+    const b = Build.b;
+    if (b) {
+      const col = Build.color();
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const sg of b.segs) {
+        ctx.beginPath();
+        sg.pts.forEach((p, i) => { const x = X(p[0]), y = Y(p[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+        ctx.strokeStyle = '#0B1834'; ctx.lineWidth = 8; ctx.stroke();
+        ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.setLineDash([9, 6]); ctx.stroke(); ctx.setLineDash([]);
+      }
+      b.stops.forEach((st, i) => {
+        const x = X(st.mx), y = Y(st.my);
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+        ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+        ctx.fillStyle = '#0B1834'; ctx.font = '700 11px "Barlow Condensed", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y + 0.5);
+      });
+    }
+  },
+
+  rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+  },
+
+  /** élément touché sur la carte */
+  hit(px, py) {
+    let best = null, bd = 24 * 24;
+    for (const it of this.vpos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bd) { bd = d; best = { type: 'veh', ...it }; } }
+    if (best) return best;
+    const o = this.origin();
+    bd = 20 * 20;
+    for (const l of G.s.lines) l.stops.forEach((st, k) => {
+      const x = st.mx * o.k - o.x, y = st.my * o.k - o.y;
+      const d = (x - px) ** 2 + (y - py) ** 2;
+      if (d < bd) { bd = d; best = { type: 'stop', l, k, st }; }
+    });
+    return best;
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — interface, construction de lignes, démarrage
+   ===================================================================== */
+
+G.ui = { selZone: null, selLine: null, selVeh: null, follow: null, sheet: null, sheetArg: null, statsAdv: false, statsMode: 'all', statsPeriod: 'today', statsSort: 'pax' };
+
+/* ---------- pictogrammes ---------- */
+const IC = {
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  pause: '<path d="M8 5v14M16 5v14" stroke-width="3"/>',
+  play: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
+  net: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 6h7M6 8.5v5a4 4 0 0 0 4 4h5.5"/>',
+  plus: '<path d="M12 5v14M5 12h14" stroke-width="2.4"/>',
+  zones: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4z"/><path d="M13 13h7v7h-7z" stroke-dasharray="2 2"/>',
+  euro: '<path d="M17 6.5A7 7 0 1 0 17 17.5M4 10h9M4 14h9"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5" stroke-width="2.2"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18" stroke-width="2.2"/>',
+  undo: '<path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-3"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5" stroke-width="2.6"/>',
+  target: '<circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+  sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
+  rain: '<path d="M7 15a4.5 4.5 0 1 1 1-8.9A5.5 5.5 0 0 1 18.5 9 3.5 3.5 0 0 1 18 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+  snow: '<path d="M12 2v20M4 7l16 10M4 17L20 7"/><path d="M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5"/>',
+  heat: '<path d="M10 14.5V5a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v7"/>',
+  wind: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"/>',
+  strike: '<path d="M7 11V6a1.5 1.5 0 0 1 3 0v4M10 10V4.5a1.5 1.5 0 0 1 3 0V10M13 10V5.5a1.5 1.5 0 0 1 3 0V12M16 9a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a6 6 0 0 1-5.4-3.4L4 13a1.6 1.6 0 0 1 2.8-1.5L8 13"/>',
+  works: '<path d="M3 20h18M6 20l4-14h4l4 14M8 13h8"/>',
+  accident: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5" stroke-width="2.2"/>',
+  demo: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5" stroke-width="2.2"/>',
+  ok: '<path d="M5 12.5l4.5 4.5L19 7.5" stroke-width="2.4"/>',
+  follow: '<circle cx="12" cy="12" r="3"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+};
+const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
+const pict = (mode) => `<span class="pict pict-${mode}" aria-label="${MODES[mode].label}">${mode === 'metro' ? 'M' : mode === 'bus' ? 'BUS' : mode === 'ter' ? 'TER' : '≈'}</span>`;
+const badge = (l) => `<span class="lbadge lb-${l.mode}" style="background:${l.color};color:${inkOn(l.color)}">${esc(l.mode === 'ter' ? l.num : l.mode === 'boat' ? 'N' + l.num : l.num)}</span>`;
+const badgeFull = (l) => `${pict(l.mode)}${badge(l)}`;
+
+const $ = (sel) => document.querySelector(sel);
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+const UI = {
+  init() {
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-act]');
+      if (!el) return;
+      const fn = ACT[el.dataset.act];
+      if (fn) { e.preventDefault(); fn(el.dataset.arg, el, e); }
+    });
+    document.addEventListener('input', (e) => {
+      const el = e.target.closest('[data-input]');
+      if (el && INP[el.dataset.input]) INP[el.dataset.input](el.value, el);
+    });
+    document.addEventListener('change', (e) => {
+      const el = e.target.closest('[data-change]');
+      if (el && CHG[el.dataset.change]) CHG[el.dataset.change](el.value, el);
+    });
+    $('#btnMenu').innerHTML = icon('menu');
+    $('#nav').innerHTML = [
+      ['lines', 'net', 'Réseau'], ['build', 'plus', 'Construire'], ['zones', 'zones', 'Zones'],
+      ['finance', 'euro', 'Finances'], ['stats', 'chart', 'Stats'], ['infos', 'info', 'Infos'],
+    ].map(([k, ic, t]) => `<button class="nav-b ${k === 'build' ? 'nav-build' : ''}" data-act="nav" data-arg="${k}" id="nav-${k}">${icon(ic)}<span>${t}</span>${k === 'infos' ? '<i class="dot" id="infoDot" hidden></i>' : ''}</button>`).join('');
+    Loader.listeners.push((msg) => {
+      const c = $('#chip');
+      if (msg || Loader.busy > 0) { c.hidden = false; c.innerHTML = '<span class="spin"></span>' + esc(msg || 'Chargement…'); }
+      else c.hidden = true;
+    });
+  },
+
+  /* ---- barre du haut ---- */
+  refreshTop() {
+    if (!G.s) return;
+    const s = G.s;
+    const t = Time.label(s.min);
+    const prof = s.days[0] ? Eco.dayProfit(s.days[0]) : null;
+    $('#cash').innerHTML = `<b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b><small>${prof === null ? 'trésorerie' : (prof >= 0 ? '+' : '') + fmtEur(prof) + ' hier'}</small>`;
+    $('#clock').innerHTML = `<b>${t.time}</b><small>${t.day}</small>`;
+    $('#wx').innerHTML = icon(EV_INFO[Events.weather()].icon);
+    $('#wx').title = EV_INFO[Events.weather()].title;
+    $('#btnPlay').innerHTML = G.paused ? icon('play') : icon('pause');
+    $('#btnPlay').setAttribute('aria-label', G.paused ? 'Reprendre' : 'Pause');
+    $('#btnSpeed').textContent = '×' + G.speed;
+  },
+  refreshInfoBadge() {
+    const n = Events.active().filter((e) => e.bad).length + Events.upcoming().filter((e) => e.bad).length;
+    const d = $('#infoDot'); if (d) d.hidden = n === 0;
+  },
+  updateTint() {
+    if (!G.map || !G.s) return;
+    const m = Time.mod(G.s.min) / 60;
+    let b = 1;
+    if (m < 5 || m >= 22) b = 0.5; else if (m < 7) b = 0.5 + 0.5 * (m - 5) / 2; else if (m >= 20) b = 1 - 0.5 * (m - 20) / 2;
+    const p = G.map.getPane('tilePane');
+    if (p) p.style.filter = `brightness(${b.toFixed(2)}) saturate(${(0.75 + 0.25 * b).toFixed(2)})`;
+  },
+
+  /* ---- notifications ---- */
+  toast(text, kind = 'info') {
+    const box = $('#toasts'); if (!box) return;
+    const el = document.createElement('div');
+    el.className = 'toast t-' + kind;
+    el.textContent = text;
+    box.appendChild(el);
+    while (box.children.length > 3) box.firstChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, kind === 'bad' ? 5200 : 4000);
+  },
+
+  /* ---- panneau du bas ---- */
+  open(name, arg) {
+    G.ui.sheet = name; G.ui.sheetArg = arg;
+    this.closeCard();
+    const sh = $('#sheet');
+    sh.hidden = false;
+    document.querySelectorAll('.nav-b').forEach((b) => b.classList.toggle('on', b.dataset.arg === name || (name === 'line' && b.dataset.arg === 'lines')));
+    this.refreshSheet(true);
+  },
+  sheetOpen() { return !$('#sheet').hidden; },
+  close() {
+    $('#sheet').hidden = true; G.ui.sheet = null;
+    document.querySelectorAll('.nav-b').forEach((b) => b.classList.remove('on'));
+    if (G.ui.selLine) { G.ui.selLine = null; Render.dirty = true; }
+  },
+  refreshSheet(scrollTop) {
+    if (!this.sheetOpen()) return;
+    const f = SHEETS[G.ui.sheet]; if (!f) return;
+    const r = f(G.ui.sheetArg);
+    if (!r) { this.close(); return; }
+    const body = $('#sheetBody');
+    const keep = body.scrollTop;
+    const opened = [...body.querySelectorAll('details')].map((d) => d.open);
+    $('#sheetTitle').innerHTML = r.title;
+    body.innerHTML = r.html;
+    if (!scrollTop) body.querySelectorAll('details').forEach((d, i) => { if (opened[i]) d.open = true; });
+    body.scrollTop = scrollTop ? 0 : keep;
+  },
+
+  /* ---- carte flottante (véhicule, arrêt, zone) ---- */
+  card(html) { const c = $('#card'); c.innerHTML = html; c.hidden = false; },
+  closeCard() {
+    $('#card').hidden = true;
+    const changed = G.ui.selZone || G.ui.selVeh;
+    G.ui.selZone = null; G.ui.selVeh = null; G.ui.follow = null; G.ui.cardType = null;
+    if (changed) Render.dirty = true;
+  },
+  showVehicle(l, v) {
+    G.ui.selVeh = v; G.ui.selZone = null; G.ui.cardType = 'veh'; G.ui.cardLine = l;
+    this.renderVehCard();
+  },
+  renderVehCard() {
+    const v = G.ui.selVeh, l = G.ui.cardLine;
+    if (!v || !l || !l.veh.includes(v)) { this.closeCard(); return; }
+    const md = MODEL[v.model], f = v.load / md.cap;
+    const n = l.stops.length;
+    let next = '—', dir = '';
+    const evt = l.ev[v.ev];
+    if (evt) { next = l.stops[evt.k].name; dir = evt.d === 0 ? l.stops[n - 1].name : l.stops[0].name; if (l.loop) dir = 'circulaire'; }
+    this.card(`<div class="card-h">${badgeFull(l)}<div class="card-t"><b>${esc(md.name)}</b><small>${esc(md.desc)}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+      <div class="fillbar"><i style="width:${Math.min(100, f * 100).toFixed(0)}%;background:${fillCol(f)}"></i></div>
+      <div class="kv"><span>À bord</span><b>${fmtInt(v.load)} / ${md.cap} · ${fmtPct(f)}</b></div>
+      <div class="kv"><span>Prochain arrêt</span><b>${esc(next)}</b></div>
+      <div class="kv"><span>Direction</span><b>${esc(dir)}</b></div>
+      <div class="kv"><span>Vitesse</span><b>${v.dwell > 0 ? 'à quai' : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
+      <div class="row2"><button class="btn sm ${G.ui.follow === v ? 'on' : ''}" data-act="follow">${icon('follow')} ${G.ui.follow === v ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="openLine" data-arg="${l.id}">Voir la ligne</button></div>`);
+  },
+  showStop(l, k) {
+    G.ui.cardType = 'stop'; G.ui.selVeh = null;
+    const st = l.stops[k];
+    const near = [];
+    for (const ln of G.s.lines) ln.stops.forEach((s2, k2) => { if (dist(s2.mx, s2.my, st.mx, st.my) < 60) near.push([ln, k2]); });
+    const rows = near.map(([ln, k2]) => {
+      const n = ln.stops.length;
+      let w = 0; for (let j = 0; j < n; j++) w += ln.Wf[k2 * n + j] + ln.Wb[k2 * n + j];
+      const hw = ln.active ? '~' + Math.max(1, Math.round(ln.headway)) + ' min' : ln.status === 'construction' ? 'en travaux' : 'hors service';
+      return `<button class="lrow" data-act="openLine" data-arg="${ln.id}">${badgeFull(ln)}<span class="lrow-t">${esc(ln.name)}</span><span class="lrow-v"><b>${fmtInt(w)}</b> en attente<br><small>passage ${hw}</small></span></button>`;
+    }).join('');
+    const z = G.w.zoneAt(st.mx, st.my);
+    this.card(`<div class="card-h"><div class="plate">${esc(st.name)}</div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+      ${z ? `<p class="sub">${esc(z.name)} · ${esc(z.commune)}</p>` : ''}${rows}`);
+  },
+  showZone(z) {
+    G.ui.selZone = z; G.ui.selVeh = null; G.ui.cardType = 'zone';
+    Render.dirty = true;
+    const buyable = G.w.purchasable(z);
+    const t = IRIS_TYPES[z.type] || 'Zone';
+    this.card(`<div class="card-h"><div class="card-t"><b>${esc(z.name)}</b><small>${esc(z.commune)} · quartier ${esc(t.toLowerCase())}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+      <div class="kv"><span>Habitants (estim.)</span><b>${fmtInt(z.pop)}</b></div>
+      <div class="kv"><span>Emplois (estim.)</span><b>${fmtInt(z.jobs)}</b></div>
+      <div class="kv"><span>Densité</span><b>${fmtInt(z.density)} hab./km²</b></div>
+      <div class="kv"><span>Surface</span><b>${z.areaKm2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} km²</b></div>
+      ${z.owned ? '<p class="note ok">Dans votre zone d’exploitation.</p>'
+        : buyable ? `<button class="btn primary wide" data-act="buyZone" data-arg="${esc(z.code)}">Acheter · ${fmtEur(z.price)}</button>`
+          : `<p class="note">Zone non contiguë : achetez d’abord une zone voisine. Prix : ${fmtEur(z.price)}.</p>`}`);
+  },
+
+  /* ---- fenêtre modale ---- */
+  modal(html, opts = {}) {
+    const m = $('#modal');
+    $('#modalBox').innerHTML = html;
+    m.hidden = false;
+    if (opts.pause) { G.ui.prevPaused = G.paused; G.paused = true; this.refreshTop(); G.ui.modalPaused = true; }
+  },
+  closeModal() {
+    $('#modal').hidden = true;
+    if (G.ui.modalPaused) { G.paused = G.ui.prevPaused; G.ui.modalPaused = false; this.refreshTop(); }
+  },
+  strikeDialog(e) {
+    this.modal(`<div class="plate big">${icon('strike')} Préavis de grève</div>
+      <p>Les agents ${e.mode === 'bus' ? 'des bus' : 'du métro'} menacent d’arrêter le travail demain toute la journée. Toutes les lignes ${e.mode === 'bus' ? 'de bus' : 'de métro'} seront à l’arrêt.</p>
+      <p>Une négociation immédiate (primes, embauches) peut éviter le mouvement.</p>
+      <div class="row2"><button class="btn" data-act="strikeNo" data-arg="${e.id}">Laisser faire</button><button class="btn primary" data-act="strikeYes" data-arg="${e.id}">Négocier · ${fmtEur(e.cost)}</button></div>`, { pause: true });
+  },
+
+  /* ---- écrans ---- */
+  showStart() {
+    G.ready = false;
+    $('#start').hidden = false;
+    $('#game').hidden = true;
+    StartScreen.render('home');
+  },
+  showGame() { $('#start').hidden = true; $('#game').hidden = false; setTimeout(() => G.map && G.map.invalidateSize(), 50); },
+};
+
+/* =====================================================================
+   PANNEAUX
+   ===================================================================== */
+const statLine = (label, val, cls = '') => `<div class="kv ${cls}"><span>${label}</span><b>${val}</b></div>`;
+const section = (t) => `<h3 class="sec">${t}</h3>`;
+
+function lineToday(l) {
+  const t = l.today;
+  return { pax: t.pax, fares: t.fares + t.ads, ops: t.ops, mec: t.mec, fill: t.loadN ? t.loadSum / t.loadN : 0 };
+}
+function lineAgg(l, period) {
+  if (period === 'today') return lineToday(l);
+  const arr = period === 'yesterday' ? l.hist.slice(0, 1) : l.hist.slice(0, 7);
+  if (!arr.length) return { pax: 0, fares: 0, ops: 0, mec: 0, fill: 0 };
+  const sum = (k) => arr.reduce((a, d) => a + (d[k] || 0), 0);
+  return { pax: sum('pax'), fares: sum('fares') + sum('ads'), ops: sum('ops'), mec: sum('mec'), fill: sum('fill') / arr.length };
+}
+
+const SHEETS = {
+  lines() {
+    const s = G.s;
+    if (!s.lines.length) return { title: 'Réseau', html: `<div class="empty">${pict('metro')}${pict('bus')}<p>Aucune ligne pour l’instant.</p><button class="btn primary" data-act="nav" data-arg="build">${icon('plus')} Créer une première ligne</button></div>` };
+    const rows = MODE_ORDER.map((m) => {
+      const ls = s.lines.filter((l) => l.mode === m).sort((a, b) => a.num - b.num);
+      if (!ls.length) return '';
+      return section(MODES[m].label) + ls.map((l) => {
+        const t = lineToday(l);
+        const st = l.status === 'construction' ? `<em class="tag warn">Travaux · ${Time.label(l.buildEnd).day}</em>` : Events.halted(l) ? '<em class="tag bad">Interrompue</em>' : !l.active ? '<em class="tag">Hors service</em>' : '';
+        return `<button class="lrow" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="lrow-t">${esc(l.name)}<small>${l.veh.length} véhicule${l.veh.length > 1 ? 's' : ''} · ${l.stops.length} arrêts · ${fmtKm(l.path.L)} ${st}</small></span><span class="lrow-v"><b>${fmtInt(t.pax)}</b> voy.<br><small>${fmtPct(t.fill)} rempli</small></span></button>`;
+      }).join('');
+    }).join('');
+    return { title: 'Réseau', html: rows + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
+  },
+
+  line(id) {
+    const l = G.s.lines.find((x) => x.id === +id);
+    if (!l) return null;
+    G.ui.selLine = l;
+    const t = lineToday(l), y = l.hist[0];
+    const cap = Lines.capacity(l);
+    const groups = {};
+    for (const v of l.veh) groups[v.model] = (groups[v.model] || 0) + 1;
+    const vrows = Object.entries(groups).map(([m, c]) => {
+      const md = MODEL[m];
+      return `<div class="vrow"><div><b>${esc(md.name)}</b><small>${md.cap} places · ${md.kmh} km/h · ${fmtEur(md.op * G.s.costMul)}/h</small></div><div class="stepper"><button data-act="sellVeh" data-arg="${l.id}|${m}" aria-label="Vendre">−</button><b>${c}</b><button data-act="buyVeh" data-arg="${l.id}|${m}" aria-label="Acheter">+</button></div></div>`;
+    }).join('') || '<p class="note">Aucun véhicule : la ligne ne transporte personne.</p>';
+    const cat = CATALOG[l.mode].map((md) => `<button class="catrow" data-act="buyVeh" data-arg="${l.id}|${md.id}"><span><b>${esc(md.name)}</b><small>${esc(md.desc)} · ${md.cap} pl. · ${md.kmh} km/h · ${fmtEur(md.op * G.s.costMul)}/h</small></span><em>${fmtEur(md.price * G.s.costMul)}</em></button>`).join('');
+    const price = (k, lab) => `<div class="vrow"><div><b>${lab}</b><small>réf. ${MODES[l.mode].ref.toFixed(2).replace('.', ',')} €</small></div><div class="stepper"><button data-act="price" data-arg="${l.id}|${k}|-0.1">−</button><b>${l.prices[k].toFixed(2).replace('.', ',')} €</b><button data-act="price" data-arg="${l.id}|${k}|0.1">+</button></div></div>`;
+    const hourOpts = (vals, cur) => vals.map((v) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${Time.hhmm(v)}</option>`).join('');
+    const laneKm = l.mode === 'bus' ? laneLength(l) / 1000 : 0;
+    const laneCost = Math.round(laneKm * 90000 * G.s.costMul / 1000) * 1000;
+    const sigCost = Math.round(l.stops.length * 25000 * G.s.costMul / 1000) * 1000;
+    const status = l.status === 'construction' ? `<p class="note warn">Chantier en cours : ouverture le ${Time.label(l.buildEnd).day} à ${Time.label(l.buildEnd).time}.</p>` : Events.halted(l) ? '<p class="note bad">Ligne interrompue (événement en cours).</p>' : '';
+    const swatches = LINE_COLORS.map((c) => `<button class="sw ${c === l.color ? 'on' : ''}" style="background:${c}" data-act="lineColor" data-arg="${l.id}|${c}" aria-label="Couleur ${c}"></button>`).join('');
+    const html = `${status}
+      <div class="stops">${l.stops.map((s2, i) => `<span>${i ? '<i></i>' : ''}${esc(s2.name)}</span>`).join('')}</div>
+      <div class="kpis">
+        <div><small>Voyageurs aujourd’hui</small><b>${fmtInt(t.pax)}</b></div>
+        <div><small>Remplissage moyen · pic</small><b>${fmtPct(t.fill)} · <span style="color:${fillCol(l.today.loadMax || 0)}">${fmtPct(l.today.loadMax || 0)}</span></b></div>
+        <div><small>Recettes − coûts</small><b class="${t.fares - t.ops < 0 ? 'neg' : 'pos'}">${fmtEur(t.fares - t.ops)}</b></div>
+        <div><small>Mécontents</small><b>${fmtInt(t.mec)}</b></div>
+      </div>
+      ${statLine('Passage', l.veh.length ? 'toutes les ~' + Math.max(1, Math.round(l.headway)) + ' min' : '—')}
+      ${statLine('Tour complet', l.cycleMin ? Math.round(l.cycleMin) + ' min' : '—')}
+      ${statLine('Vitesse commerciale', Math.round(l.speedAvg || 0) + ' km/h')}
+      ${statLine('Capacité totale', fmtInt(cap) + ' places')}
+      ${statLine('Population desservie', fmtInt(l.catchPop || 0))}
+      ${y ? statLine('Hier', fmtInt(y.pax) + ' voy. · ' + fmtEur(y.fares + y.ads - y.ops)) : ''}
+      ${section('Véhicules')}${vrows}
+      <details class="cat"><summary>${icon('plus')} Acheter un véhicule</summary>${cat}</details>
+      ${section('Tarifs par période')}${price('week', 'Semaine')}${price('weekend', 'Week-end')}${price('night', 'Nuit (22 h – 5 h)')}
+      ${section('Horaires')}
+      <div class="vrow"><div><b>Premier départ</b></div><select data-change="hStart" data-arg="${l.id}" ${l.night ? 'disabled' : ''}>${hourOpts([240, 270, 300, 330, 360, 390, 420], l.hours.start)}</select></div>
+      <div class="vrow"><div><b>Fin de service</b></div><select data-change="hEnd" data-arg="${l.id}" ${l.night ? 'disabled' : ''}>${hourOpts([1260, 1320, 1380, 0, 30, 60, 120], l.hours.end)}</select></div>
+      <label class="tgl"><input type="checkbox" data-change="night" data-arg="${l.id}" ${l.night ? 'checked' : ''}><span>Service de nuit (24 h/24)</span></label>
+      ${l.mode === 'bus' ? `${section('Aménagements')}
+        <div class="vrow"><div><b>Couloirs de bus</b><small>${laneKm.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km sur axes principaux · les bus évitent 75 % des bouchons</small></div>${l.busLane ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="busLane" data-arg="${l.id}">${fmtEur(laneCost)}</button>`}</div>
+        <div class="vrow"><div><b>Priorité aux feux</b><small>+10 % de vitesse</small></div>${l.signal ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="signal" data-arg="${l.id}">${fmtEur(sigCost)}</button>`}</div>` : ''}
+      ${section('Couleur')}<div class="swatches">${swatches}</div>
+      ${section('Actions')}
+      <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
+    return { title: `${badgeFull(l)}<span>${esc(l.name)}</span>`, html };
+  },
+
+  build() {
+    const cards = MODE_ORDER.map((m) => {
+      const hint = { bus: 'Suit les vraies routes, subit le trafic. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'Circule sur les voies ferrées existantes, de gare en gare.', boat: 'Navigue sur les fleuves et canaux. 60 k€ par ponton.' }[m];
+      const cheapest = CATALOG[m][0];
+      return `<button class="modecard" data-act="buildMode" data-arg="${m}">${pict(m)}<span><b>${MODES[m].label}</b><small>${hint}</small><small>Véhicules dès ${fmtEur(cheapest.price * G.s.costMul)}</small></span></button>`;
+    }).join('');
+    return { title: 'Construire une ligne', html: `<p class="sub">Choisissez un mode, puis touchez la carte pour placer les arrêts dans vos zones.</p>${cards}` };
+  },
+
+  zones() {
+    const w = G.w;
+    const owned = [...w.zones.values()].filter((z) => z.owned);
+    const buy = [...w.zones.values()].filter((z) => w.purchasable(z)).sort((a, b) => b.density - a.density);
+    const pop = owned.reduce((a, z) => a + z.pop, 0), area = owned.reduce((a, z) => a + z.areaKm2, 0);
+    const rows = buy.slice(0, 40).map((z) => `<div class="zrow"><button class="zrow-t" data-act="seeZone" data-arg="${esc(z.code)}"><b>${esc(z.name)}</b><small>${esc(z.commune)} · ${fmtInt(z.density)} hab./km² · ${IRIS_TYPES[z.type]}</small></button><button class="btn sm primary" data-act="buyZone" data-arg="${esc(z.code)}">${fmtEur(z.price)}</button></div>`).join('');
+    return {
+      title: 'Zones d’exploitation',
+      html: `<div class="kpis"><div><small>Zones</small><b>${owned.length}</b></div><div><small>Habitants</small><b>${fmtInt(pop)}</b></div><div><small>Surface</small><b>${area.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km²</b></div><div><small>Achetables</small><b>${buy.length}</b></div></div>
+      <p class="sub">Les zones jaunes en pointillés sont voisines de votre territoire. Le prix dépend de la densité d’habitants et d’emplois.</p>
+      ${section('Zones achetables, des plus denses aux moins denses')}${rows || '<p class="note">Aucune zone voisine chargée pour l’instant.</p>'}`,
+    };
+  },
+
+  finance() {
+    const s = G.s, d = s.today, y = s.days[0];
+    const col = (x) => (x === undefined ? '—' : fmtEur(x));
+    const row = (lab, a, b, neg) => `<tr><th>${lab}</th><td class="${neg ? 'neg' : ''}">${neg && a ? '−' : ''}${col(a)}</td><td class="${neg ? 'neg' : ''}">${y ? (neg && b ? '−' : '') + col(b) : '—'}</td></tr>`;
+    const res = Eco.dayProfit(d), resY = y ? Eco.dayProfit(y) : undefined;
+    const loans = s.loans.map((ln) => `<div class="vrow"><div><b>${fmtEur(ln.amount)}</b><small>${(ln.rate * 100).toFixed(0)} %/an · ${fmtEur(ln.amount * ln.rate / 365)} d’intérêts/jour</small></div><div class="row2 tight"><button class="btn sm" data-act="repay" data-arg="${ln.id}|0.25">−25 %</button><button class="btn sm" data-act="repay" data-arg="${ln.id}|1">Solder</button></div></div>`).join('') || '<p class="note">Aucun emprunt en cours.</p>';
+    const offers = Eco.loanOffers().map((o, i) => `<button class="catrow" data-act="borrow" data-arg="${i}"><span><b>${o.label}</b><small>${(o.rate * 100).toFixed(0)} %/an · remboursable à tout moment</small></span><em>+${fmtEur(o.amount)}</em></button>`).join('');
+    const ads = MODE_ORDER.map((m) => `<div class="vrow"><div><b>${MODES[m].label}</b><small>${ADS.label[s.ads[m]]}${s.ads[m] === 2 ? ' · −4 % de fréquentation' : ''}</small></div><div class="seg">${[0, 1, 2].map((k) => `<button class="${s.ads[m] === k ? 'on' : ''}" data-act="ads" data-arg="${m}|${k}">${ADS.label[k]}</button>`).join('')}</div></div>`).join('');
+    return {
+      title: 'Finances',
+      html: `<div class="kpis"><div><small>Trésorerie</small><b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b></div><div><small>Dette</small><b>${fmtEur(Eco.debt())}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div><div><small>Moy. 3 jours</small><b class="${Sim.avgDailyProfit() < 0 ? 'neg' : 'pos'}">${fmtEur(Sim.avgDailyProfit())}</b></div></div>
+      ${section('Compte d’exploitation')}
+      <div class="tblw"><table class="tbl"><thead><tr><th></th><th>Aujourd’hui</th><th>Hier</th></tr></thead><tbody>
+      ${row('Billets', d.fares, y && y.fares)}${row('Publicité', d.ads, y && y.ads)}
+      ${row('Exploitation véhicules', d.ops, y && y.ops, true)}${row('Maintenance', d.maint, y && y.maint, true)}${row('Intérêts', d.interest, y && y.interest, true)}${row('Négociations', d.events, y && y.events, true)}
+      <tr class="tot"><th>Résultat</th><td class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</td><td class="${resY < 0 ? 'neg' : 'pos'}">${col(resY)}</td></tr>
+      ${row('Investissements', d.capex + d.zones, y && y.capex + y.zones, true)}${row('Ventes de véhicules', d.sales, y && y.sales)}
+      </tbody></table></div>
+      ${section('Résultat des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: Eco.dayProfit(x), l: Time.dayLabel(x.date) })))}
+      ${section('Publicité')}<p class="sub">Panneaux dans les véhicules et les stations. Plus de pubs, plus de recettes, mais un peu moins de voyageurs.</p>${ads}
+      ${section('Emprunts')}${loans}${section('Offres de la banque')}${offers}
+      <p class="note">Plafond d’endettement : ${fmtEur(Eco.maxDebt())}.</p>`,
+    };
+  },
+
+  stats() {
+    const s = G.s, u = G.ui;
+    const t = s.today, y = s.days[0];
+    const allL = s.lines;
+    const fills = allL.map((l) => lineToday(l).fill).filter((x) => x > 0);
+    const avgFill = fills.length ? fills.reduce((a, b) => a + b, 0) / fills.length : 0;
+    const nVeh = allL.reduce((a, l) => a + l.veh.length, 0);
+    const owned = [...G.w.zones.values()].filter((z) => z.owned);
+    let html = `<div class="kpis">
+      <div><small>Voyageurs aujourd’hui</small><b>${fmtInt(t.pax)}</b></div>
+      <div><small>Hier</small><b>${y ? fmtInt(y.pax) : '—'}</b></div>
+      <div><small>Remplissage moyen</small><b>${fmtPct(avgFill)}</b></div>
+      <div><small>Mécontents aujourd’hui</small><b>${fmtInt(t.mec)}</b></div>
+      <div><small>Lignes · véhicules</small><b>${allL.length} · ${nVeh}</b></div>
+      <div><small>Habitants du territoire</small><b>${fmtInt(owned.reduce((a, z) => a + z.pop, 0))}</b></div>
+      <div><small>Voitures en moins</small><b>${fmtPct(s.modalShift || 0)}</b></div>
+      <div><small>Recette / voyageur</small><b>${t.pax ? (t.fares / t.pax).toFixed(2).replace('.', ',') + ' €' : '—'}</b></div>
+    </div>
+    ${section('Voyageurs des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: x.pax, l: Time.dayLabel(x.date) })), true)}
+    <label class="tgl"><input type="checkbox" data-change="statsAdv" ${u.statsAdv ? 'checked' : ''}><span>Statistiques détaillées par ligne</span></label>`;
+    if (u.statsAdv) {
+      const chips = (key, opts) => `<div class="seg wrap">${opts.map(([v, lab]) => `<button class="${u[key] === v ? 'on' : ''}" data-act="statsSet" data-arg="${key}|${v}">${lab}</button>`).join('')}</div>`;
+      html += chips('statsMode', [['all', 'Tous'], ['bus', 'Bus'], ['metro', 'Métro'], ['ter', 'TER'], ['boat', 'Fluvial']]);
+      html += chips('statsPeriod', [['today', 'Aujourd’hui'], ['yesterday', 'Hier'], ['week', '7 jours']]);
+      html += chips('statsSort', [['pax', 'Voyageurs'], ['res', 'Résultat'], ['fill', 'Remplissage'], ['mec', 'Mécontents']]);
+      const rows = allL.filter((l) => u.statsMode === 'all' || l.mode === u.statsMode).map((l) => ({ l, a: lineAgg(l, u.statsPeriod) }));
+      const key = { pax: (r) => r.a.pax, res: (r) => r.a.fares - r.a.ops, fill: (r) => r.a.fill, mec: (r) => r.a.mec }[u.statsSort];
+      rows.sort((p, q) => key(q) - key(p));
+      html += `<div class="tblw"><table class="tbl lines"><thead><tr><th>Ligne</th><th>Voy.</th><th>Rempl.</th><th>Résultat</th><th>Méc.</th></tr></thead><tbody>${rows.map((r) => `<tr data-act="openLine" data-arg="${r.l.id}"><th>${badge(r.l)}</th><td>${fmtInt(r.a.pax)}</td><td>${fmtPct(r.a.fill)}</td><td class="${r.a.fares - r.a.ops < 0 ? 'neg' : 'pos'}">${fmtEur(r.a.fares - r.a.ops)}</td><td>${fmtInt(r.a.mec)}</td></tr>`).join('') || '<tr><td colspan="5">Aucune ligne.</td></tr>'}</tbody></table></div>`;
+    }
+    return { title: 'Statistiques', html };
+  },
+
+  infos() {
+    const s = G.s, w = Events.weather();
+    const evRow = (e, up) => `<div class="evrow ${e.bad ? 'bad' : ''}">${icon(EV_INFO[e.kind]?.icon || 'info')}<div><b>${esc(e.title)}</b><small>${esc(e.desc)}</small><small>${up ? 'à partir du ' + Time.label(e.start).day + ' ' + Time.label(e.start).time : 'jusqu’à ' + Time.label(e.end).time + (Time.mod(e.end) < Time.mod(s.min) || e.end - s.min > 1440 ? ' (' + Time.label(e.end).day + ')' : '')}${e.kind === 'strike' && e.resolved ? ' · désamorcée' : ''}</small></div></div>`;
+    const act = Events.active(), up = Events.upcoming();
+    return {
+      title: 'Infos trafic',
+      html: `<div class="wxbig">${icon(EV_INFO[w].icon)}<div><b>${EV_INFO[w].title}</b><small>${{ sun: 'Aucun effet sur le réseau.', rain: 'Plus de monde dans le métro et les bus, circulation un peu plus lente.', snow: 'Bus très ralentis, le métro fait le plein.', heat: 'Les navettes fluviales ont la cote.', storm: 'Navettes fluviales à quai, circulation perturbée.' }[w]}</small></div></div>
+      ${section('En cours')}${act.map((e) => evRow(e)).join('') || '<p class="note">Rien à signaler.</p>'}
+      ${section('À venir')}${up.map((e) => evRow(e, true)).join('') || '<p class="note">Aucun événement annoncé.</p>'}
+      ${section('Journal')}${s.journal.slice(0, 30).map((j) => `<div class="jrow"><small>${Time.label(j.t).day} ${Time.label(j.t).time}</small><span>${esc(j.text)}</span></div>`).join('') || '<p class="note">Le journal est vide.</p>'}`,
+    };
+  },
+
+  menu() {
+    const s = G.s;
+    const slots = Save.list().map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}${s.slot === n ? ' · en cours' : ''}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + fmtEur(meta.money) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div><div class="row2 tight"><button class="btn sm primary" data-act="saveSlot" data-arg="${n}">Sauver</button>${meta ? `<button class="btn sm" data-act="loadSlot" data-arg="${n}">Charger</button>` : ''}</div></div>`).join('');
+    const tg = (k, lab) => `<label class="tgl"><input type="checkbox" data-change="setting" data-arg="${k}" ${s.settings[k] ? 'checked' : ''}><span>${lab}</span></label>`;
+    return {
+      title: 'Menu',
+      html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
+      ${section('Affichage')}
+      <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      ${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
+      ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
+      <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
+      ${section('Données')}<p class="sub">Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes, voies ferrées, fleuves et lieux : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
+    };
+  },
+};
+
+function barChart(items, posOnly) {
+  if (!items.length) return '<p class="note">Les chiffres apparaîtront après la première journée complète.</p>';
+  const W = 320, H = 110, pad = 18;
+  const max = Math.max(1, ...items.map((i) => Math.abs(i.v)));
+  const hasNeg = !posOnly && items.some((i) => i.v < 0);
+  const zero = hasNeg ? H / 2 : H - pad;
+  const scale = (hasNeg ? H / 2 - 6 : H - pad - 8) / max;
+  const bw = (W - 8) / items.length;
+  const bars = items.map((it, i) => {
+    const h = Math.abs(it.v) * scale;
+    const x = 4 + i * bw + 2, y = it.v >= 0 ? zero - h : zero;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(2, bw - 4).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="1.5" fill="${it.v >= 0 ? (posOnly ? 'var(--yellow)' : 'var(--ok)') : 'var(--bad)'}"/>` +
+      (i % 2 === items.length % 2 || items.length < 8 ? `<text x="${(x + (bw - 4) / 2).toFixed(1)}" y="${H - 3}" text-anchor="middle">${it.l}</text>` : '');
+  }).join('');
+  const last = items[items.length - 1];
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Graphique"><line x1="0" x2="${W}" y1="${zero}" y2="${zero}" class="axis"/>${bars}</svg><small>Dernier jour : <b>${posOnly ? fmtInt(last.v) : fmtEur(last.v)}</b> · max ${posOnly ? fmtInt(max) : fmtEur(max)}</small></div>`;
+}
+
+function laneLength(l) {
+  if (!l.segE) return 0;
+  let m = 0; const net = G.w.road, P = l.path;
+  for (let i = 0; i < P.pts.length - 1; i++) { const e = l.segE[i]; if (e >= 0 && net.cls[e] <= 3) m += P.cum[i + 1] - P.cum[i]; }
+  return m;
+}
+
+/* =====================================================================
+   CONSTRUCTION DE LIGNE
+   ===================================================================== */
+const Build = {
+  b: null,
+  color() { return this.b ? this.b.color : '#FFCD00'; },
+  start(mode) {
+    const w = G.w;
+    if (mode === 'bus' && !w.road.nE) { UI.toast('Les routes sont encore en chargement, patientez quelques secondes.', 'warn'); return; }
+    if (mode === 'ter' && !w.rail.nE) { UI.toast('Aucune voie ferrée chargée dans votre territoire. Achetez des zones traversées par le train.', 'warn'); return; }
+    if (mode === 'boat' && !w.water.nE) { UI.toast('Aucun fleuve ni canal dans votre territoire pour l’instant.', 'warn'); return; }
+    UI.close(); UI.closeCard();
+    this.b = { mode, stops: [], segs: [], loop: false, color: Lines.nextColor() };
+    $('#buildbar').hidden = false; $('#nav').classList.add('dim');
+    this.bar();
+    UI.toast({ bus: 'Touchez une rue pour placer chaque arrêt de bus.', metro: 'Touchez la carte pour placer les stations. Retouchez la 1re pour une ligne circulaire.', ter: 'Touchez près d’une gare pour l’ajouter.', boat: 'Touchez le fleuve pour placer les pontons.' }[mode], 'info');
+  },
+  bar() {
+    const b = this.b; if (!b) return;
+    const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
+    const cost = Lines.costOf(b.mode, b.stops, path);
+    $('#buildbar').innerHTML = `<div class="bb-t">${pict(b.mode)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}${b.loop ? ' · circulaire' : ''}</b><small>Infrastructure : ${fmtEur(cost)}</small></div></div>
+      <div class="bb-a"><button class="icon-b" data-act="bUndo" aria-label="Retirer le dernier arrêt" ${b.stops.length ? '' : 'disabled'}>${icon('undo')}</button><button class="icon-b" data-act="bCancel" aria-label="Annuler">${icon('close')}</button><button class="btn primary sm" data-act="bOk" ${b.stops.length >= 2 ? '' : 'disabled'}>${icon('check')} Valider</button></div>`;
+  },
+  allStops(mode) {
+    const out = [];
+    for (const l of G.s.lines) if (l.mode === mode) for (const st of l.stops) out.push(st);
+    return out;
+  },
+  stopName(mx, my, mode, nodeName) {
+    const w = G.w;
+    const used = new Set(this.b.stops.map((s) => s.name));
+    let name = '';
+    const pois = w.poisNear(mx, my, mode === 'ter' ? 800 : 180).filter((p) => p.name && (mode !== 'ter' || p.kind === 'station'));
+    if (pois.length) { pois.sort((a, b) => dist(a.mx, a.my, mx, my) - dist(b.mx, b.my, mx, my)); name = pois[0].name; }
+    if (!name && nodeName) name = nodeName;
+    if (!name && w.road.nE) {
+      const i = w.road.nearest(mx, my, 150);
+      if (i >= 0) { const nm = w.road.adj[i].map((e) => w.road.name[e]).filter(Boolean); if (nm.length) name = nm[0]; }
+    }
+    if (mode === 'boat' && name && !pois.length) name = 'Quai ' + name.replace(/^(rue|avenue|boulevard|chemin|route|allée|place)\s+(de la |du |des |de l’|de l'|de |d’)?/i, '');
+    const z = w.zoneAt(mx, my);
+    if (!name) name = z ? z.name : 'Arrêt';
+    if (used.has(name) && z && !used.has(z.name)) name = z.name;
+    let n = name, k = 2;
+    const ROM = ['', '', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    while (used.has(n)) { n = name + ' ' + (k < ROM.length ? ROM[k] : k); k++; }
+    return n.trim();
+  },
+  tap(mx, my) {
+    const b = this.b, w = G.w, mode = b.mode;
+    let st = null;
+    // reprise de la 1re station : ligne circulaire
+    if (b.stops.length >= 3 && MODES[mode].loop && !b.loop) {
+      const f = b.stops[0];
+      const o = Render.origin();
+      const px = Math.hypot((f.mx - mx) * o.k, (f.my - my) * o.k);
+      if (px < 26) return this.closeLoop();
+    }
+    if (b.loop) { UI.toast('La ligne est déjà bouclée. Validez ou retirez un arrêt.', 'info'); return; }
+    if (mode === 'metro') {
+      const ex = this.allStops('metro').find((s) => dist(s.mx, s.my, mx, my) < 90);
+      st = ex ? { mx: ex.mx, my: ex.my, name: ex.name, shared: true } : { mx, my };
+    } else if (mode === 'bus') {
+      const ex = this.allStops('bus').find((s) => dist(s.mx, s.my, mx, my) < 35);
+      const net = w.road;
+      const i = ex && ex.nid != null && net.idx.has(ex.nid) ? net.idx.get(ex.nid) : net.nearest(mx, my, 180, (n) => net.adj[n].some((e) => net.cls[e] > 0));
+      if (i < 0) { UI.toast('Aucune rue à proximité : touchez plus près d’une route.', 'warn'); return; }
+      st = { mx: net.x[i], my: net.y[i], node: i, nid: net.ids[i], name: ex ? ex.name : null, shared: !!ex };
+    } else if (mode === 'ter') {
+      const gares = w.pois.filter((p) => p.kind === 'station' && p.train && dist(p.mx, p.my, mx, my) < 700).sort((a, b) => dist(a.mx, a.my, mx, my) - dist(b.mx, b.my, mx, my));
+      if (!gares.length) { UI.toast('Pas de gare ici. Touchez près d’une gare existante.', 'warn'); return; }
+      const g = gares[0];
+      const i = w.rail.nearest(g.mx, g.my, 450);
+      if (i < 0) { UI.toast('Cette gare n’est reliée à aucune voie chargée.', 'warn'); return; }
+      const ex = this.allStops('ter').find((s) => dist(s.mx, s.my, g.mx, g.my) < 80);
+      st = { mx: w.rail.x[i], my: w.rail.y[i], node: i, nid: w.rail.ids[i], name: g.name || null, shared: !!ex };
+    } else if (mode === 'boat') {
+      const i = w.water.nearest(mx, my, 300);
+      if (i < 0) { UI.toast('Touchez directement le fleuve ou le canal.', 'warn'); return; }
+      st = { mx: w.water.x[i], my: w.water.y[i], node: i, nid: w.water.ids[i] };
+    }
+    const z = w.zoneAt(st.mx, st.my);
+    if (!z || !z.owned) { UI.toast('Cet emplacement est hors de votre zone d’exploitation. Achetez la zone d’abord.', 'warn'); return; }
+    const last = b.stops[b.stops.length - 1];
+    if (last && ((st.node !== undefined && st.node === last.node) || dist(st.mx, st.my, last.mx, last.my) < 60)) { UI.toast('Arrêt trop proche du précédent.', 'warn'); return; }
+    if (!st.name) st.name = this.stopName(st.mx, st.my, mode);
+    else { const used = new Set(b.stops.map((s) => s.name)); let n = st.name, k = 2; while (used.has(n)) n = st.name + ' ' + k++; st.name = n; }
+    if (last) {
+      const sg = Lines.segment(mode, last, st);
+      if (!sg) { UI.toast(mode === 'bus' ? 'Pas d’itinéraire routier entre ces deux arrêts.' : 'Pas de liaison continue entre ces deux points.', 'warn'); return; }
+      if (sg.pts.length < 2) sg.pts.push([st.mx, st.my]);
+      b.segs.push(sg);
+    }
+    b.stops.push(st);
+    if (navigator.vibrate) navigator.vibrate(12);
+    this.bar();
+  },
+  closeLoop() {
+    const b = this.b;
+    const f = b.stops[0], last = b.stops[b.stops.length - 1];
+    const sg = Lines.segment(b.mode, last, f);
+    if (!sg) { UI.toast('Impossible de boucler la ligne ici.', 'warn'); return; }
+    b.segs.push(sg); b.loop = true;
+    this.bar();
+  },
+  undo() {
+    const b = this.b; if (!b) return;
+    if (b.loop) { b.loop = false; b.segs.pop(); }
+    else if (b.stops.length) { b.stops.pop(); if (b.segs.length >= b.stops.length && b.segs.length) b.segs.pop(); }
+    this.bar();
+  },
+  cancel() {
+    this.b = null; $('#buildbar').hidden = true; $('#nav').classList.remove('dim');
+  },
+  confirm() {
+    const b = this.b; if (!b || b.stops.length < 2) return;
+    const path = Lines.assemble(b.stops, b.segs, b.loop);
+    const infra = Lines.costOf(b.mode, b.stops, path);
+    const cat = CATALOG[b.mode];
+    G.ui.bSel = { model: cat[b.mode === 'bus' ? 1 : 0].id, count: b.mode === 'bus' ? 3 : 2, color: b.color, path, infra };
+    this.dialog();
+  },
+  dialog() {
+    const b = this.b, q = G.ui.bSel;
+    const md = MODEL[q.model];
+    const vehCost = Math.round(md.price * G.s.costMul) * q.count;
+    const total = q.infra + vehCost;
+    const sp = { bus: 4.2, metro: 12.4, ter: 18, boat: 5.5 }[b.mode];
+    const cyc = (b.loop ? q.path.L : 2 * q.path.L) / sp / 60 + b.stops.length * 2 * 0.6;
+    const hw = cyc / q.count;
+    const cat = CATALOG[b.mode].map((m) => `<button class="catrow ${m.id === q.model ? 'on' : ''}" data-act="bModel" data-arg="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(m.desc)} · ${m.cap} pl. · ${m.kmh} km/h · ${fmtEur(m.op * G.s.costMul)}/h</small></span><em>${fmtEur(m.price * G.s.costMul)}</em></button>`).join('');
+    const sw = LINE_COLORS.map((c) => `<button class="sw ${c === q.color ? 'on' : ''}" style="background:${c}" data-act="bColor" data-arg="${c}" aria-label="Couleur ${c}"></button>`).join('');
+    UI.modal(`<div class="plate big">${pict(b.mode)} Nouvelle ligne · ${esc(MODES[b.mode].label)}</div>
+      <p class="sub">${b.stops.length} arrêts · ${fmtKm(q.path.L)}${b.loop ? ' · circulaire' : ''} · de ${esc(b.stops[0].name)} à ${esc(b.loop ? b.stops[0].name : b.stops[b.stops.length - 1].name)}${b.mode === 'metro' ? `<br>Chantier : ${q.path.L > 4000 ? '2 jours' : '1 jour'} avant l’ouverture.` : ''}</p>
+      <h3 class="sec">Couleur</h3><div class="swatches">${sw}</div>
+      <h3 class="sec">Véhicules</h3>${cat}
+      <div class="vrow"><div><b>Nombre</b><small>passage toutes les ~${Math.max(1, Math.round(hw))} min</small></div><div class="stepper"><button data-act="bCount" data-arg="-1">−</button><b>${q.count}</b><button data-act="bCount" data-arg="1">+</button></div></div>
+      <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${fmtEur(total)}</td></tr><tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr></tbody></table>
+      <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bBuild" ${G.s.money < total ? 'disabled' : ''}>Construire</button></div>`);
+  },
+  build() {
+    const b = this.b, q = G.ui.bSel;
+    const md = MODEL[q.model];
+    const total = q.infra + Math.round(md.price * G.s.costMul) * q.count;
+    if (!Eco.spend(total, 'capex')) return;
+    b.path = q.path;
+    const line = Lines.create(b, { model: q.model, count: q.count, color: q.color });
+    Render.lineBox(line);
+    Sim.lineQuality(line);
+    Events.log('Nouvelle ligne ' + MODES[line.mode].label.toLowerCase() + ' ' + Lines.label(line) + ' : ' + line.name + '.', 'ok');
+    UI.closeModal(); this.cancel();
+    UI.toast(line.status === 'construction' ? 'Chantier lancé ! Ouverture le ' + Time.label(line.buildEnd).day + ' à ' + Time.label(line.buildEnd).time : 'Ligne ' + Lines.label(line) + ' ouverte !', 'ok');
+    Render.dirty = true; UI.refreshTop();
+    Save.auto();
+  },
+};
+
+/* =====================================================================
+   ACTIONS
+   ===================================================================== */
+const findLine = (id) => G.s.lines.find((l) => l.id === +id);
+const ACT = {
+  nav(k) {
+    if (Build.b) Build.cancel();
+    if (G.ui.sheet === k && UI.sheetOpen()) { UI.close(); return; }
+    UI.open(k);
+  },
+  menu() { if (G.ui.sheet === 'menu' && UI.sheetOpen()) UI.close(); else UI.open('menu'); },
+  closeSheet() { UI.close(); },
+  closeCard() { UI.closeCard(); },
+  closeModal() { UI.closeModal(); },
+  play() { G.paused = !G.paused; UI.refreshTop(); },
+  speed() { const v = [1, 5, 20, 60]; G.speed = v[(v.indexOf(G.speed) + 1) % v.length]; G.paused = false; UI.refreshTop(); },
+  openLine(id) { UI.open('line', id); Render.dirty = true; },
+  follow() { G.ui.follow = G.ui.follow === G.ui.selVeh ? null : G.ui.selVeh; UI.renderVehCard(); },
+  buildMode(m) { Build.start(m); },
+  bUndo() { Build.undo(); },
+  bCancel() { Build.cancel(); },
+  bOk() { Build.confirm(); },
+  bModel(id) { G.ui.bSel.model = id; Build.dialog(); },
+  bColor(c) { G.ui.bSel.color = c; Build.b.color = c; Build.dialog(); },
+  bCount(d) { G.ui.bSel.count = clamp(G.ui.bSel.count + +d, 1, 40); Build.dialog(); },
+  bBuild() { Build.build(); },
+  buyVeh(arg) {
+    const [id, m] = arg.split('|'); const l = findLine(id); if (!l) return;
+    if (Lines.addVehicle(l, m)) { UI.toast(MODEL[m].name + ' ajouté à la ligne ' + Lines.label(l) + '.', 'ok'); Sim.lineQuality(l); }
+    UI.refreshSheet();
+  },
+  sellVeh(arg) {
+    const [id, m] = arg.split('|'); const l = findLine(id); if (!l) return;
+    Lines.sellVehicle(l, m); Sim.lineQuality(l); UI.refreshSheet();
+  },
+  price(arg) {
+    const [id, k, d] = arg.split('|'); const l = findLine(id); if (!l) return;
+    l.prices[k] = Math.round(clamp(l.prices[k] + +d, 0, 15) * 10) / 10; UI.refreshSheet();
+  },
+  busLane(id) {
+    const l = findLine(id); if (!l || l.busLane) return;
+    const km = laneLength(l) / 1000;
+    const cost = Math.round(km * 90000 * G.s.costMul / 1000) * 1000;
+    if (Eco.spend(cost, 'capex')) { l.busLane = true; l.laneKm = km; Sim.lineQuality(l); UI.toast('Couloirs de bus aménagés sur la ligne ' + Lines.label(l) + '.', 'ok'); }
+    UI.refreshSheet();
+  },
+  signal(id) {
+    const l = findLine(id); if (!l || l.signal) return;
+    const cost = Math.round(l.stops.length * 25000 * G.s.costMul / 1000) * 1000;
+    if (Eco.spend(cost, 'capex')) { l.signal = true; Sim.lineQuality(l); UI.toast('Priorité aux feux activée.', 'ok'); }
+    UI.refreshSheet();
+  },
+  lineColor(arg) { const [id, c] = arg.split('|'); const l = findLine(id); if (l) { l.color = c; Render.dirty = true; UI.refreshSheet(); } },
+  centerLine(id) {
+    const l = findLine(id); if (!l) return;
+    Render.lineBox(l);
+    const b = l.bbox;
+    G.map.fitBounds([[myToLat(b.maxy), mxToLon(b.minx)], [myToLat(b.miny), mxToLon(b.maxx)]], { padding: [40, 40], paddingBottomRight: [20, Math.round(window.innerHeight * 0.45)] });
+  },
+  delLine(id, el) {
+    const l = findLine(id); if (!l) return;
+    if (!el.dataset.confirm) { el.dataset.confirm = '1'; el.textContent = 'Confirmer : supprimer'; return; }
+    Lines.remove(l); UI.close(); Render.dirty = true;
+    UI.toast('Ligne supprimée. Véhicules revendus.', 'info');
+  },
+  buyZone(code) {
+    const z = G.w.zones.get(code); if (!z || z.owned) return;
+    if (!G.w.purchasable(z)) { UI.toast('Cette zone n’est pas contiguë à votre territoire.', 'warn'); return; }
+    if (!Eco.spend(z.price, 'zones')) return;
+    z.owned = true;
+    Events.log('Zone achetée : ' + z.name + ' (' + z.commune + ').', 'ok');
+    UI.toast('Zone acquise : ' + z.name + '.', 'ok');
+    Render.dirty = true;
+    if (G.ui.cardType === 'zone') UI.showZone(z);
+    if (UI.sheetOpen()) UI.refreshSheet();
+    Loader.ensureAround();
+    Save.auto();
+  },
+  seeZone(code) {
+    const z = G.w.zones.get(code); if (!z) return;
+    UI.close();
+    G.map.setView([myToLat(z.cy), mxToLon(z.cx)], Math.max(G.map.getZoom(), 14));
+    UI.showZone(z);
+  },
+  borrow(i) { Eco.borrow(Eco.loanOffers()[+i]); UI.refreshSheet(); },
+  repay(arg) { const [id, f] = arg.split('|'); const ln = G.s.loans.find((x) => x.id === +id); if (ln) Eco.repay(ln, f === '1' ? ln.amount : Math.ceil(ln.amount * 0.25)); UI.refreshSheet(); },
+  ads(arg) { const [m, k] = arg.split('|'); G.s.ads[m] = +k; UI.refreshSheet(); },
+  statsSet(arg) { const [k, v] = arg.split('|'); G.ui[k] = v; UI.refreshSheet(); },
+  strikeYes(id) {
+    const e = G.s.events.find((x) => x.id === +id);
+    if (e && G.s.money >= e.cost) { Eco.charge(e.cost, 'events'); e.resolved = true; Events.log('Grève évitée après négociation (' + fmtEur(e.cost) + ').', 'ok'); UI.toast('Accord trouvé : la grève est levée.', 'ok'); }
+    else if (e) { UI.toast('Trésorerie insuffisante pour négocier.', 'bad'); }
+    UI.closeModal(); UI.refreshTop();
+  },
+  strikeNo() { UI.closeModal(); },
+  saveSlot(n) { if (Save.write(+n)) UI.toast('Partie sauvegardée dans l’emplacement ' + n + '.', 'ok'); UI.refreshSheet(); },
+  loadSlot(n) { Save.auto(); Game.load(+n); },
+  base(v) { G.s.settings.base = v; Game.setBase(); UI.refreshSheet(); },
+  centerHome() { const c = G.s.city; G.map.setView([c.lat, c.lon], 14); UI.close(); },
+  quit(_, el) {
+    if (!el.dataset.confirm) { el.dataset.confirm = '1'; el.textContent = 'Confirmer (partie sauvegardée)'; return; }
+    Save.auto(); UI.close(); Game.stop(); UI.showStart();
+  },
+  offlineOk() { UI.closeModal(); },
+  // écran d'accueil
+  stHome() { StartScreen.render('home'); },
+  stNew() { StartScreen.render('new'); },
+  stLoad() { StartScreen.render('load'); },
+  stContinue() { const n = +localStorage.getItem('corr.last'); if (n) Game.load(n); },
+  stPickCity(i) { StartScreen.city = StartScreen.results[+i]; StartScreen.render('new'); },
+  stDiff(d) { StartScreen.diff = d; StartScreen.render('new'); },
+  stSlot(n) { StartScreen.slot = +n; StartScreen.render('new'); },
+  stGo() { StartScreen.go(); },
+  stLoadSlot(n) { Game.load(+n); },
+  stDelSlot(n, el) { if (!el.dataset.confirm) { el.dataset.confirm = '1'; el.textContent = 'Confirmer'; return; } Save.remove(+n); StartScreen.render('load'); },
+};
+const INP = {
+  citySearch(v) { StartScreen.search(v); },
+};
+const CHG = {
+  hStart(v, el) { const l = findLine(el.dataset.arg); if (l) { l.hours.start = +v; } },
+  hEnd(v, el) { const l = findLine(el.dataset.arg); if (l) { l.hours.end = +v; } },
+  night(_, el) { const l = findLine(el.dataset.arg); if (l) { l.night = el.checked; UI.refreshSheet(); } },
+  setting(_, el) { G.s.settings[el.dataset.arg] = el.checked; Render.dirty = true; },
+  statsAdv(_, el) { G.ui.statsAdv = el.checked; UI.refreshSheet(); },
+};
+
+/* =====================================================================
+   ÉCRAN D'ACCUEIL
+   ===================================================================== */
+const StartScreen = {
+  city: null, diff: 'normal', slot: 1, results: [], timer: null, q: '',
+  render(view) {
+    const box = $('#startBox');
+    const last = +localStorage.getItem('corr.last');
+    const slots = Save.list();
+    if (view === 'home') {
+      const lm = last ? slots[last - 1].meta : null;
+      box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
+        <p class="tagline">Bâtissez le réseau de transport de votre ville, sur la vraie carte de France.</p>
+        <div class="stack">
+          ${lm ? `<button class="btn primary big" data-act="stContinue">Continuer · ${esc(lm.city)}<small>${esc(lm.date)} · ${fmtEur(lm.money)}</small></button>` : ''}
+          <button class="btn ${lm ? '' : 'primary'} big" data-act="stNew">Nouvelle partie</button>
+          ${slots.some((s) => s.meta) ? '<button class="btn big" data-act="stLoad">Charger une partie</button>' : ''}
+        </div>
+        <p class="credits">Photos aériennes IGN · Données © OpenStreetMap · Connexion internet requise</p>`;
+    } else if (view === 'new') {
+      if (!this.slot || slots[this.slot - 1].meta) { const free = slots.find((s) => !s.meta); this.slot = free ? free.n : this.slot || 1; }
+      box.innerHTML = `<div class="plate big">Nouvelle partie</div>
+        <label class="lab" for="citySearch">Ville de départ</label>
+        <input id="citySearch" class="inp" type="search" placeholder="Ex. Lyon, Nantes, Annecy…" autocomplete="off" data-input="citySearch" value="${esc(this.q)}">
+        <div id="cityRes" class="cityres">${this.resHTML()}</div>
+        ${this.city ? `<div class="chosen">${icon('ok')} <b>${esc(this.city.nom)}</b> <small>${esc(this.city.codesPostaux?.[0] || this.city.codeDepartement || '')} · ${fmtInt(this.city.population || 0)} hab.</small></div>` : ''}
+        <label class="lab">Difficulté</label>
+        <div class="seg">${Object.entries(DIFF).map(([k, d]) => `<button class="${this.diff === k ? 'on' : ''}" data-act="stDiff" data-arg="${k}">${d.label}</button>`).join('')}</div>
+        <p class="sub">Capital de départ : ${fmtEur(DIFF[this.diff].money)} · coûts ×${DIFF[this.diff].cost.toLocaleString('fr-FR')}</p>
+        <label class="lab">Emplacement de sauvegarde</label>
+        <div class="seg wrap">${slots.map((s) => `<button class="${this.slot === s.n ? 'on' : ''}" data-act="stSlot" data-arg="${s.n}">${s.n}${s.meta ? ' · ' + esc(s.meta.city) : ' · libre'}</button>`).join('')}</div>
+        ${slots[this.slot - 1].meta ? '<p class="note warn">Cet emplacement contient une partie : elle sera remplacée.</p>' : ''}
+        <div class="row2"><button class="btn" data-act="stHome">Retour</button><button class="btn primary" data-act="stGo" ${this.city ? '' : 'disabled'}>Démarrer</button></div>`;
+      const inp = $('#citySearch');
+      if (inp && !this.city) inp.focus();
+    } else if (view === 'load') {
+      box.innerHTML = `<div class="plate big">Charger une partie</div>
+        ${slots.map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + fmtEur(meta.money) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div>${meta ? `<div class="row2 tight"><button class="btn sm primary" data-act="stLoadSlot" data-arg="${n}">Jouer</button><button class="btn sm danger" data-act="stDelSlot" data-arg="${n}">Effacer</button></div>` : ''}</div>`).join('')}
+        <button class="btn wide" data-act="stHome">Retour</button>`;
+    } else if (view === 'loading') {
+      box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
+        <div class="loadbox"><span class="spin big"></span><p id="loadMsg">${esc(this.loadMsg || 'Chargement…')}</p></div>`;
+    }
+  },
+  resHTML() {
+    if (!this.results.length) return this.q.length >= 2 ? '<p class="note">Aucune commune trouvée.</p>' : '';
+    return this.results.map((c, i) => `<button class="cityrow ${this.city && this.city.code === c.code ? 'on' : ''}" data-act="stPickCity" data-arg="${i}"><b>${esc(c.nom)}</b><small>${esc(c.codesPostaux?.[0] || '')} · ${fmtInt(c.population || 0)} hab.</small></button>`).join('');
+  },
+  search(v) {
+    this.q = v;
+    clearTimeout(this.timer);
+    if (v.trim().length < 2) { this.results = []; $('#cityRes').innerHTML = ''; return; }
+    this.timer = setTimeout(async () => {
+      try {
+        this.results = (await API.searchCommunes(v.trim())).filter((c) => c.centre);
+        $('#cityRes').innerHTML = this.resHTML();
+      } catch (e) { $('#cityRes').innerHTML = '<p class="note bad">Recherche impossible : vérifiez la connexion internet.</p>'; }
+    }, 300);
+  },
+  setMsg(t) { this.loadMsg = t; const el = $('#loadMsg'); if (el) el.textContent = t; },
+  go() {
+    if (!this.city) return;
+    const c = this.city;
+    const city = { nom: c.nom, code: c.code, lat: c.centre.coordinates[1], lon: c.centre.coordinates[0] };
+    Game.newGame(city, this.diff, this.slot);
+  },
+};
+
+/* =====================================================================
+   PARTIE
+   ===================================================================== */
+const Game = {
+  baseLayers: {},
+  initMap() {
+    if (G.map) return;
+    G.map = L.map('map', { zoomControl: false, zoomSnap: 0.5, zoomDelta: 0.5, maxZoom: 19.5, minZoom: 6, maxBounds: [[40.8, -6.5], [52, 10.5]], maxBoundsViscosity: 0.8, tap: true });
+    this.baseLayers.photo = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', { maxNativeZoom: 19, maxZoom: 20, attribution: '© IGN Géoplateforme · © contributeurs OpenStreetMap' });
+    this.baseLayers.plan = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', { maxNativeZoom: 18, maxZoom: 20, attribution: '© IGN Géoplateforme · © contributeurs OpenStreetMap' });
+    G.map.attributionControl.setPrefix(false);
+    G.map.on('click', (e) => this.onTap(e));
+    Render.init();
+  },
+  setBase() {
+    const want = G.s.settings.base === 'plan' ? 'plan' : 'photo';
+    for (const [k, lay] of Object.entries(this.baseLayers)) {
+      if (k === want && !G.map.hasLayer(lay)) lay.addTo(G.map);
+      if (k !== want && G.map.hasLayer(lay)) G.map.removeLayer(lay);
+    }
+  },
+  onTap(e) {
+    if (!G.ready) return;
+    const mx = lonToMx(e.latlng.lng), my = latToMy(e.latlng.lat);
+    if (Build.b) { Build.tap(mx, my); return; }
+    const h = Render.hit(e.containerPoint.x, e.containerPoint.y);
+    if (h && h.type === 'veh') { UI.showVehicle(h.l, h.v); return; }
+    if (h && h.type === 'stop') { UI.showStop(h.l, h.k); return; }
+    const z = G.w.zoneAt(mx, my);
+    if (z) { UI.showZone(z); return; }
+    UI.closeCard();
+  },
+
+  async newGame(city, diff, slot) {
+    StartScreen.render('loading');
+    StartScreen.setMsg('Préparation de ' + city.nom + '…');
+    G.s = Sim.newState(city, diff, slot);
+    G.mpu = mPerUnit(city.lat);
+    G.w = new World();
+    const [ci, cj] = chunkOf(city.lat, city.lon);
+    const chunks = [];
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) chunks.push([ci + di, cj + dj]);
+    chunks.sort((a, b) => Math.abs(a[0] - ci) + Math.abs(a[1] - cj) - Math.abs(b[0] - ci) - Math.abs(b[1] - cj));
+    StartScreen.setMsg('Chargement des quartiers (IGN)…');
+    await Loader.zonesFor(chunks);
+    if (!G.w.zones.size) {
+      StartScreen.render('new');
+      UI.toast('Impossible de charger les quartiers. Vérifiez la connexion et réessayez.', 'bad');
+      return;
+    }
+    // territoire de départ
+    const cmx = lonToMx(city.lon), cmy = latToMy(city.lat);
+    const center = G.w.zoneAt(cmx, cmy);
+    let n = 0;
+    for (const z of G.w.zones.values()) if (dist(z.cx, z.cy, cmx, cmy) < 1300) { z.owned = true; n++; }
+    if (center) center.owned = true;
+    if (!n && !center) {
+      let best = null, bd = Infinity;
+      for (const z of G.w.zones.values()) { const d = dist(z.cx, z.cy, cmx, cmy); if (d < bd) { bd = d; best = z; } }
+      if (best) best.owned = true;
+    }
+    G.s.zoneMode = G.w.mode;
+    Events.log('Bienvenue à ' + city.nom + ' ! Votre compagnie démarre avec ' + [...G.w.zones.values()].filter((z) => z.owned).length + ' zone(s).', 'ok');
+    await this.enter(true);
+    Save.write(slot);
+  },
+
+  async load(n) {
+    const data = Save.read(n);
+    if (!data) { UI.toast('Sauvegarde introuvable.', 'bad'); return; }
+    this.stop();
+    $('#start').hidden = false; $('#game').hidden = true;
+    StartScreen.render('loading');
+    StartScreen.setMsg('Chargement de ' + data.city.nom + '…');
+    G.s = Save.hydrate(data);
+    G.s.slot = n;
+    G.mpu = mPerUnit(G.s.city.lat);
+    G.w = new World();
+    G.w.mode = G.s.zoneMode || 'iris';
+    // zones possédées : on recharge la grille autour d'elles
+    const boxes = G.s.ownedBoxes || [];
+    const chunks = new Map();
+    const add = (c) => chunks.set(c.join(':'), c);
+    const [ci, cj] = chunkOf(G.s.city.lat, G.s.city.lon);
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) add([ci + di, cj + dj]);
+    for (const b of boxes) for (const c of chunksForMercBox(b, 1)) add(c);
+    StartScreen.setMsg('Chargement des quartiers (IGN)…');
+    await Loader.zonesFor([...chunks.values()]);
+    const own = new Set(G.s.owned);
+    for (const z of G.w.zones.values()) if (own.has(z.code)) z.owned = true;
+    await this.enter(false);
+    // progression hors-ligne
+    if (G.s.settings.idle && G.s.lastReal) {
+      const r = Sim.offline((Date.now() - G.s.lastReal) / 1000);
+      if (r) {
+        UI.modal(`<div class="plate big">${icon('sun')} Pendant votre absence</div>
+          <p>Le réseau a continué de tourner pendant <b>${Math.floor(r.gameMin / 1440)} j ${Math.floor((r.gameMin % 1440) / 60)} h</b> de jeu.</p>
+          <p class="big-num ${r.gain < 0 ? 'neg' : 'pos'}">${r.gain >= 0 ? '+' : ''}${fmtEur(r.gain)}</p>
+          <p class="sub">Calcul basé sur le résultat moyen des 3 derniers jours.</p>
+          <button class="btn primary wide" data-act="offlineOk">Reprendre</button>`, { pause: true });
+        UI.refreshTop();
+      }
+    }
+  },
+
+  async enter(isNew) {
+    UI.showGame();
+    this.initMap();
+    G.paused = false; G.speed = 1;
+    this.setBase();
+    const v = G.s.view;
+    if (v) G.map.setView([v.lat, v.lng], v.z, { animate: false });
+    else G.map.setView([G.s.city.lat, G.s.city.lon], 14.5, { animate: false });
+    for (const l of G.s.lines) { Lines.prepare(l); Render.lineBox(l); }
+    G.ready = true;
+    Render.resize(); Render.dirty = true;
+    UI.refreshTop(); UI.updateTint(); UI.refreshInfoBadge();
+    Traffic.update();
+    for (const l of G.s.lines) Sim.lineQuality(l);
+    if (isNew) setTimeout(() => UI.toast('Touchez « Construire » pour créer votre première ligne de bus.', 'info'), 1200);
+    Loader.ensureAround().then(() => {
+      for (const l of G.s.lines) { Lines.resolveEdges(l); if (!l.catchPop) Lines.computeOD(l); Sim.lineQuality(l); }
+    });
+  },
+
+  stop() { G.ready = false; Build.cancel(); UI.closeCard(); UI.closeModal(); },
+};
+
+/* ownedBoxes ajouté à la sauvegarde pour recharger le bon secteur */
+const _ser = Save.serialize.bind(Save);
+Save.serialize = function () {
+  const raw = JSON.parse(_ser());
+  raw.ownedBoxes = [...G.w.zones.values()].filter((z) => z.owned).map((z) => z.bbox);
+  return JSON.stringify(raw);
+};
+
+/* =====================================================================
+   BOUCLE PRINCIPALE
+   ===================================================================== */
+let lastFrame = performance.now(), lastCard = 0, lastAuto = Date.now(), lastTop = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000);
+  lastFrame = now;
+  if (G.ready && G.s) {
+    if (!G.paused) Sim.advance(dt * 60 * G.speed);
+    Render.tick(now);
+    if (now - lastTop > 500) { lastTop = now; UI.refreshTop(); }
+    if (now - lastCard > 400) {
+      lastCard = now;
+      if (G.ui.cardType === 'veh') UI.renderVehCard();
+      if (G.ui.follow) {
+        const l = G.ui.cardLine, v = G.ui.follow;
+        if (l && l.veh.includes(v)) {
+          const p = Lines.posOf(l, v);
+          const pt = G.map.latLngToContainerPoint([myToLat(p.my), mxToLon(p.mx)]);
+          const c = G.map.getSize();
+          if (Math.abs(pt.x - c.x / 2) > 40 || Math.abs(pt.y - c.y * 0.4) > 40) G.map.panTo([myToLat(p.my), mxToLon(p.mx)], { animate: true, duration: 0.35 });
+        }
+      }
+    }
+    if (Date.now() - lastAuto > 60000) { lastAuto = Date.now(); Save.auto(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function boot() {
+  UI.init();
+  UI.showStart();
+  document.addEventListener('visibilitychange', () => { if (document.hidden && G.ready) Save.auto(); });
+  window.addEventListener('pagehide', () => { if (G.ready) Save.auto(); });
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
+  requestAnimationFrame(frame);
+}
+document.addEventListener('DOMContentLoaded', boot);
+
+</script>
+</body>
+</html>

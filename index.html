@@ -433,6 +433,47 @@ const API = {
     const j = await fetchJSON('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=codeDepartement', {}, 15000);
     return j && j[0] && j[0].codeDepartement;
   },
+  /** WFS Géoplateforme avec pagination */
+  async wfsAll(typename, b, props) {
+    const out = [];
+    let start = 0, useProps = !!props;
+    for (let page = 0; page < 30; page++) {
+      const u = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=' + typename +
+        '&OUTPUTFORMAT=application/json&COUNT=5000&STARTINDEX=' + start + (useProps ? '&PROPERTYNAME=' + props : '') +
+        '&BBOX=' + [b.w, b.s, b.e, b.n].map((x) => x.toFixed(5)).join(',') + ',EPSG:4326';
+      let j;
+      try { j = await fetchJSON(u, {}, 90000); }
+      catch (e) { if (useProps && page === 0) { useProps = false; page--; continue; } throw e; }
+      const f = j.features || [];
+      for (const x of f) out.push(x);
+      const total = j.numberMatched ?? j.totalFeatures;
+      start += f.length;
+      if (!f.length || (typeof total === 'number' && start >= total) || (typeof total !== 'number' && f.length < 5000)) break;
+    }
+    return { type: 'FeatureCollection', features: out };
+  },
+  async bdtopo(b) {
+    const [roads, rails, water, gares, pois] = await Promise.all([
+      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,nom_voie_ban_gauche,nom_collaboratif_gauche'),
+      this.wfsAll('BDTOPO_V3:troncon_de_voie_ferree', b, 'geometrie,nature,etat_de_l_objet,vitesse_maximale'),
+      this.wfsAll('BDTOPO_V3:troncon_hydrographique', b, 'geometrie,navigabilite,classe_de_largeur,cpx_toponyme_de_cours_d_eau'),
+      this.wfsAll('BDTOPO_V3:equipement_de_transport', b, 'geometrie,nature,toponyme'),
+      this.wfsAll('BDTOPO_V3:zone_d_activite_ou_d_interet', b, 'geometrie,categorie,nature,toponyme'),
+    ]);
+    return { roads, rails, water, gares, pois };
+  },
+  async signals(s, w, n, e) {
+    const bb = [s, w, n, e].map((x) => x.toFixed(5)).join(',');
+    const q = `[out:json][timeout:60][bbox:${bb}];(node[highway~"^(traffic_signals|stop|give_way)$"];node[crossing=traffic_signals];);out qt;`;
+    let lastErr;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const ep = OVERPASS[(attempt + 1) % OVERPASS.length];
+      try {
+        return await fetchJSON(ep, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) }, 60000);
+      } catch (err) { lastErr = err; await sleep(2000 + attempt * 3000); }
+    }
+    throw lastErr;
+  },
   async overpass(s, w, n, e) {
     const bb = [s, w, n, e].map((x) => x.toFixed(5)).join(',');
     const q = `[out:json][timeout:120][bbox:${bb}];
@@ -494,6 +535,7 @@ class Net {
     this.ea = []; this.eb = []; this.len = []; this.cls = []; this.spd = []; this.name = [];
     this.seen = new Set(); this.pair = new Map(); this.grid = new Map();
     this.dens = []; this.zone = []; this.noise = []; this.traffic = [];
+    this.ow = []; this.bl = [];
     this.version = 0;
   }
   get nE() { return this.ea.length; }
@@ -506,7 +548,8 @@ class Net {
     let c = this.grid.get(k); if (!c) { c = []; this.grid.set(k, c); } c.push(i);
     return i;
   }
-  edge(a, b, cls, kmh, name, key) {
+  /** ow = 1 : circulation autorisée seulement de a vers b ; bl = 1 : voie réservée aux bus */
+  edge(a, b, cls, kmh, name, key, ow = 0, bl = 0) {
     if (this.seen.has(key) || a === b) return;
     this.seen.add(key);
     const e = this.ea.length;
@@ -516,6 +559,7 @@ class Net {
     this.dens.push(-1); this.zone.push(null);
     this.noise.push(0.7 + 0.6 * rnd01(hashStr(key)));
     this.traffic.push(0.2);
+    this.ow.push(ow ? 1 : 0); this.bl.push(bl ? 1 : 0);
     this.adj[a].push(e); this.adj[b].push(e);
     this.pair.set(this.ids[a] + '_' + this.ids[b], e);
     this.pair.set(this.ids[b] + '_' + this.ids[a], e);
@@ -536,10 +580,30 @@ class Net {
     if (best < 0) return -1;
     return Math.sqrt(bd) * G.mpu <= maxM ? best : -1;
   }
+  /** plusieurs nœuds proches, du plus près au plus loin */
+  nearestList(mx, my, maxM, accept, limit = 8) {
+    const r = Math.ceil(meters(maxM) / GCELL);
+    const cx = Math.floor(mx / GCELL), cy = Math.floor(my / GCELL);
+    const lim2 = meters(maxM) ** 2, out = [];
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      const c = this.grid.get((cx + dx) + ',' + (cy + dy));
+      if (!c) continue;
+      for (const i of c) {
+        const d = (this.x[i] - mx) ** 2 + (this.y[i] - my) ** 2;
+        if (d <= lim2 && (!accept || accept(i))) out.push([d, i]);
+      }
+    }
+    out.sort((a, b) => a[0] - b[0]);
+    return out.slice(0, limit).map((x) => x[1]);
+  }
+  /** un nœud est desservable par un bus s'il touche une vraie rue (pas une voie rapide) */
+  busNode(i) { return this.adj[i].some((e) => this.cls[e] > 0); }
 }
 
 /** A* (coût = temps pour la route, distance sinon). Renvoie {nodes, edges, len} ou null */
-function route(net, from, to, maxIter = 400000) {
+function route(net, from, to, opts = {}) {
+  const maxIter = opts.maxIter || 400000;
+  const oneway = !opts.noOneway;
   if (from === to) return { nodes: [from], edges: [], len: 0 };
   const n = net.x.length;
   const g = new Float64Array(n).fill(Infinity);
@@ -557,6 +621,7 @@ function route(net, from, to, maxIter = 400000) {
     if (u === to) break;
     closed[u] = 1;
     for (const e of net.adj[u]) {
+      if (oneway && net.ow[e] && net.ea[e] !== u) continue; // sens interdit
       const v = net.other(e, u);
       if (closed[v]) continue;
       let c = net.len[e];
@@ -612,6 +677,8 @@ class World {
     this.zoneChunks = new Set(); this.roadChunks = new Set();
     this.mode = 'iris';
     this.deptsLoaded = new Set();
+    this.signals = []; this.sgrid = new Map(); this.sigSeen = new Set(); this.sigChunks = new Set();
+    this.roadSrc = 'ign'; this.bdFail = 0;
     this.version = 0;
   }
 
@@ -736,12 +803,18 @@ class World {
       const t = el.tags;
       if (!t) continue;
       if (el.type === 'way' && el.nodes) {
-        let net = null, cls = 4, kmh = 30;
+        let net = null, cls = 4, kmh = 30, ow = 0, bl = 0;
         if (t.highway) {
           net = this.road;
           cls = ROAD_CLS[t.highway] ?? 4;
           kmh = ROAD_KMH[t.highway] || 30;
           const ms = parseInt(t.maxspeed, 10); if (ms > 4 && ms < 140) kmh = ms;
+          const o = t.oneway;
+          if (o === 'yes' || o === '1' || o === 'true') ow = 1;
+          else if (o === '-1' || o === 'reverse') ow = -1;
+          else if (o !== 'no' && (t.junction === 'roundabout' || t.junction === 'circular' || t.highway === 'motorway' || t.highway === 'motorway_link')) ow = 1;
+          if (t['oneway:bus'] === 'no' || t['oneway:psv'] === 'no') ow = 0;
+          if (t.highway === 'busway' || /lane/.test(t['busway'] || '') || t['lanes:bus'] || t['bus:lanes']) bl = 1;
         } else if (t.railway === 'rail') {
           if (t.usage === 'industrial' || t.usage === 'military' || t.usage === 'test') continue;
           net = this.rail; cls = 0; kmh = 120;
@@ -754,7 +827,10 @@ class World {
           const nd = nodes.get(el.nodes[k]);
           if (!nd) { prev = -1; continue; }
           const i = net.node(el.nodes[k], lonToMx(nd.lon), latToMy(nd.lat));
-          if (prev >= 0) net.edge(prev, i, cls, kmh, name, el.id + ':' + k);
+          if (prev >= 0) {
+            if (ow === -1) net.edge(i, prev, cls, kmh, name, el.id + ':' + k, 1, bl);
+            else net.edge(prev, i, cls, kmh, name, el.id + ':' + k, ow, bl);
+          }
           prev = i;
         }
         net.version++;
@@ -777,6 +853,113 @@ class World {
       }
     }
     this.version++;
+  }
+
+  /* ---- ingestion BD TOPO (IGN) ---- */
+  ingestBDTopo(d) {
+    const key = (c) => c[0].toFixed(7) + ',' + c[1].toFixed(7);
+    const lines = (g) => !g ? [] : g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+    const addLine = (net, fid, coords, cls, kmh, name, ow, bl) => {
+      let prev = -1;
+      coords.forEach((c, k) => {
+        const i = net.node(key(c), lonToMx(c[0]), latToMy(c[1]));
+        if (prev >= 0) {
+          if (ow === -1) net.edge(i, prev, cls, kmh, name, fid + ':' + k, 1, bl);
+          else net.edge(prev, i, cls, kmh, name, fid + ':' + k, ow ? 1 : 0, bl);
+        }
+        prev = i;
+      });
+    };
+    /* routes */
+    for (const f of d.roads.features || []) {
+      const p = f.properties || {};
+      const nat = p.nature || '';
+      if (/sentier|escalier|piste cyclable|chemin|bac |liaison maritime|empierr/i.test(nat)) continue;
+      const bus = p.reserve_aux_bus || '';
+      const acc = p.acces_vehicule_leger || '';
+      if (/impossible|ayants droit/i.test(acc) && !bus) continue;
+      const sens = p.sens_de_circulation || '';
+      let ow = /direct/i.test(sens) ? 1 : /inverse/i.test(sens) ? -1 : 0;
+      if (bus && ow) { // voie bus à contresens : les bus peuvent emprunter les deux sens
+        const b = /direct/i.test(bus) ? 1 : /inverse/i.test(bus) ? -1 : 0;
+        if (b === -ow || b === 0) ow = 0;
+      }
+      const imp = parseInt(p.importance, 10);
+      let cls = imp === 1 ? 0 : imp === 2 ? 1 : imp === 3 ? 2 : imp === 4 ? 3 : 4;
+      if (/autoroutier/i.test(nat)) cls = 0;
+      let kmh = [110, 70, 50, 40, 30][cls];
+      const v = +p.vitesse_moyenne_vl; if (v >= 5 && v <= 130) kmh = v;
+      const name = p.nom_voie_ban_gauche || prettyName(p.nom_collaboratif_gauche);
+      for (const ln of lines(f.geometry)) addLine(this.road, f.id, ln, cls, kmh, name, ow, bus ? 1 : 0);
+    }
+    this.road.version++;
+    /* voies ferrées (hors tram, métro, voies de service) */
+    for (const f of d.rails.features || []) {
+      const p = f.properties || {};
+      if (!/principale|LGV|grande vitesse/i.test(p.nature || '')) continue;
+      if (p.etat_de_l_objet && !/service/i.test(p.etat_de_l_objet)) continue;
+      const kmh = +p.vitesse_maximale > 20 ? +p.vitesse_maximale : 120;
+      for (const ln of lines(f.geometry)) addLine(this.rail, f.id, ln, 0, kmh, '', 0, 0);
+    }
+    this.rail.version++;
+    /* fleuves et canaux navigables */
+    for (const f of d.water.features || []) {
+      const p = f.properties || {};
+      if (!(p.navigabilite === true || /50|15/.test(p.classe_de_largeur || ''))) continue;
+      for (const ln of lines(f.geometry)) addLine(this.water, f.id, ln, 0, 20, p.cpx_toponyme_de_cours_d_eau || '', 0, 0);
+    }
+    this.water.version++;
+    /* gares et lieux */
+    const centre = (g) => {
+      const poly = !g ? null : g.type === 'Polygon' ? g.coordinates : g.type === 'MultiPolygon' ? g.coordinates[0] : g.type === 'Point' ? [[g.coordinates]] : null;
+      if (!poly || !poly[0] || !poly[0].length) return null;
+      let x = 0, y = 0; const r = poly[0];
+      for (const c of r) { x += c[0]; y += c[1]; }
+      return [x / r.length, y / r.length];
+    };
+    const addPoi = (f, kind, name, train) => {
+      if (this.poiSeen.has(f.id)) return;
+      const c = centre(f.geometry); if (!c) return;
+      this.poiSeen.add(f.id);
+      this.pois.push({ mx: lonToMx(c[0]), my: latToMy(c[1]), kind, name: name || '', w: POI_W[kind] || 250, train: !!train });
+    };
+    for (const f of d.gares.features || []) {
+      const p = f.properties || {};
+      const n = p.nature || '';
+      if (/^gare voyageurs/i.test(n)) addPoi(f, 'station', p.toponyme, true);
+      else if (/station de m[ée]tro/i.test(n)) addPoi(f, 'metro_station', p.toponyme, false);
+      else if (/gare routi/i.test(n)) addPoi(f, 'bus_station', p.toponyme, false);
+    }
+    for (const f of d.pois.features || []) {
+      const p = f.properties || {};
+      const kind = bdKind(p.nature || '', p.categorie || '');
+      if (kind) addPoi(f, kind, p.toponyme);
+    }
+    this.version++;
+  }
+
+  /* ---- feux, stops, cédez-le-passage (OpenStreetMap) ---- */
+  ingestSignals(json) {
+    let n = 0;
+    for (const el of json.elements || []) {
+      if (el.type !== 'node' || this.sigSeen.has(el.id)) continue;
+      this.sigSeen.add(el.id);
+      const h = el.tags?.highway, t = h === 'stop' ? 'stop' : h === 'give_way' ? 'yield' : 'sig';
+      const sg = { id: el.id, mx: lonToMx(el.lon), my: latToMy(el.lat), t, ph: hash32(el.id) };
+      const k = Math.floor(sg.mx / GCELL) + ',' + Math.floor(sg.my / GCELL);
+      let c = this.sgrid.get(k); if (!c) { c = []; this.sgrid.set(k, c); } c.push(sg);
+      this.signals.push(sg); n++;
+    }
+    return n;
+  }
+  signalsNear(mx, my, rM) {
+    const r = Math.ceil(meters(rM) / GCELL), cx = Math.floor(mx / GCELL), cy = Math.floor(my / GCELL);
+    const lim = meters(rM) ** 2, out = [];
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      const c = this.sgrid.get((cx + dx) + ',' + (cy + dy)); if (!c) continue;
+      for (const sg of c) if ((sg.mx - mx) ** 2 + (sg.my - my) ** 2 <= lim) out.push(sg);
+    }
+    return out;
   }
 
   /** Recalcule la densité rattachée à chaque tronçon routier (après ajout de zones ou de routes) */
@@ -811,15 +994,53 @@ class World {
   }
 }
 
+/** « R DE LA REPUBLIQUE » -> « Rue de la République »-ish (repli si le nom BAN manque) */
+const ABBR = { R: 'Rue', AV: 'Avenue', BD: 'Boulevard', PL: 'Place', QU: 'Quai', QUAI: 'Quai', CRS: 'Cours', CHE: 'Chemin', IMP: 'Impasse', ALL: 'Allée', RTE: 'Route', GAL: 'Galerie', PASS: 'Passage', SQ: 'Square', PROM: 'Promenade', MTE: 'Montée', RPT: 'Rond-point', ESPL: 'Esplanade', FG: 'Faubourg', SENT: 'Sentier', VC: 'Voie communale', RN: 'RN', RD: 'RD' };
+function prettyName(s) {
+  if (!s) return '';
+  const small = new Set(['DE', 'DU', 'DES', 'LA', 'LE', 'LES', 'D', 'L', 'ET', 'AU', 'AUX', 'SUR', 'SOUS', 'EN']);
+  return s.split(/\s+/).map((w, i) => {
+    if (i === 0 && ABBR[w]) return ABBR[w];
+    if (/^(RN|RD|A)\d+/.test(w)) return w;
+    const parts = w.split("'");
+    return parts.map((x, k) => {
+      if (small.has(x) && (i > 0 || k > 0)) return x.toLowerCase();
+      return x.charAt(0) + x.slice(1).toLowerCase();
+    }).join("'");
+  }).join(' ');
+}
+/** nature BD TOPO -> type de lieu du jeu */
+function bdKind(nat, cat) {
+  const n = nat.toLowerCase();
+  if (/h[ôo]pital|clinique|centre hospitalier/.test(n)) return 'hospital';
+  if (/universit|enseignement sup|grande [ée]cole/.test(n)) return 'university';
+  if (/lyc[ée]e|coll[èe]ge/.test(n)) return 'college';
+  if (/enseignement primaire|[ée]cole maternelle|groupe scolaire/.test(n)) return 'school';
+  if (/^mairie|h[ôo]tel de ville/.test(n)) return 'townhall';
+  if (/mus[ée]e/.test(n)) return 'museum';
+  if (/stade|complexe sportif|hippodrome|v[ée]lodrome|palais des sports/.test(n)) return 'stadium';
+  if (/centre commercial|grand magasin|hypermarch/.test(n)) return 'mall';
+  if (/march[ée]/.test(n)) return 'marketplace';
+  if (/cin[ée]ma/.test(n)) return 'cinema';
+  if (/th[ée][âa]tre|op[ée]ra|salle de spectacle|auditorium/.test(n)) return 'theatre';
+  if (/biblioth|m[ée]diath/.test(n)) return 'library';
+  if (/monument|ch[âa]teau|parc de loisirs|zoo|parc d'attraction|site touristique/.test(n)) return 'attraction';
+  if (/pr[ée]fecture|palais de justice|tribunal/.test(n)) return 'townhall';
+  if (/zone d'activit|zone industrielle|usine|centre de recherche|bureau/.test(n)) return 'business';
+  if (/sport|sant|enseignement|culture|administratif/i.test(cat)) return 'other';
+  return null;
+}
+
 const POI_W = {
   station: 2600, metro_station: 900, university: 3000, college: 900, school: 450, hospital: 2000, townhall: 500,
   marketplace: 600, cinema: 700, theatre: 500, library: 300, mall: 2600, department_store: 1500, supermarket: 450,
-  attraction: 900, museum: 900,
+  attraction: 900, museum: 900, stadium: 1600, bus_station: 1200, business: 1800, other: 200,
 };
 const POI_LABEL = {
   station: 'Gare', metro_station: 'Station', university: 'Université', college: 'Collège', school: 'École', hospital: 'Hôpital',
   townhall: 'Mairie', marketplace: 'Marché', cinema: 'Cinéma', theatre: 'Théâtre', library: 'Bibliothèque',
   mall: 'Centre commercial', department_store: 'Grand magasin', supermarket: 'Supermarché', attraction: 'Site touristique', museum: 'Musée',
+  stadium: 'Stade', bus_station: 'Gare routière', business: 'Zone d’activités', other: 'Équipement',
 };
 
 /* ---------- gestionnaire de chargement ---------- */
@@ -880,29 +1101,70 @@ const Loader = {
 
   async roadsFor(chunks) {
     const w = G.w; let n = 0;
-    for (const [i, j] of chunks) {
-      const key = i + ':' + j;
-      if (w.roadChunks.has(key)) continue;
-      w.roadChunks.add(key);
-      const b = chunkBox(i, j);
-      this.busy++; this.status('Routes OpenStreetMap…');
+    const todo = chunks.filter(([i, j]) => !w.roadChunks.has(i + ':' + j));
+    for (const [i, j] of todo) w.roadChunks.add(i + ':' + j);
+    const one = async ([i, j]) => {
+      const key = i + ':' + j, b = chunkBox(i, j);
+      const srcWas = w.roadSrc;
+      this.busy++; this.status(w.roadSrc === 'ign' ? 'Routes IGN…' : 'Routes OpenStreetMap…');
       try {
-        let js = await Cache.get('osm:' + key);
-        if (!js) { js = await API.overpass(b.s, b.w, b.n, b.e); await Cache.set('osm:' + key, js); }
-        w.ingestOSM(js);
+        if (w.roadSrc === 'ign') {
+          let d = await Cache.get('bdt:' + key);
+          if (!d) {
+            try { d = await API.bdtopo(b); await Cache.set('bdt:' + key, d); }
+            catch (e) {
+              w.bdFail++;
+              if (w.bdFail >= 2 && !w.road.nE) w.roadSrc = 'osm';
+              throw e;
+            }
+          }
+          w.ingestBDTopo(d);
+        } else {
+          let js = await Cache.get('osm:' + key);
+          if (!js) { js = await API.overpass(b.s, b.w, b.n, b.e); await Cache.set('osm:' + key, js); }
+          w.ingestOSM(js);
+        }
         w.attachDensity(false);
         n++;
         Render.dirty = true;
         Sim.onNetworkGrow();
+        this.signalsFor(i, j); // en arrière-plan
       } catch (e) {
-        console.warn('osm', key, e);
+        console.warn('routes', key, e);
         w.roadChunks.delete(key);
-        UI.toast('Routes indisponibles (serveur OpenStreetMap saturé). Nouvel essai dans 1 min.', 'warn');
-        setTimeout(() => Loader.ensureAround(), 60000);
-      } finally { this.busy--; }
-    }
+        if (srcWas === 'ign' && w.roadSrc === 'osm') {
+          UI.toast('Serveur IGN indisponible : bascule sur OpenStreetMap (plus lent).', 'warn');
+          setTimeout(() => Loader.ensureAround(), 0);
+        } else if (srcWas === 'ign' && !w.road.nE && w.bdFail < 2) {
+          setTimeout(() => Loader.ensureAround(), 3000);
+        } else {
+          UI.toast('Routes indisponibles pour le moment. Nouvel essai dans 1 min.', 'warn');
+          setTimeout(() => Loader.ensureAround(), 60000);
+        }
+      } finally { this.busy--; this.status(this.busy > 0 ? 'Routes…' : null); }
+    };
+    // 3 secteurs en parallèle
+    const queue = todo.slice();
+    const workers = [0, 1, 2].map(async () => { while (queue.length) await one(queue.shift()); });
+    await Promise.all(workers);
     this.status(null);
     return n;
+  },
+
+  /** feux, stops et cédez-le-passage : petite requête OpenStreetMap, sans bloquer le jeu */
+  async signalsFor(i, j) {
+    const w = G.w, key = i + ':' + j;
+    if (w.sigChunks.has(key)) return;
+    w.sigChunks.add(key);
+    try {
+      let js = await Cache.get('sig:' + key);
+      if (!js) { const b = chunkBox(i, j); js = await API.signals(b.s, b.w, b.n, b.e); await Cache.set('sig:' + key, js); }
+      if (w.ingestSignals(js)) { Sim.onSignals(); Render.dirty = true; }
+    } catch (e) {
+      console.warn('signalisation', key, e);
+      w.sigChunks.delete(key);
+      setTimeout(() => Loader.signalsFor(i, j), 120000);
+    }
   },
 
   /** S'assure que les données autour du territoire possédé sont chargées */
@@ -1039,21 +1301,62 @@ function octiPath(a, b) {
   return out;
 }
 
+function reversePath(path) {
+  const N = path.pts.length;
+  const out = { pts: path.pts.slice().reverse(), pairs: path.pairs ? path.pairs.slice().reverse() : null, stopPt: path.stopPt.slice().reverse().map((i) => N - 1 - i) };
+  buildPathMeta(out);
+  return out;
+}
+
 /* ---------- construction de ligne ---------- */
 const Lines = {
   netFor(mode) { return mode === 'bus' ? G.w.road : mode === 'ter' ? G.w.rail : mode === 'boat' ? G.w.water : null; },
 
-  /** Calcule le tronçon entre deux arrêts. Renvoie {pts, edges(pairs), nodeIds} */
-  segment(mode, A, B) {
+  /** Calcule le tronçon entre deux arrêts (en respectant les sens de circulation). Renvoie {pts, pairs, len} */
+  segment(mode, A, B, opts) {
     if (mode === 'metro') {
       return { pts: octiPath([A.mx, A.my], [B.mx, B.my]), pairs: null };
     }
-    const net = this.netFor(mode);
-    const r = route(net, A.node, B.node);
+    return this.segNodes(this.netFor(mode), A.node, B.node, opts);
+  },
+  segNodes(net, a, b, opts) {
+    const r = route(net, a, b, opts);
     if (!r) return null;
     const pts = r.nodes.map((i) => [net.x[i], net.y[i]]);
+    if (pts.length < 2) pts.push([net.x[b], net.y[b]]);
     const pairs = r.edges.map((e) => net.ids[net.ea[e]] + '_' + net.ids[net.eb[e]]);
-    return { pts, pairs, len: r.len };
+    while (pairs.length < pts.length - 1) pairs.push(null);
+    return { pts, pairs, len: r.len, end: b };
+  },
+  /** itinéraire raisonnable (pas de détour absurde) */
+  okRoute(sg, net, a, b) {
+    if (!sg) return false;
+    const crow = Math.hypot(net.x[a] - net.x[b], net.y[a] - net.y[b]) * G.mpu;
+    return sg.len <= crow * 3.2 + 900;
+  },
+  /** Trajet retour d'une ligne de bus : du terminus vers le départ, en cherchant au besoin
+   *  un point d'arrêt de l'autre côté de la rue (sens uniques, boulevards à deux chaussées). */
+  buildBack(mode, stops) {
+    if (mode !== 'bus') return null;
+    const net = G.w.road, n = stops.length;
+    const back = new Array(n), segs = [];
+    back[n - 1] = stops[n - 1].node;
+    let forced = false;
+    for (let k = n - 1; k >= 1; k--) {
+      const st = stops[k - 1];
+      const cands = [st.node, ...net.nearestList(st.mx, st.my, 160, (i) => net.busNode(i), 10).filter((i) => i !== st.node)];
+      let pickNode = -1, seg = null;
+      for (const c of cands) {
+        const sg = this.segNodes(net, back[k], c);
+        if (this.okRoute(sg, net, back[k], c)) { pickNode = c; seg = sg; break; }
+      }
+      if (!seg) { seg = this.segNodes(net, back[k], st.node, { noOneway: true }); pickNode = st.node; forced = true; }
+      if (!seg) return null;
+      back[k - 1] = pickNode; segs.push(seg);
+    }
+    const rstops = stops.slice().reverse().map((st, j) => ({ mx: net.x[back[n - 1 - j]], my: net.y[back[n - 1 - j]] }));
+    const path = this.assemble(rstops, segs, false);
+    return { path, back, forced };
   },
 
   /** Assemble le chemin complet depuis les tronçons */
@@ -1101,8 +1404,8 @@ const Lines = {
     const line = {
       id, mode: b.mode, num: opts.num || this.nextNum(b.mode), color: opts.color || this.nextColor(),
       name: '', loop: !!b.loop,
-      stops: b.stops.map((st) => ({ mx: st.mx, my: st.my, name: st.name, nid: st.nid ?? null, shared: !!st.shared })),
-      path: b.path,
+      stops: b.stops.map((st) => ({ mx: st.mx, my: st.my, name: st.name, nid: st.nid ?? null, shared: !!st.shared, bmx: st.bmx, bmy: st.bmy, bnid: st.bnid ?? null })),
+      path: b.path, pathB: b.pathB || null, routedV2: true,
       prices: { week: MODES[b.mode].ref, weekend: MODES[b.mode].ref, night: MODES[b.mode].ref },
       hours: { start: 330, end: 30 }, night: false, busLane: false, signal: false,
       status: b.mode === 'metro' ? 'construction' : 'active',
@@ -1126,14 +1429,19 @@ const Lines = {
     const n = line.stops.length;
     buildPathMeta(line.path);
     const P = line.path;
+    if (line.pathB) buildPathMeta(line.pathB);
+    const PB = line.loop ? null : (line.pathB || reversePath(P));
+    line.P = [P, PB];
     line.stopAt = P.stopPt.map((i) => P.cum[i]);
     const L = P.L;
-    line.C = line.loop ? L : 2 * L;
+    line.L0 = L;
+    line.C = line.loop ? L : L + PB.L;
     const ev = [];
     for (let k = 0; k < n; k++) ev.push({ u: line.stopAt[k], k, d: 0 });
-    if (!line.loop) for (let k = n - 1; k >= 0; k--) ev.push({ u: 2 * L - line.stopAt[k], k, d: 1 });
+    if (!line.loop) PB.stopPt.forEach((pi, j) => ev.push({ u: L + PB.cum[pi], k: n - 1 - j, d: 1 }));
     ev.sort((a, b) => a.u - b.u || a.d - b.d);
     line.ev = ev;
+    line.bbox = null;
     line.Wf = new Float64Array(n * n);
     line.Wb = new Float64Array(n * n);
     line.segE = null;
@@ -1143,19 +1451,99 @@ const Lines = {
     line.evMul = new Float64Array(n).fill(1);
     line.active = false;
     for (const v of line.veh) { v.on = new Float64Array(n); v.load = 0; }
+    this.controls(line);
+  },
+
+  /** feux, stops et cédez-le-passage rencontrés sur le parcours (bus uniquement) */
+  controls(line) {
+    const w = G.w, out = [];
+    if (line.mode === 'bus' && w.signals.length) {
+      line.P.forEach((P, dir) => {
+        if (!P) return;
+        const base = dir ? line.L0 : 0, seen = new Set();
+        P.pts.forEach((pt, i) => {
+          for (const sg of w.signalsNear(pt[0], pt[1], 14)) {
+            if (seen.has(sg.id)) continue;
+            seen.add(sg.id);
+            out.push({ u: base + P.cum[i], t: sg.t, sg });
+          }
+        });
+      });
+      out.sort((a, b) => a.u - b.u);
+    }
+    line.ctl = out;
+    for (const v of line.veh) this.ctlPointer(line, v);
+  },
+  ctlPointer(line, v) {
+    v.ci = 0; v.cwrap = false;
+    const c = line.ctl || [];
+    while (v.ci < c.length && c[v.ci].u <= v.u + 1e-6) v.ci++;
+    if (v.ci >= c.length) { v.ci = 0; v.cwrap = true; }
+  },
+
+  /** Recalcule l'itinéraire d'une ligne existante sur le réseau actuel (sens uniques compris) */
+  reroute(line) {
+    if (line.mode === 'metro') return false;
+    const net = this.netFor(line.mode);
+    if (!net || !net.nE) return false;
+    const rad = line.mode === 'bus' ? 250 : line.mode === 'ter' ? 450 : 300;
+    const acc = line.mode === 'bus' ? (i) => net.busNode(i) : null;
+    const st = [];
+    for (const s0 of line.stops) {
+      const cands = net.nearestList(s0.mx, s0.my, rad, acc, 8);
+      if (!cands.length) return false;
+      st.push({ ...s0, cands, node: cands[0] });
+    }
+    const segs = [];
+    for (let k = 0; k < st.length - 1; k++) {
+      let ok = null;
+      for (const c of st[k + 1].cands) {
+        const sg = this.segNodes(net, st[k].node, c);
+        if (this.okRoute(sg, net, st[k].node, c)) { ok = sg; st[k + 1].node = c; break; }
+      }
+      if (!ok) return false;
+      segs.push(ok);
+    }
+    if (line.loop) {
+      const sg = this.segNodes(net, st[st.length - 1].node, st[0].node);
+      if (!sg) return false;
+      segs.push(sg);
+    }
+    for (const x of st) { x.mx = net.x[x.node]; x.my = net.y[x.node]; x.nid = net.ids[x.node]; }
+    const path = this.assemble(st, segs, line.loop);
+    let pathB = null;
+    if (!line.loop && line.mode === 'bus') {
+      const bk = this.buildBack('bus', st);
+      if (!bk) return false;
+      pathB = bk.path;
+      st.forEach((x, k) => { const b = bk.back[k]; x.bmx = net.x[b]; x.bmy = net.y[b]; x.bnid = net.ids[b]; });
+    }
+    line.stops = st.map((x) => ({ mx: x.mx, my: x.my, name: x.name, nid: x.nid, shared: x.shared, bmx: x.bmx, bmy: x.bmy, bnid: x.bnid ?? null }));
+    line.path = path; line.pathB = pathB; line.routedV2 = true;
+    const od = line.od;
+    this.prepare(line);
+    if (od && od.length === line.stops.length ** 2) line.od = od;
+    if (line.active) { this.placeVehicles(line); for (const v of line.veh) v.hidden = false; }
+    return true;
   },
 
   resolveEdges(line) {
     const net = this.netFor(line.mode);
     if (!net || !line.path.pairs) return;
-    const segE = new Int32Array(line.path.pts.length).fill(-1);
     let found = 0;
-    line.path.pairs.forEach((p, i) => {
-      if (!p) return;
-      const e = net.pair.get(p);
-      if (e !== undefined) { segE[i] = e; found++; }
-    });
-    line.segE = segE;
+    const res = (P) => {
+      if (!P || !P.pairs) return null;
+      const segE = new Int32Array(P.pts.length).fill(-1);
+      P.pairs.forEach((p, i) => {
+        if (!p) return;
+        const e = net.pair.get(p);
+        if (e !== undefined) { segE[i] = e; found++; }
+      });
+      return segE;
+    };
+    const Ps = line.P || [line.path, null];
+    line.segEs = [res(Ps[0]), res(Ps[1])];
+    line.segE = line.segEs[0];
     line.segFound = found;
   },
 
@@ -1226,7 +1614,8 @@ const Lines = {
       v.ev = 0; v.wrap = false;
       while (v.ev < line.ev.length && line.ev[v.ev].u < v.u - 1e-6) v.ev++;
       if (v.ev >= line.ev.length) { v.ev = 0; v.wrap = true; }
-      v.dwell = 0; if (v.on) v.on.fill(0); v.load = 0;
+      v.dwell = 0; if (v.on) v.on.fill(0); v.load = 0; v.hold = null;
+      this.ctlPointer(line, v);
     });
   },
   remove(line) {
@@ -1238,12 +1627,10 @@ const Lines = {
   },
 
   posOf(line, v) {
-    const L = line.path.L;
-    let s = v.u;
-    let back = false;
-    if (!line.loop && s > L) { s = 2 * L - s; back = true; }
-    const p = pointAt(line.path, s);
-    return { mx: p[0], my: p[1], seg: p[2], back };
+    const L = line.L0;
+    if (line.loop || v.u <= L) { const p = pointAt(line.P[0], v.u); return { mx: p[0], my: p[1], seg: p[2], dir: 0 }; }
+    const p = pointAt(line.P[1], v.u - L);
+    return { mx: p[0], my: p[1], seg: p[2], dir: 1 };
   },
   label(line) {
     if (line.mode === 'metro') return String(line.num);
@@ -1294,7 +1681,7 @@ const Traffic = {
     const c = G.w.road.traffic[e] ?? 0.3;
     let f = 1 / (1 + 3 * Math.pow(Math.max(0, c - 0.3), 1.6));
     f = Math.max(0.22, f);
-    if (line.busLane && G.w.road.cls[e] <= 3) f = 1 - (1 - f) * 0.25;
+    if ((line.busLane && G.w.road.cls[e] <= 3) || G.w.road.bl[e]) f = 1 - (1 - f) * 0.25;
     return f;
   },
 };
@@ -1518,9 +1905,26 @@ const Sim = {
 
   onNetworkGrow() {
     for (const l of G.s.lines) {
-      if (l.segE && l.segFound >= (l.path.pairs || []).filter(Boolean).length) continue;
-      Lines.resolveEdges(l);
+      const want = (l.path.pairs || []).filter(Boolean).length + ((l.pathB && l.pathB.pairs) || []).filter(Boolean).length;
+      if (!(l.segE && l.segFound >= want)) Lines.resolveEdges(l);
     }
+    this.rerouteOld();
+  },
+  /** lignes créées avant la gestion des sens uniques : nouveau calcul automatique */
+  rerouteOld() {
+    let n = 0;
+    for (const l of G.s.lines) {
+      if (l.routedV2 || l.mode === 'metro') { l.routedV2 = true; continue; }
+      const net = Lines.netFor(l.mode);
+      // on attend que le réseau couvre tous les arrêts
+      if (!l.stops.every((st) => net.nearest(st.mx, st.my, 250) >= 0)) continue;
+      if (Lines.reroute(l)) n++;
+      else l.routedV2 = true; // impossible : on garde l'ancien tracé
+    }
+    if (n) { UI.toast(n + ' ligne' + (n > 1 ? 's' : '') + ' recalculée' + (n > 1 ? 's' : '') + ' selon les sens de circulation.', 'ok'); Render.dirty = true; }
+  },
+  onSignals() {
+    for (const l of G.s.lines) Lines.controls(l);
   },
 
   advance(sec) {
@@ -1597,14 +2001,19 @@ const Sim = {
     let spd = 0;
     if (l.mode === 'bus') {
       let num = 0, den = 0;
-      const P = l.path;
-      for (let i = 0; i < P.pts.length - 1; i++) {
-        const segL = P.cum[i + 1] - P.cum[i];
-        const e = l.segE ? l.segE[i] : -1;
-        const net = G.w.road;
-        const vmax = Math.min(e >= 0 ? net.spd[e] : 8.3, 13.9);
-        num += segL; den += segL / (vmax * Traffic.busFactor(e, l) * (l.signal ? 1.1 : 1) * Events.speedMult('bus'));
-      }
+      const net = G.w.road;
+      (l.P || [l.path]).forEach((P, dir) => {
+        if (!P) return;
+        const segE = l.segEs ? l.segEs[dir] : null;
+        for (let i = 0; i < P.pts.length - 1; i++) {
+          const segL = P.cum[i + 1] - P.cum[i];
+          const e = segE ? segE[i] : -1;
+          const vmax = Math.min(e >= 0 ? net.spd[e] : 8.3, 13.9);
+          num += segL; den += segL / (vmax * Traffic.busFactor(e, l) * (l.signal ? 1.05 : 1) * Events.speedMult('bus'));
+        }
+      });
+      // attente moyenne aux feux et stops
+      for (const c of l.ctl || []) den += c.t === 'sig' ? (l.signal ? 4 : 18) : c.t === 'stop' ? 4 : 1.5;
       spd = den > 0 ? num / den : 6;
     } else {
       const v0 = l.veh[0] ? MODEL[l.veh[0].model].kmh / 3.6 : 10;
@@ -1621,46 +2030,71 @@ const Sim = {
     l.qual = l.veh.length ? qWait * qSpeed : 0;
   },
 
-  vehSpeed(l, v, seg) {
+  vehSpeed(l, v, p) {
+    const seg = p.seg;
+    const segE = l.segEs ? l.segEs[p.dir || 0] : l.segE;
     const md = MODEL[v.model];
     const vm = md.kmh / 3.6;
     const sm = Events.speedMult(l.mode);
     if (l.mode === 'bus') {
-      const e = l.segE ? l.segE[seg] : -1;
+      const e = segE ? segE[seg] : -1;
       const net = G.w.road;
       const lim = e >= 0 ? net.spd[e] : 8.3;
-      return Math.max(1.2, Math.min(vm, lim * 0.95) * Traffic.busFactor(e, l) * (l.signal ? 1.1 : 1) * sm);
+      return Math.max(1.2, Math.min(vm, lim * 0.95) * Traffic.busFactor(e, l) * sm);
     }
     if (l.mode === 'metro') return vm * 0.62;
     if (l.mode === 'ter') {
-      const e = l.segE ? l.segE[seg] : -1;
+      const e = segE ? segE[seg] : -1;
       const lim = e >= 0 ? G.w.rail.spd[e] : vm;
       return Math.max(3, Math.min(vm, lim) * 0.72 * sm);
     }
     return Math.max(0.5, vm * 0.9 * (sm || 0.01));
   },
 
+  /** attente à un feu / stop / cédez-le-passage (en secondes de jeu) */
+  ctlWait(l, c, tSec) {
+    if (c.t === 'stop') return 3 + 3 * Math.min(1, G.w.road.traffic[0] || 0);
+    if (c.t === 'yield') return Math.random() < 0.55 ? 0 : 1 + Math.random() * 3;
+    const sg = c.sg;
+    const T = 60 + (sg.ph % 41);            // cycle 60 à 100 s
+    const g = l.signal ? 0.88 : 0.5;          // part du vert (priorité aux feux)
+    const ph = (tSec + (sg.ph >>> 8) % T) % T;
+    return ph < g * T ? 0 : T - ph;
+  },
+
   moveVehicles(dt) {
+    const tNow = G.s.sec;
     for (const l of G.s.lines) {
       if (!l.active || !l.veh.length) continue;
+      const ctl = l.ctl || [];
       for (const v of l.veh) {
         let t = dt, guard = 0;
-        while (t > 1e-6 && guard++ < 50) {
-          if (v.dwell > 0) { const d = Math.min(t, v.dwell); v.dwell -= d; t -= d; continue; }
+        while (t > 1e-6 && guard++ < 80) {
+          if (v.dwell > 0) { const d = Math.min(t, v.dwell); v.dwell -= d; t -= d; if (v.dwell <= 0) v.hold = null; continue; }
           const evt = l.ev[v.ev];
-          const target = evt.u + (v.wrap ? l.C : 0);
+          const tStop = evt.u + (v.wrap ? l.C : 0);
+          let tCtl = Infinity, c = null;
+          if (ctl.length) { c = ctl[v.ci]; tCtl = c.u + (v.cwrap ? l.C : 0); }
+          const target = Math.min(tStop, tCtl);
           const p = Lines.posOf(l, v);
-          const spd = this.vehSpeed(l, v, p.seg);
+          const spd = this.vehSpeed(l, v, p);
           v.spd = spd;
-          const remain = target - v.u;
-          const need = remain / spd;
-          if (need <= t) {
-            v.u = target; t -= Math.max(0, need);
-            if (v.wrap) { v.u -= l.C; v.wrap = false; if (v.u < 0) v.u = 0; }
-            this.atStop(l, v, evt);
-            v.ev++;
-            if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
-          } else { v.u += spd * t; t = 0; }
+          const need = (target - v.u) / spd;
+          if (need > t) { v.u += spd * t; t = 0; break; }
+          v.u = target; t -= Math.max(0, need);
+          if (tCtl <= tStop) {
+            // feu, stop ou cédez-le-passage
+            v.ci++;
+            if (v.ci >= ctl.length) { v.ci = 0; v.cwrap = true; }
+            const w = this.ctlWait(l, c, tNow + (dt - t));
+            if (w > 0) { v.dwell = w; v.hold = c.t; }
+            continue;
+          }
+          if (v.wrap) { v.u -= l.C; v.wrap = false; v.cwrap = false; if (v.u < 0) v.u = 0; }
+          this.atStop(l, v, evt);
+          v.hold = null;
+          v.ev++;
+          if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
         }
       }
     }
@@ -1788,6 +2222,8 @@ const Save = {
       status: l.status, buildEnd: l.buildEnd, rep: l.rep, created: l.created, hist: l.hist, today: l.today,
       veh: l.veh.map((v) => v.model),
       path: { pts: l.path.pts.map((p) => [r6(p[0]), r6(p[1])]), pairs: l.path.pairs, stopPt: l.path.stopPt },
+      pathB: l.pathB ? { pts: l.pathB.pts.map((p) => [r6(p[0]), r6(p[1])]), pairs: l.pathB.pairs, stopPt: l.pathB.stopPt } : null,
+      routedV2: !!l.routedV2,
       od: Array.from(l.od, (x) => Math.round(x * 100) / 100),
     }));
     const owned = [...G.w.zones.values()].filter((z) => z.owned).map((z) => z.code);
@@ -1820,7 +2256,7 @@ const Save = {
   hydrate(data) {
     const s = data;
     s.lines = s.lines.map((l) => {
-      const line = { ...l, path: { pts: l.path.pts, pairs: l.path.pairs, stopPt: l.path.stopPt }, od: Float64Array.from(l.od || []), veh: [] };
+      const line = { ...l, path: { pts: l.path.pts, pairs: l.path.pairs, stopPt: l.path.stopPt }, pathB: l.pathB ? { pts: l.pathB.pts, pairs: l.pathB.pairs, stopPt: l.pathB.stopPt } : null, od: Float64Array.from(l.od || []), veh: [] };
       line.veh = l.veh.map((m) => ({ id: s.nextId++, model: m, u: 0, ev: 0, dwell: 0, on: null, load: 0, hidden: true }));
       if (!line.today) line.today = Lines.blankStats();
       return line;
@@ -1981,13 +2417,16 @@ const Render = {
     for (const l of order) {
       if (!l.bbox) this.lineBox(l);
       if (!inView(l.bbox)) continue;
-      const P = l.path.pts;
       ctx.beginPath();
-      let lx = -1e9, ly = -1e9;
-      P.forEach((p, i) => {
-        const x = X(p[0]), y = Y(p[1]);
-        if (i === 0) { ctx.moveTo(x, y); lx = x; ly = y; } else if (Math.abs(x - lx) + Math.abs(y - ly) > 0.8 || i === P.length - 1) { ctx.lineTo(x, y); lx = x; ly = y; }
-      });
+      for (const PP of [l.path, l.pathB]) {
+        if (!PP) continue;
+        const P = PP.pts;
+        let lx = -1e9, ly = -1e9;
+        P.forEach((p, i) => {
+          const x = X(p[0]), y = Y(p[1]);
+          if (i === 0) { ctx.moveTo(x, y); lx = x; ly = y; } else if (Math.abs(x - lx) + Math.abs(y - ly) > 0.8 || i === P.length - 1) { ctx.lineTo(x, y); lx = x; ly = y; }
+        });
+      }
       if (l.loop) ctx.closePath();
       const lw = ({ metro: 6, ter: 5, bus: 4, boat: 4 }[l.mode]) * zf;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -2020,6 +2459,12 @@ const Render = {
         } else {
           ctx.beginPath(); ctx.arc(x, y, (l.mode === 'bus' ? 4 : 5) * zf, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
           ctx.lineWidth = 2; ctx.strokeStyle = l.mode === 'boat' ? '#1E88E5' : l.color; ctx.stroke();
+          // arrêt du sens retour, de l'autre côté de la rue
+          if (st.bmx !== undefined && dist(st.bmx, st.bmy, st.mx, st.my) > 15) {
+            const bx = X(st.bmx), by = Y(st.bmy);
+            ctx.beginPath(); ctx.arc(bx, by, 3.2 * zf, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            ctx.lineWidth = 1.6; ctx.strokeStyle = l.color; ctx.stroke();
+          }
         }
         if (showNames) labels.push({ x, y, t: st.name, pri: l.mode === 'metro' || l.mode === 'ter' ? 0 : 1 });
       });
@@ -2054,7 +2499,7 @@ const Render = {
 
   lineBox(l) {
     let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-    for (const p of l.path.pts) { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1]; }
+    for (const p of l.pathB ? l.path.pts.concat(l.pathB.pts) : l.path.pts) { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1]; }
     l.bbox = { minx, miny, maxx, maxy };
   },
 
@@ -2066,6 +2511,30 @@ const Render = {
     ctx.clearRect(0, 0, W, H);
     const X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
     const zf = z >= 17 ? 1.6 : z >= 15.5 ? 1.25 : z >= 13 ? 1 : 0.8;
+    /* feux tricolores, stops, cédez-le-passage */
+    if (z >= 16 && G.w.signals.length) {
+      const tSec = s.sec;
+      const ref = { signal: false };
+      const r = z >= 17.5 ? 4 : 3;
+      for (const sg of G.w.signals) {
+        const x = X(sg.mx), y = Y(sg.my);
+        if (x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
+        if (sg.t === 'sig') {
+          const green = Sim.ctlWait(ref, { t: 'sig', sg }, tSec) === 0;
+          ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, 7); ctx.fillStyle = '#0B1834'; ctx.fill();
+          ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = green ? '#3DDC84' : '#F0483E'; ctx.fill();
+        } else if (z >= 17) {
+          if (sg.t === 'stop') {
+            ctx.beginPath();
+            for (let k = 0; k < 8; k++) { const a = Math.PI / 8 + k * Math.PI / 4; ctx.lineTo(x + 5 * Math.cos(a), y + 5 * Math.sin(a)); }
+            ctx.closePath(); ctx.fillStyle = '#E3051C'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+          } else {
+            ctx.beginPath(); ctx.moveTo(x - 5, y - 4); ctx.lineTo(x + 5, y - 4); ctx.lineTo(x, y + 5); ctx.closePath();
+            ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = 1.6; ctx.strokeStyle = '#E3051C'; ctx.stroke();
+          }
+        }
+      }
+    }
     this.vpos = [];
     for (const l of s.lines) {
       if (!l.active) continue;
@@ -2310,7 +2779,7 @@ const UI = {
       <div class="kv"><span>À bord</span><b>${fmtInt(v.load)} / ${md.cap} · ${fmtPct(f)}</b></div>
       <div class="kv"><span>Prochain arrêt</span><b>${esc(next)}</b></div>
       <div class="kv"><span>Direction</span><b>${esc(dir)}</b></div>
-      <div class="kv"><span>Vitesse</span><b>${v.dwell > 0 ? 'à quai' : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
+      <div class="kv"><span>Vitesse</span><b>${v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
       <div class="row2"><button class="btn sm ${G.ui.follow === v ? 'on' : ''}" data-act="follow">${icon('follow')} ${G.ui.follow === v ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="openLine" data-arg="${l.id}">Voir la ligne</button></div>`);
   },
   showStop(l, k) {
@@ -2438,6 +2907,7 @@ const SHEETS = {
       ${statLine('Vitesse commerciale', Math.round(l.speedAvg || 0) + ' km/h')}
       ${statLine('Capacité totale', fmtInt(cap) + ' places')}
       ${statLine('Population desservie', fmtInt(l.catchPop || 0))}
+      ${l.mode === 'bus' ? statLine('Feux · stops · cédez-le-passage', ['sig', 'stop', 'yield'].map((t) => (l.ctl || []).filter((c) => c.t === t).length).join(' · ')) : ''}
       ${y ? statLine('Hier', fmtInt(y.pax) + ' voy. · ' + fmtEur(y.fares + y.ads - y.ops)) : ''}
       ${section('Véhicules')}${vrows}
       <details class="cat"><summary>${icon('plus')} Acheter un véhicule</summary>${cat}</details>
@@ -2451,6 +2921,7 @@ const SHEETS = {
         <div class="vrow"><div><b>Priorité aux feux</b><small>+10 % de vitesse</small></div>${l.signal ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="signal" data-arg="${l.id}">${fmtEur(sigCost)}</button>`}</div>` : ''}
       ${section('Couleur')}<div class="swatches">${swatches}</div>
       ${section('Actions')}
+      ${l.mode !== 'metro' ? `<button class="btn wide" data-act="reroute" data-arg="${l.id}">${icon('undo')} Recalculer l’itinéraire (sens de circulation)</button>` : ''}
       <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
     return { title: `${badgeFull(l)}<span>${esc(l.name)}</span>`, html };
   },
@@ -2561,7 +3032,7 @@ const SHEETS = {
       ${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
-      ${section('Données')}<p class="sub">Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes, voies ferrées, fleuves et lieux : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
+      ${section('Données')}<p class="sub">Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
     };
   },
 };
@@ -2657,9 +3128,20 @@ const Build = {
     } else if (mode === 'bus') {
       const ex = this.allStops('bus').find((s) => dist(s.mx, s.my, mx, my) < 35);
       const net = w.road;
-      const i = ex && ex.nid != null && net.idx.has(ex.nid) ? net.idx.get(ex.nid) : net.nearest(mx, my, 180, (n) => net.adj[n].some((e) => net.cls[e] > 0));
-      if (i < 0) { UI.toast('Aucune rue à proximité : touchez plus près d’une route.', 'warn'); return; }
-      st = { mx: net.x[i], my: net.y[i], node: i, nid: net.ids[i], name: ex ? ex.name : null, shared: !!ex };
+      const cands = ex && ex.nid != null && net.idx.has(ex.nid) ? [net.idx.get(ex.nid)] : net.nearestList(mx, my, 180, (n) => net.busNode(n), 8);
+      if (!cands.length) { UI.toast('Aucune rue à proximité : touchez plus près d’une route.', 'warn'); return; }
+      const last0 = b.stops[b.stops.length - 1];
+      let i = cands[0], pre = null;
+      if (last0) {
+        // premier point de la rue réellement atteignable dans le bon sens de circulation
+        i = -1;
+        for (const c of cands) {
+          const sg = Lines.segNodes(net, last0.node, c);
+          if (Lines.okRoute(sg, net, last0.node, c)) { i = c; pre = sg; break; }
+        }
+        if (i < 0) { UI.toast('Aucun itinéraire respectant les sens de circulation jusqu’ici. Essayez une autre rue.', 'warn'); return; }
+      }
+      st = { mx: net.x[i], my: net.y[i], node: i, nid: net.ids[i], name: ex ? ex.name : null, shared: !!ex, pre };
     } else if (mode === 'ter') {
       const gares = w.pois.filter((p) => p.kind === 'station' && p.train && dist(p.mx, p.my, mx, my) < 700).sort((a, b) => dist(a.mx, a.my, mx, my) - dist(b.mx, b.my, mx, my));
       if (!gares.length) { UI.toast('Pas de gare ici. Touchez près d’une gare existante.', 'warn'); return; }
@@ -2680,7 +3162,8 @@ const Build = {
     if (!st.name) st.name = this.stopName(st.mx, st.my, mode);
     else { const used = new Set(b.stops.map((s) => s.name)); let n = st.name, k = 2; while (used.has(n)) n = st.name + ' ' + k++; st.name = n; }
     if (last) {
-      const sg = Lines.segment(mode, last, st);
+      const sg = st.pre || Lines.segment(mode, last, st);
+      delete st.pre;
       if (!sg) { UI.toast(mode === 'bus' ? 'Pas d’itinéraire routier entre ces deux arrêts.' : 'Pas de liaison continue entre ces deux points.', 'warn'); return; }
       if (sg.pts.length < 2) sg.pts.push([st.mx, st.my]);
       b.segs.push(sg);
@@ -2709,6 +3192,15 @@ const Build = {
   confirm() {
     const b = this.b; if (!b || b.stops.length < 2) return;
     const path = Lines.assemble(b.stops, b.segs, b.loop);
+    b.pathB = null;
+    if (b.mode === 'bus' && !b.loop) {
+      const bk = Lines.buildBack('bus', b.stops);
+      if (!bk) { UI.toast('Impossible de trouver un trajet retour respectant les sens de circulation.', 'warn'); return; }
+      const net = G.w.road;
+      b.pathB = bk.path;
+      b.stops.forEach((st, k) => { const n = bk.back[k]; st.bmx = net.x[n]; st.bmy = net.y[n]; st.bnid = net.ids[n]; });
+      if (bk.forced) UI.toast('Attention : une partie du retour emprunte un sens interdit faute d’alternative.', 'warn');
+    }
     const infra = Lines.costOf(b.mode, b.stops, path);
     const cat = CATALOG[b.mode];
     G.ui.bSel = { model: cat[b.mode === 'bus' ? 1 : 0].id, count: b.mode === 'bus' ? 3 : 2, color: b.color, path, infra };
@@ -2799,6 +3291,12 @@ const ACT = {
     const l = findLine(id); if (!l || l.signal) return;
     const cost = Math.round(l.stops.length * 25000 * G.s.costMul / 1000) * 1000;
     if (Eco.spend(cost, 'capex')) { l.signal = true; Sim.lineQuality(l); UI.toast('Priorité aux feux activée.', 'ok'); }
+    UI.refreshSheet();
+  },
+  reroute(id) {
+    const l = findLine(id); if (!l) return;
+    if (Lines.reroute(l)) { Render.lineBox(l); Render.dirty = true; Sim.lineQuality(l); UI.toast('Itinéraire recalculé.', 'ok'); }
+    else UI.toast('Recalcul impossible : réseau pas encore chargé autour de tous les arrêts.', 'warn');
     UI.refreshSheet();
   },
   lineColor(arg) { const [id, c] = arg.split('|'); const l = findLine(id); if (l) { l.color = c; Render.dirty = true; UI.refreshSheet(); } },
@@ -2894,7 +3392,7 @@ const StartScreen = {
           <button class="btn ${lm ? '' : 'primary'} big" data-act="stNew">Nouvelle partie</button>
           ${slots.some((s) => s.meta) ? '<button class="btn big" data-act="stLoad">Charger une partie</button>' : ''}
         </div>
-        <p class="credits">Photos aériennes IGN · Données © OpenStreetMap · Connexion internet requise</p>`;
+        <p class="credits">Photos et données IGN (BD TOPO) · Signalisation © OpenStreetMap · Connexion internet requise</p>`;
     } else if (view === 'new') {
       if (!this.slot || slots[this.slot - 1].meta) { const free = slots.find((s) => !s.meta); this.slot = free ? free.n : this.slot || 1; }
       box.innerHTML = `<div class="plate big">Nouvelle partie</div>

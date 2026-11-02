@@ -1959,7 +1959,7 @@ const Sim = {
       v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301,
       owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun', rail: { stations: [], tracks: [] },
       today: Eco.blankDay(), days: [], ads: { bus: 1, metro: 1, ter: 1, boat: 1 },
-      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, base: 'pale' },
+      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, lights: true, base: 'pale' },
       modalShift: 0, view: null, lastReal: Date.now(), created: Date.now(), zoneMode: 'iris',
     };
   },
@@ -2005,6 +2005,7 @@ const Sim = {
     const s = G.s, m = s.min, mod = Time.mod(m);
     for (const l of s.lines) this.lineMinute(l, m);
     if (mod % 10 === 0) {
+      UI.updateTint();
       Traffic.update();
       for (const l of s.lines) this.lineQuality(l);
     }
@@ -2698,6 +2699,157 @@ function lum(hex) {
 const inkOn = (hex) => (lum(hex) > 0.55 ? '#232323' : '#FFFFFF');
 const fillCol = (f) => (f < 0.6 ? '#2E9E5B' : f < 0.9 ? '#E08A12' : '#D9433A');
 
+/* =====================================================================
+   NUIT : obscurité, lampadaires, éclairage des stations et des véhicules
+   ===================================================================== */
+const Night = {
+  sp: null,
+  /** 0 = plein jour, 1 = nuit noire ; lever/coucher du soleil selon la saison (France) */
+  factor() {
+    const s = G.s; if (!s) return 0;
+    const m = Time.mod(s.min) / 60, d = Time.date(s.min);
+    const doy = Math.floor((d - Date.UTC(d.getUTCFullYear(), 0, 0)) / 864e5);
+    const th = 2 * Math.PI * (doy - 172) / 365;
+    const rise = 7.2 - 1.4 * Math.cos(th), set = 19.4 + 2.4 * Math.cos(th), tw = 0.75;
+    if (m < rise - tw || m > set + tw) return 1;
+    if (m > rise + tw && m < set - tw) return 0;
+    if (m <= rise + tw) return clamp((rise + tw - m) / (2 * tw), 0, 1);
+    return clamp((m - (set - tw)) / (2 * tw), 0, 1);
+  },
+  lightsOn() { return G.s.settings.lights !== false; },
+  sprite(size, stops, sx = 1, sy = 1, cx = 0.5) {
+    const c = document.createElement('canvas'); c.width = size * sx; c.height = size * sy;
+    const g = c.getContext('2d');
+    g.scale(sx, sy);
+    const gr = g.createRadialGradient(size * cx, size / 2, 0, size * cx, size / 2, size / 2);
+    for (const [o, col] of stops) gr.addColorStop(o, col);
+    g.fillStyle = gr; g.fillRect(0, 0, size, size);
+    return c;
+  },
+  init() {
+    if (this.sp) return;
+    this.sp = {
+      hole: this.sprite(64, [[0, 'rgba(0,0,0,1)'], [0.45, 'rgba(0,0,0,.7)'], [1, 'rgba(0,0,0,0)']]),
+      warm: this.sprite(64, [[0, 'rgba(255,190,110,.95)'], [0.3, 'rgba(255,160,70,.45)'], [1, 'rgba(255,140,40,0)']]),
+      led: this.sprite(64, [[0, 'rgba(255,244,220,.95)'], [0.3, 'rgba(240,230,210,.4)'], [1, 'rgba(230,220,200,0)']]),
+      beam: this.sprite(64, [[0, 'rgba(255,250,225,.9)'], [0.35, 'rgba(255,240,200,.35)'], [1, 'rgba(255,235,190,0)']], 2, 0.6, 0.05),
+      red: this.sprite(32, [[0, 'rgba(255,60,50,1)'], [0.4, 'rgba(255,40,30,.4)'], [1, 'rgba(255,30,20,0)']]),
+      green: this.sprite(32, [[0, 'rgba(70,255,120,1)'], [0.4, 'rgba(40,230,90,.4)'], [1, 'rgba(30,200,80,0)']]),
+      white: this.sprite(32, [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,255,240,.45)'], [1, 'rgba(255,255,240,0)']]),
+    };
+  },
+  /** obscurité + lampadaires + stations éclairées (calque statique, sous les lignes) */
+  draw(ctx, o, nf, W, H) {
+    this.init();
+    const z = o.z, s = G.s, w = G.w, X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
+    ctx.save();
+    ctx.fillStyle = `rgba(6,10,30,${(0.74 * nf).toFixed(3)})`;
+    ctx.fillRect(0, 0, W, H);
+    const ln = clamp((nf - 0.15) / 0.45, 0, 1);
+    if (ln > 0 && this.lightsOn()) {
+      const net = w.road;
+      const mpp = G.mpu / o.k;                       // mètres par pixel
+      const Rm = clamp(18 / mpp, 1.2, 16);           // rayon éclairé par un lampadaire (~18 m)
+      if (net.nE) {
+        const maxCls = z < 12.5 ? 1 : z < 13.5 ? 2 : z < 14.5 ? 3 : 4;
+        const nx = net.x, ny = net.y;
+        const paths = [new Path2D(), new Path2D()];  // 0 : grands axes (sodium), 1 : rues (LED)
+        const lamps = [];
+        const stepM = 32;
+        for (let e = 0; e < net.nE; e++) {
+          const c = net.cls[e]; if (c > maxCls) continue;
+          const a = net.ea[e], b = net.eb[e];
+          const x1 = X(nx[a]), y1 = Y(ny[a]), x2 = X(nx[b]), y2 = Y(ny[b]);
+          if ((x1 < -20 && x2 < -20) || (x1 > W + 20 && x2 > W + 20) || (y1 < -20 && y2 < -20) || (y1 > H + 20 && y2 > H + 20)) continue;
+          const pth = paths[c <= 1 ? 0 : 1];
+          pth.moveTo(x1, y1); pth.lineTo(x2, y2);
+          if (z >= 15 && lamps.length < 9000) {
+            const n = Math.floor(net.len[e] / stepM + (net.noise[e] - 0.7) * 1.6);
+            for (let k = 0; k < n; k++) { const t = (k + 0.5) / n; lamps.push(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, c <= 1 ? 1 : 0); }
+          }
+        }
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        // couloirs éclairés : on « perce » l'obscurité le long des rues
+        ctx.globalCompositeOperation = 'destination-out';
+        for (const [wMul, al] of [[2.6, 0.22], [1.3, 0.3]]) {
+          ctx.globalAlpha = al * ln;
+          ctx.lineWidth = Math.max(1.2, Rm * wMul);
+          ctx.stroke(paths[0]); ctx.stroke(paths[1]);
+        }
+        // teinte des éclairages : sodium orangé sur les grands axes, LED blanche ailleurs
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineWidth = Math.max(0.8, Rm * 1.1);
+        ctx.globalAlpha = 0.22 * ln; ctx.strokeStyle = '#FF9A3C'; ctx.stroke(paths[0]);
+        ctx.globalAlpha = 0.14 * ln; ctx.strokeStyle = '#FFE8C8'; ctx.stroke(paths[1]);
+        if (z < 15) { // vue d'avion : fil lumineux fin
+          ctx.lineWidth = 0.9; ctx.globalAlpha = 0.5 * ln;
+          ctx.strokeStyle = '#FFB866'; ctx.stroke(paths[0]);
+          ctx.globalAlpha = 0.3 * ln; ctx.strokeStyle = '#FFF0D8'; ctx.stroke(paths[1]);
+        }
+        // lampadaires individuels, de près
+        if (lamps.length) {
+          const r = Rm * 0.9;
+          ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.45 * ln;
+          for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(this.sp.hole, lamps[i] - r, lamps[i + 1] - r, 2 * r, 2 * r);
+          ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.35 * ln;
+          for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(lamps[i + 2] ? this.sp.warm : this.sp.led, lamps[i] - r * 0.6, lamps[i + 1] - r * 0.6, 1.2 * r, 1.2 * r);
+          ctx.globalAlpha = 0.95 * ln; ctx.fillStyle = '#FFE9C0';
+          for (let i = 0; i < lamps.length; i += 3) ctx.fillRect(lamps[i] - 0.9, lamps[i + 1] - 0.9, 1.8, 1.8);
+        }
+      }
+      // stations et arrêts éclairés
+      const SR = clamp(45 / mpp, 5, 26);
+      ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.7 * ln;
+      for (const l of s.lines) for (const st of l.stops) {
+        const x = X(st.mx), y = Y(st.my);
+        if (x > -SR && y > -SR && x < W + SR && y < H + SR) ctx.drawImage(this.sp.hole, x - SR, y - SR, 2 * SR, 2 * SR);
+      }
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.4 * ln;
+      for (const l of s.lines) for (const st of l.stops) {
+        const x = X(st.mx), y = Y(st.my);
+        if (x > -SR && y > -SR && x < W + SR && y < H + SR) ctx.drawImage(this.sp.led, x - SR * 0.7, y - SR * 0.7, 1.4 * SR, 1.4 * SR);
+      }
+    }
+    ctx.restore();
+  },
+  /** phares et feux des véhicules du joueur (calque dynamique) */
+  vehicle(ctx, l, x, y, ang, L2, W2, zf, ln) {
+    this.init();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.translate(x, y); ctx.rotate(ang || 0);
+    const sp = this.sp;
+    if (l.mode === 'bus' || l.mode === 'ter') {
+      const bl = (l.mode === 'ter' ? 95 : 44) * zf, bw = (l.mode === 'ter' ? 34 : 26) * zf;
+      // cône des phares, dans le sens de la marche
+      const g = ctx.createLinearGradient(L2, 0, L2 + bl, 0);
+      g.addColorStop(0, 'rgba(255,246,215,.85)'); g.addColorStop(0.45, 'rgba(255,240,200,.32)'); g.addColorStop(1, 'rgba(255,236,190,0)');
+      ctx.globalAlpha = ln; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(L2, -W2 * 0.8); ctx.lineTo(L2 + bl, -bw / 2); ctx.lineTo(L2 + bl, bw / 2); ctx.lineTo(L2, W2 * 0.8); ctx.closePath(); ctx.fill();
+      const hl = 4.5 * zf;
+      ctx.drawImage(sp.white, L2 - hl, -W2 * 0.6 - hl, 2 * hl, 2 * hl);
+      ctx.drawImage(sp.white, L2 - hl, W2 * 0.6 - hl, 2 * hl, 2 * hl);
+      ctx.globalAlpha = 0.9 * ln;
+      const t = 5 * zf;
+      ctx.drawImage(sp.red, -L2 - t, -W2 * 0.7 - t, 2 * t, 2 * t);
+      ctx.drawImage(sp.red, -L2 - t, W2 * 0.7 - t, 2 * t, 2 * t);
+    } else if (l.mode === 'metro') {
+      ctx.globalAlpha = 0.35 * ln;
+      const h = L2 * 1.6;
+      ctx.drawImage(sp.led, -h, -h, 2 * h, 2 * h);
+    } else {
+      const t = 5.5 * zf;
+      ctx.globalAlpha = 0.95 * ln;
+      ctx.drawImage(sp.red, -t, -W2 - t, 2 * t, 2 * t);    // bâbord
+      ctx.drawImage(sp.green, -t, W2 - t, 2 * t, 2 * t);   // tribord
+      ctx.drawImage(sp.white, L2 * 0.3 - t, -t, 2 * t, 2 * t);
+      ctx.globalAlpha = 0.25 * ln;
+      ctx.drawImage(sp.led, -L2 * 2, -L2 * 2, 4 * L2, 4 * L2); // reflet sur l'eau
+    }
+    ctx.restore();
+  },
+};
+
 const Render = {
   dirty: true, last: 0, moving: false, zooming: false, o0: null,
 
@@ -2757,6 +2909,10 @@ const Render = {
     const vb = { minx: o.x / o.k - 0.05 * W / o.k, maxx: (o.x + W * 1.05) / o.k, miny: o.y / o.k - 0.05 * H / o.k, maxy: (o.y + H * 1.05) / o.k };
     const X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
     const inView = (b) => !(b.maxx < vb.minx || b.minx > vb.maxx || b.maxy < vb.miny || b.miny > vb.maxy);
+    const nf = Night.factor();
+    this.nf = nf;
+    if (nf > 0.02) Night.draw(ctx, o, nf, W, H);
+    const za = 1 - 0.7 * nf;
 
     /* zones */
     if (s.settings.zones) {
@@ -2779,7 +2935,8 @@ const Render = {
           if (z >= 12) { ctx.strokeStyle = 'rgba(35,35,35,.16)'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke(); }
           if (works.has(zn.code)) { ctx.strokeStyle = EV_COL.works; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]); }
         } else {
-          ctx.fillStyle = buyable ? 'rgba(244,242,236,.42)' : 'rgba(244,242,236,.7)';
+          const zr = Math.round(244 - 236 * nf), zg = Math.round(242 - 230 * nf), zb = Math.round(236 - 206 * nf);
+          ctx.fillStyle = `rgba(${zr},${zg},${zb},${((buyable ? 0.42 : 0.7) * (1 - 0.35 * nf)).toFixed(3)})`;
           ctx.fill('evenodd');
           if (buyable) {
             ctx.strokeStyle = 'rgba(35,35,35,.45)'; ctx.lineWidth = 1.3; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
@@ -2823,7 +2980,7 @@ const Render = {
         for (let i = 0; i < arr.length; i += 4) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i + 2], arr[i + 3]); }
         ctx.lineWidth = baseW[c] * zf;
         ctx.strokeStyle = bk === 4 ? 'rgba(35,35,35,.16)' : TR_COL[bk];
-        ctx.globalAlpha = bk === 4 ? 1 : 0.85;
+        ctx.globalAlpha = (bk === 4 ? 1 : 0.85) * (1 - 0.55 * (this.nf || 0));
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -3025,6 +3182,8 @@ const Render = {
         this.vpos.push({ x, y, l, v });
         const dims = { bus: [13, 7], metro: [19, 8.5], ter: [22, 8.5], boat: [15, 8.5] }[l.mode];
         const L2 = dims[0] * zf / 2, W2 = dims[1] * zf / 2;
+        const nl = this.nf > 0.15 && Night.lightsOn() ? clamp((this.nf - 0.15) / 0.45, 0, 1) : 0;
+        if (nl > 0) Night.vehicle(ctx, l, x, y, p.ang, L2, W2, zf, nl);
         ctx.save(); ctx.translate(x, y); ctx.rotate(p.ang || 0);
         this.rr(ctx, -L2, -W2, 2 * L2, 2 * W2, l.mode === 'boat' ? W2 : Math.min(3, W2));
         ctx.fillStyle = l.color; ctx.fill();
@@ -3229,13 +3388,12 @@ const UI = {
   },
   updateTint() {
     if (!G.map || !G.s) return;
-    const m = Time.mod(G.s.min) / 60;
-    let b = 1;
-    if (m < 5 || m >= 22) b = 0.5; else if (m < 7) b = 0.5 + 0.5 * (m - 5) / 2; else if (m >= 20) b = 1 - 0.5 * (m - 20) / 2;
+    const nf = Night.factor();
     const p = G.map.getPane('tilePane');
     if (!p) return;
-    if (G.s.settings.base === 'pale') p.style.filter = `grayscale(1) sepia(.18) contrast(.62) brightness(${(1.28 * (0.62 + 0.38 * b)).toFixed(2)})`;
-    else p.style.filter = `brightness(${b.toFixed(2)}) saturate(${(0.75 + 0.25 * b).toFixed(2)})`;
+    if (G.s.settings.base === 'pale') p.style.filter = `grayscale(1) sepia(.18) contrast(.62) brightness(${(1.28 * (1 - 0.45 * nf)).toFixed(2)})`;
+    else p.style.filter = `brightness(${(1 - 0.4 * nf).toFixed(2)}) saturate(${(1 - 0.35 * nf).toFixed(2)})`;
+    if (Math.abs(nf - (this.lastNf ?? -1)) > 0.01) { this.lastNf = nf; Render.dirty = true; }
   },
 
   /* ---- notifications ---- */
@@ -3609,7 +3767,7 @@ const SHEETS = {
       html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
       ${section('Affichage')}
       <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
-      ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
+      ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
       ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
@@ -3828,7 +3986,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -4180,6 +4338,7 @@ const Game = {
     else G.map.setView([G.s.city.lat, G.s.city.lon], 14.5, { animate: false });
     if (!G.s.rail) G.s.rail = { stations: [], tracks: [] };
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
+    if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     Rail.inject();
     for (const l of G.s.lines) { Lines.prepare(l); Render.lineBox(l); }
     G.ready = true;

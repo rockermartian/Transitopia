@@ -177,6 +177,15 @@ small{font-size:12.5px;color:var(--muted)}
 .bb-t{display:flex;align-items:center;gap:8px;min-width:0}
 .bb-t b{font:600 16px/1.1 var(--f-display);display:block}
 .bb-a{display:flex;align-items:center;gap:2px;flex:none}
+#buildbar.edit{flex-wrap:wrap;border-radius:24px;padding:8px 8px 8px 12px}
+.bb-tools{flex-basis:100%;margin-bottom:2px}
+#plan{position:absolute;inset:0;z-index:1100;background:var(--paper);display:flex;flex-direction:column;padding-top:var(--sat)}
+#plan[hidden]{display:none}
+.plan-h{display:flex;align-items:center;gap:8px;padding:8px 12px 6px max(10px,var(--sal))}
+.plan-h b{flex:1;font:600 19px/1.1 var(--f-display)}
+.plan-f{margin:0 12px 6px}
+.plan-c{flex:1;min-height:0;position:relative;padding-bottom:var(--sab)}
+.plan-c canvas{display:block}
 
 #modal{position:fixed;inset:0;z-index:1200;background:rgba(35,35,35,.35);display:flex;align-items:flex-end;justify-content:center;padding:calc(20px + var(--sat)) 0 0}
 .modal-box{width:100%;max-width:520px;max-height:100%;overflow:auto;background:var(--panel);border-radius:24px 24px 0 0;padding:18px max(18px,var(--sar)) calc(18px + var(--sab)) max(18px,var(--sal));animation:up .22s ease-out}
@@ -1144,6 +1153,75 @@ const POI_LABEL = {
   stadium: 'Stade', bus_station: 'Gare routière', business: 'Zone d’activités', other: 'Équipement',
 };
 
+/* ---------- population réelle : recensement INSEE par IRIS (fichiers par département livrés avec l'appli) ---------- */
+const PopData = {
+  mem: new Map(), pending: new Map(), failed: new Set(),
+  dep(insee) { return !insee ? null : insee.startsWith('97') ? insee.slice(0, 3) : insee.slice(0, 2); },
+  async get(dep) {
+    if (this.mem.has(dep)) return this.mem.get(dep);
+    if (this.failed.has(dep)) return null;
+    if (this.pending.has(dep)) return this.pending.get(dep);
+    const pr = (async () => {
+      let d = await Cache.get('ipop:' + dep);
+      if (!d) {
+        // dossier pop/ ou, à défaut, fichiers déposés à la racine du site
+        for (const u of ['pop/' + dep + '.json', dep + '.json']) {
+          try { d = await fetchJSON(u, {}, 30000); if (d && typeof d === 'object') break; d = null; } catch (e) { d = null; }
+        }
+        if (!d) { this.failed.add(dep); return null; }
+        await Cache.set('ipop:' + dep, d);
+      }
+      this.mem.set(dep, d);
+      return d;
+    })();
+    this.pending.set(dep, pr);
+    const r = await pr; this.pending.delete(dep);
+    return r;
+  },
+  /** habitants d'une zone : IRIS exact, sinon somme des IRIS de la commune */
+  lookup(d, z) {
+    if (z.code && d[z.code] !== undefined && !String(z.code).startsWith('C')) return d[z.code];
+    if (!z.insee) return undefined;
+    if (d[z.insee + '0000'] !== undefined) return d[z.insee + '0000'];
+    let sum = 0, found = false;
+    for (const k in d) if (k.startsWith(z.insee)) { sum += d[k]; found = true; }
+    return found ? sum : undefined;
+  },
+  /** remplace les estimations par les chiffres du recensement */
+  async apply() {
+    const w = G.w; if (!w) return 0;
+    const deps = new Set();
+    for (const z of w.zones.values()) if (!z.popReal && !z.popTried && z.insee) deps.add(this.dep(z.insee));
+    let n = 0;
+    for (const dep of deps) {
+      const d = await this.get(dep);
+      for (const z of w.zones.values()) {
+        if (z.popReal || z.popTried || this.dep(z.insee) !== dep) continue;
+        z.popTried = true;
+        if (!d) continue;
+        // découpage IRIS récent absent du recensement 2019 : on garde l'estimation
+        if (z.code && !String(z.code).startsWith('C') && z.type !== 'Z' && d[z.code] === undefined) continue;
+        const p = this.lookup(d, z);
+        if (p === undefined) continue;
+        z.pop = Math.max(0, p); z.popReal = 'INSEE 2019';
+        if (z.type === 'H') z.jobs = Math.max(z.jobs * 0.3, z.pop * 0.35);
+        else if (z.type === 'Z') z.jobs = z.pop * 0.4;
+        w.reprice(z); n++;
+      }
+    }
+    if (n) {
+      w.attachDensity(true);
+      if (G.s && G.ready) {
+        for (const l of G.s.lines) if (l.stopAt) Lines.computeOD(l);
+        Transfers.rebuild();
+        for (const l of G.s.lines) Sim.lineQuality(l);
+      }
+      Render.dirty = true;
+    }
+    return n;
+  },
+};
+
 /* ---------- gestionnaire de chargement ---------- */
 const Loader = {
   busy: 0,
@@ -1190,8 +1268,9 @@ const Loader = {
       // populations communales pour les communes non découpées
       for (const z of w.zones.values()) if (z.type === 'Z' && !z.popFetched && w.mode === 'iris') {
         z.popFetched = true;
-        API.communePop(z.insee).then((p) => { if (p) { z.pop = p; z.jobs = p * 0.4; w.reprice(z); Render.dirty = true; } });
+        API.communePop(z.insee).then((p) => { if (p) { z.pop = p; z.jobs = p * 0.4; z.popReal = 'INSEE (commune)'; z.popTried = true; w.reprice(z); Render.dirty = true; } });
       }
+      PopData.apply().catch((e) => console.warn('population', e));
       w.attachDensity(true);
       w.version++;
       Render.dirty = true;
@@ -1357,6 +1436,21 @@ const ADS = {
   label: ['Aucune', 'Discrète', 'Intensive'],
 };
 const MAINT = { busStop: 10, metroKm: 600, metroStation: 250, terKm: 25, terStation: 120, boatStop: 40 };
+/** grille horaire : part de la flotte en service selon la période */
+const SERVICE_KEYS = [
+  ['peak', 'Heures de pointe', 'lun.–ven. 7 h–9 h 30 et 16 h 30–19 h 30'],
+  ['off', 'Heures creuses', 'lun.–ven. en journée'],
+  ['evening', 'Soirée', 'lun.–ven. 20 h–22 h'],
+  ['sat', 'Samedi', 'toute la journée'],
+  ['sun', 'Dimanche et fériés', 'toute la journée'],
+  ['night', 'Nuit', '22 h–5 h, avec le service de nuit'],
+];
+const SERVICE_PRESETS = {
+  uniforme: { label: 'Uniforme', v: { peak: 1, off: 1, evening: 1, sat: 1, sun: 1, night: 1 } },
+  equilibre: { label: 'Équilibrée', v: { peak: 1, off: 0.75, evening: 0.5, sat: 0.75, sun: 0.5, night: 0.34 } },
+  econome: { label: 'Économe', v: { peak: 1, off: 0.5, evening: 0.34, sat: 0.5, sun: 0.34, night: 0.25 } },
+};
+const SERVICE_STEPS = [1, 0.75, 0.5, 0.34, 0.25];
 const DIFF = {
   facile: { label: 'Facile', money: 6e6, cost: 0.8 },
   normal: { label: 'Normal', money: 3.5e6, cost: 1 },
@@ -1369,7 +1463,25 @@ const Time = {
   mod(min) { return ((min % 1440) + 1440) % 1440; },
   hour(min) { return Math.floor(this.mod(min) / 60); },
   dow(min) { return this.date(min).getUTCDay(); }, // 0 = dimanche
-  weekend(min) { const d = this.dow(min); return d === 0 || d === 6; },
+  /** jour férié en France (fêtes fixes + Pâques, Ascension, Pentecôte) */
+  holiday(min) {
+    const d = this.date(min), y = d.getUTCFullYear(), md = (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+    if ([101, 501, 508, 714, 815, 1101, 1111, 1225].includes(md)) return true;
+    let h = this._easter && this._easter.y === y ? this._easter : null;
+    if (!h) {
+      // calcul de Pâques (Meeus)
+      const a = y % 19, b = Math.floor(y / 100), c = y % 100, dd = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+      const g = Math.floor((b - f + 1) / 3), hh = (19 * a + b - dd - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+      const l = (32 + 2 * e + 2 * i - hh - k) % 7, m = Math.floor((a + 11 * hh + 22 * l) / 451);
+      const mon = Math.floor((hh + l - 7 * m + 114) / 31), day = ((hh + l - 7 * m + 114) % 31) + 1;
+      const e0 = Date.UTC(y, mon - 1, day);
+      const dates = [1, 39, 50].map((o) => { const x = new Date(e0 + o * 864e5); return (x.getUTCMonth() + 1) * 100 + x.getUTCDate(); });
+      h = this._easter = { y, dates };
+    }
+    return h.dates.includes(md);
+  },
+  sundayLike(min) { return this.dow(min) === 0 || this.holiday(min); },
+  weekend(min) { return this.dow(min) === 6 || this.sundayLike(min); },
   night(min) { const h = this.hour(min); return h >= 22 || h < 5; },
   period(min) { return this.night(min) ? 'night' : this.weekend(min) ? 'weekend' : 'week'; },
   month(min) { return this.date(min).getUTCMonth(); },
@@ -1528,13 +1640,13 @@ const Lines = {
       path: b.path, pathB: b.pathB || null, routedV2: true,
       prices: { week: MODES[b.mode].ref, weekend: MODES[b.mode].ref, night: MODES[b.mode].ref },
       hours: { start: 330, end: 30 }, night: false, busLane: false, signal: false,
+      svc: { ...SERVICE_PRESETS.equilibre.v }, svcPreset: 'equilibre',
       status: b.mode === 'metro' ? 'construction' : 'active',
       buildEnd: b.mode === 'metro' ? s.min + (b.path.L > 4000 ? 2 : 1) * 1440 : 0,
       rep: 1, created: s.min, veh: [], od: null,
       today: Lines.blankStats(), hist: [],
     };
-    line.name = line.stops[0].name + ' ⇄ ' + (line.loop ? line.stops[Math.floor(line.stops.length / 2)].name : line.stops[line.stops.length - 1].name);
-    if (line.loop) line.name = 'Circulaire ' + line.stops[0].name;
+    this.autoName(line);
     s.lines.push(line);
     this.prepare(line);
     for (let k = 0; k < opts.count; k++) this.addVehicle(line, opts.model, true);
@@ -1542,7 +1654,12 @@ const Lines = {
     return line;
   },
 
-  blankStats() { return { pax: 0, fares: 0, ops: 0, ads: 0, mec: 0, loadSum: 0, loadN: 0, loadMax: 0 }; },
+  autoName(line) {
+    const st = line.stops;
+    line.name = line.loop ? 'Circulaire ' + st[0].name : st[0].name + ' ⇄ ' + st[st.length - 1].name;
+  },
+  blankStats() { return { pax: 0, fares: 0, ops: 0, ads: 0, mec: 0, loadSum: 0, loadN: 0, loadMax: 0, xin: 0, xout: 0 }; },
+  pv: 0,
 
   /** Prépare les structures de simulation d'une ligne (après création ou chargement) */
   prepare(line) {
@@ -1564,13 +1681,19 @@ const Lines = {
     line.bbox = null;
     line.Wf = new Float64Array(n * n);
     line.Wb = new Float64Array(n * n);
+    // correspondances : Xf/Xb voyageurs qui changeront de ligne à l'arrivée, Rf/Rb voyageurs arrivés d'une autre ligne (billet déjà payé)
+    line.Xf = new Float64Array(n * n); line.Xb = new Float64Array(n * n);
+    line.Rf = new Float64Array(n * n); line.Rb = new Float64Array(n * n);
+    line.xgen = []; line.xcont = Array.from({ length: n }, () => []);
+    line.pv = ++this.pv;
+    if (!line.svc) { line.svc = { ...SERVICE_PRESETS.uniforme.v }; line.svcPreset = 'uniforme'; }
     line.segE = null;
     this.resolveEdges(line);
     if (!line.od || line.od.length !== n * n) this.computeOD(line);
     line.qual = 1; line.headway = 10; line.speedAvg = MODES[line.mode].refKmh;
     line.evMul = new Float64Array(n).fill(1);
     line.active = false;
-    for (const v of line.veh) { v.on = new Float64Array(n); v.load = 0; }
+    for (const v of line.veh) { v.on = new Float64Array(n); v.ont = new Float64Array(n); v.load = 0; }
     this.controls(line);
   },
 
@@ -1643,7 +1766,8 @@ const Lines = {
     const od = line.od;
     this.prepare(line);
     if (od && od.length === line.stops.length ** 2) line.od = od;
-    if (line.active) { this.placeVehicles(line); for (const v of line.veh) v.hidden = false; }
+    if (line.active) this.activate(line, G.s.min);
+    Transfers.rebuild();
     return true;
   },
 
@@ -1694,17 +1818,83 @@ const Lines = {
     const od = new Float64Array(n * n);
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       if (i === j) continue;
-      let d = Math.abs(line.stopAt[j] - line.stopAt[i]) / 1000;
-      if (line.loop) d = Math.min(d, line.path.L / 1000 - d);
-      let g;
-      if (line.mode === 'bus') g = (1 - Math.exp(-d / 0.8)) * Math.exp(-d / 12);
-      else if (line.mode === 'metro') g = (1 - Math.exp(-d / 1.0)) * Math.exp(-d / 25);
-      else if (line.mode === 'ter') g = (1 - Math.exp(-d / 4)) * Math.exp(-d / 150);
-      else g = (1 - Math.exp(-d / 1)) * Math.exp(-d / 15);
-      od[i * n + j] = mode.K * Math.sqrt(P[i] * A[j]) * g;
+      od[i * n + j] = mode.K * Math.sqrt(P[i] * A[j]) * this.gravity(line.mode, this.stopDist(line, i, j));
     }
     line.od = od;
+    line.Pw = P; line.Aw = A;
     line.catchPop = P.reduce((a, b) => a + b, 0);
+  },
+
+  /** distance parcourue (km) entre deux arrêts d'une ligne */
+  stopDist(line, i, j) {
+    let d = Math.abs(line.stopAt[j] - line.stopAt[i]) / 1000;
+    if (line.loop) d = Math.min(d, line.path.L / 1000 - d);
+    return d;
+  },
+  /** attractivité selon la distance (peu de trajets très courts, décroissance pour les longs) */
+  gravity(mode, d) {
+    if (mode === 'bus') return (1 - Math.exp(-d / 0.8)) * Math.exp(-d / 12);
+    if (mode === 'metro') return (1 - Math.exp(-d / 1.0)) * Math.exp(-d / 25);
+    if (mode === 'ter') return (1 - Math.exp(-d / 4)) * Math.exp(-d / 150);
+    return (1 - Math.exp(-d / 1)) * Math.exp(-d / 15);
+  },
+
+  /* ---- grille horaire ---- */
+  serviceKey(min) {
+    if (Time.night(min)) return 'night';
+    if (Time.sundayLike(min)) return 'sun';
+    if (Time.dow(min) === 6) return 'sat';
+    const m = Time.mod(min);
+    if ((m >= 420 && m < 570) || (m >= 990 && m < 1170)) return 'peak';
+    if (m >= 1200) return 'evening';
+    return 'off';
+  },
+  targetActive(line, min) {
+    const n = line.veh.length; if (!n) return 0;
+    const f = line.svc ? (line.svc[this.serviceKey(min)] ?? 1) : 1;
+    return clamp(Math.round(n * f), 1, n);
+  },
+  running(line) { return line.veh.filter((v) => !v.parked).length; },
+  /** mise en service de la ligne : la bonne part de la flotte, répartie sur le parcours */
+  activate(line, min) {
+    const want = this.targetActive(line, min);
+    line.veh.forEach((v, k) => { v.parked = k >= want; v.toPark = false; });
+    this.placeVehicles(line);
+  },
+  /** ajuste la flotte en service : sorties au dépôt (au terminus) ou entrées depuis le terminus de départ */
+  adjustFleet(line, min) {
+    const want = this.targetActive(line, min);
+    const run = line.veh.filter((v) => !v.parked);
+    let extra = run.length - want;
+    if (extra > 0) {
+      for (const v of run) if (v.toPark) extra--;
+      for (let k = run.length - 1; k >= 0 && extra > 0; k--) if (!run[k].toPark) { run[k].toPark = true; extra--; }
+      return;
+    }
+    let need = want - run.length;
+    for (const v of run) if (need > 0 && v.toPark) { v.toPark = false; need--; }
+    if (need <= 0) return;
+    // un seul véhicule entre en ligne à la fois, quand le départ est dégagé
+    const ph = PHYS[line.mode], C = line.C;
+    const clear = run.every((o) => Math.min(o.u, C - o.u) > Math.max(ph.safe * 2, 80));
+    if (!clear) return;
+    const v = line.veh.find((x) => x.parked); if (!v) return;
+    v.parked = false; v.toPark = false; v.hidden = false;
+    v.u = 0; v.ev = 0; v.wrap = false; v.dwell = 0; v.v = 0; v.hold = null; v.cdec = -1; v.load = 0;
+    if (v.on) v.on.fill(0); if (v.ont) v.ont.fill(0);
+    this.ctlPointer(line, v);
+  },
+
+  /* ---- modification d'une ligne existante ---- */
+  applyEdit(line, stops, path, pathB) {
+    line.stops = stops.map((st) => ({ mx: st.mx, my: st.my, name: st.name, nid: st.nid ?? null, shared: !!st.shared, bmx: st.bmx, bmy: st.bmy, bnid: st.bnid ?? null }));
+    line.path = path; line.pathB = pathB || null; line.routedV2 = true;
+    line.od = null;
+    this.autoName(line);
+    this.prepare(line);
+    line.active = this.isActiveAt(line, G.s.min);
+    if (line.active) this.activate(line, G.s.min);
+    else for (const v of line.veh) v.hidden = true;
   },
 
   addVehicle(line, modelId, free) {
@@ -1713,23 +1903,29 @@ const Lines = {
       const price = Math.round(md.price * G.s.costMul);
       if (!Eco.spend(price, 'capex')) return false;
     }
-    const v = { id: G.s.nextId++, model: modelId, u: 0, ev: 0, dwell: 0, on: new Float64Array(line.stops.length), load: 0, hidden: true };
+    const v = { id: G.s.nextId++, model: modelId, u: 0, ev: 0, dwell: 0, on: new Float64Array(line.stops.length), ont: new Float64Array(line.stops.length), load: 0, hidden: true, parked: true };
     line.veh.push(v);
-    if (line.active) this.placeVehicles(line);
+    // le nouveau véhicule entre en ligne depuis le terminus (pas de téléportation des autres)
+    if (line.active) this.adjustFleet(line, G.s.min);
     return true;
   },
   sellVehicle(line, modelId) {
-    const i = line.veh.map((v) => v.model).lastIndexOf(modelId);
+    // de préférence un véhicule au dépôt
+    let i = line.veh.findIndex((v) => v.model === modelId && v.parked);
+    if (i < 0) i = line.veh.map((v) => v.model).lastIndexOf(modelId);
     if (i < 0) return;
     const v = line.veh[i];
     line.veh.splice(i, 1);
     Eco.earn(Math.round(MODEL[modelId].price * G.s.costMul * 0.6), 'sales');
     if (G.ui && G.ui.follow === v) G.ui.follow = null;
-    this.placeVehicles(line);
   },
   placeVehicles(line) {
-    const n = line.veh.length;
-    line.veh.forEach((v, k) => {
+    const runV = line.veh.filter((v) => !v.parked);
+    for (const v of line.veh) if (v.parked) { v.hidden = true; v.load = 0; if (v.on) v.on.fill(0); if (v.ont) v.ont.fill(0); }
+    const n = runV.length;
+    runV.forEach((v, k) => {
+      v.hidden = !line.active; v.toPark = false;
+      if (v.ont) v.ont.fill(0);
       v.u = (line.C * k) / Math.max(1, n);
       v.ev = 0; v.wrap = false;
       while (v.ev < line.ev.length && line.ev[v.ev].u < v.u - 1e-6) v.ev++;
@@ -1764,7 +1960,7 @@ const Lines = {
       const a = P.pts[p[2]], b = P.pts[Math.min(P.pts.length - 1, p[2] + 1)];
       ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
     }
-    return { mx: p[0], my: p[1], seg: p[2], dir, ang };
+    return { mx: p[0], my: p[1], seg: p[2], t: p[3], dir, ang };
   },
   /** limitation de vitesse au point où se trouve le véhicule (km/h) */
   limitAt(line, v) {
@@ -1789,6 +1985,93 @@ const Lines = {
     return en > st ? m >= st && m < en : m >= st || m < en;
   },
   price(line, min) { return line.prices[Time.period(min)]; },
+};
+
+/* ---------- correspondances entre lignes ---------- */
+const XFER = { walk: 250, pen: 0.45, maxHubs: 3 };
+const Transfers = {
+  hubs: [],
+  /** repère les arrêts proches entre lignes et calcule les trajets avec un changement */
+  rebuild() {
+    const s = G.s; if (!s) return;
+    const lines = s.lines;
+    for (const l of lines) { l.xgen = []; l.xcont = Array.from({ length: l.stops.length }, () => []); }
+    const hubs = [];
+    for (let a = 0; a < lines.length; a++) for (let b = a + 1; b < lines.length; b++) {
+      const A = lines[a], B = lines[b];
+      const cand = [];
+      A.stops.forEach((sa, ka) => B.stops.forEach((sb, kb) => {
+        const d = dist(sa.mx, sa.my, sb.mx, sb.my);
+        if (d <= XFER.walk) cand.push({ ka, kb, walk: d });
+      }));
+      if (!cand.length) continue;
+      cand.sort((x, y) => x.walk - y.walk);
+      const used = [];
+      for (const c of cand) {
+        if (used.some((u) => u.ka === c.ka || u.kb === c.kb || Math.abs(u.ka - c.ka) < 2)) continue;
+        used.push(c); if (used.length >= XFER.maxHubs) break;
+      }
+      for (const c of used) hubs.push({ A, ka: c.ka, B, kb: c.kb, walk: c.walk });
+      this.flows(A, B, used);
+      this.flows(B, A, used.map((c) => ({ ka: c.kb, kb: c.ka, walk: c.walk })));
+    }
+    this.hubs = hubs;
+  },
+  flows(A, B, hubs) {
+    if (!A.Pw || !B.Aw || !A.stopAt || !B.stopAt) return;
+    const nA = A.stops.length, nB = B.stops.length;
+    const K = Math.min(MODES[A.mode].K, MODES[B.mode].K) * XFER.pen;
+    // destinations déjà accessibles sans changer (trajet direct ou à pied)
+    const nearA = B.stops.map((sb) => A.stops.some((sa) => dist(sa.mx, sa.my, sb.mx, sb.my) < 350));
+    const nearB = A.stops.map((sa) => B.stops.some((sb) => dist(sa.mx, sa.my, sb.mx, sb.my) < 350));
+    const gen = new Map(), cont = new Map();
+    for (let i = 0; i < nA; i++) {
+      if (nearB[i]) continue;
+      for (let j = 0; j < nB; j++) {
+        if (nearA[j]) continue;
+        let best = null, bd = Infinity;
+        for (const h of hubs) {
+          if (h.ka === i || h.kb === j) continue;
+          const d = Lines.stopDist(A, i, h.ka) + Lines.stopDist(B, h.kb, j) + h.walk / 1000 * 1.5;
+          if (d < bd) { bd = d; best = h; }
+        }
+        if (!best) continue;
+        const g = Math.max(Lines.gravity(A.mode, bd), Lines.gravity(B.mode, bd));
+        const r = K * Math.sqrt(A.Pw[i] * B.Aw[j]) * g;
+        if (!(r > 1e-6)) continue;
+        const gk = i * nA + best.ka;
+        const ge = gen.get(gk); if (ge) ge.r += r; else gen.set(gk, { i, ka: best.ka, b: B, r });
+        const ck = best.ka + '|' + j;
+        const ce = cont.get(ck); if (ce) ce.w += r; else cont.set(ck, { b: B, kb: best.kb, j, w: r, ka: best.ka });
+      }
+    }
+    for (const v of gen.values()) A.xgen.push(v);
+    for (const c of cont.values()) A.xcont[c.ka].push(c);
+  },
+  /** voyageurs qui descendent pour changer de ligne : ils rejoignent le quai de la ligne suivante */
+  hand(l, k, x) {
+    const s = G.s;
+    const conts = (l.xcont[k] || []).filter((c) => c.b.active && c.b.veh.length && s.lines.includes(c.b));
+    if (!conts.length) { l.today.mec += x * 0.5; s.today.mec += x * 0.5; return; }
+    const tot = conts.reduce((a, c) => a + c.w, 0);
+    for (const c of conts) {
+      const B = c.b, nB = B.stops.length, amt = x * c.w / tot;
+      const R = B.loop || c.j > c.kb ? B.Rf : B.Rb;
+      R[c.kb * nB + c.j] += amt;
+      B.today.xin += amt;
+    }
+    l.today.xout += x;
+    s.today.xfer = (s.today.xfer || 0) + x;
+  },
+  /** correspondances d'un arrêt donné */
+  at(l, k) {
+    const out = [];
+    for (const h of this.hubs) {
+      if (h.A === l && h.ka === k) out.push({ line: h.B, k: h.kb, walk: h.walk });
+      else if (h.B === l && h.kb === k) out.push({ line: h.A, k: h.ka, walk: h.walk });
+    }
+    return out;
+  },
 };
 
 /* ---------- trafic routier (simulé) ---------- */
@@ -1849,7 +2132,7 @@ const Eco = {
     UI.toast(on ? 'Argent illimité activé. Construisez librement !' : 'Retour à la gestion normale, trésorerie : ' + fmtEur(G.s.money) + '.', 'ok');
     UI.refreshTop();
   },
-  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, loanIn: 0, repay: 0, pax: 0, mec: 0 }; },
+  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0 }; },
   dayProfit(d) { return d.fares + d.ads - d.ops - d.maint - d.interest - d.events; },
   debt() { return G.s.loans.reduce((a, l) => a + l.amount, 0); },
   loanOffers() {
@@ -2124,24 +2407,26 @@ const Sim = {
   lineMinute(l, m) {
     const was = l.active;
     l.active = Lines.isActiveAt(l, m);
-    if (l.active && !was) { Lines.placeVehicles(l); for (const v of l.veh) v.hidden = false; Render.dirty = true; }
+    if (l.active && !was) { Lines.activate(l, m); Render.dirty = true; }
     if (!l.active) {
-      if (was) { for (const v of l.veh) { v.hidden = true; v.on.fill(0); v.load = 0; } l.Wf.fill(0); l.Wb.fill(0); }
+      if (was) { for (const v of l.veh) { v.hidden = true; v.on.fill(0); if (v.ont) v.ont.fill(0); v.load = 0; } for (const W of [l.Wf, l.Wb, l.Xf, l.Xb, l.Rf, l.Rb]) W.fill(0); }
       return;
     }
     const s = G.s, n = l.stops.length, mode = MODES[l.mode];
-    // coûts d'exploitation
-    let op = 0;
-    for (const v of l.veh) op += MODEL[v.model].op;
+    // grille horaire : renforts, retraits au dépôt
+    if (was) Lines.adjustFleet(l, m);
+    // coûts d'exploitation (véhicules en service uniquement)
+    let op = 0, nRun = 0;
+    for (const v of l.veh) if (!v.parked) { op += MODEL[v.model].op; nRun++; }
     op = (op * s.costMul) / 60;
     Eco.charge(op, 'ops'); l.today.ops += op;
     const adLvl = s.ads[l.mode] || 0;
-    const adH = (ADS.perHour[l.mode][adLvl] * l.veh.length) / 60;
+    const adH = (ADS.perHour[l.mode][adLvl] * nRun) / 60;
     if (adH) { if (!s.unlimited) { s.money += adH; s.today.ads += adH; } l.today.ads += adH; }
     if (!l.veh.length) return;
     // génération des voyageurs
     const h = Time.hour(m), we = Time.weekend(m);
-    const prof = we ? (PROF_WE[h] / SUM_WE) * 0.75 : PROF_WD[h] / SUM_WD;
+    const prof = we ? (PROF_WE[h] / SUM_WE) * (Time.sundayLike(m) ? 0.6 : 0.85) : PROF_WD[h] / SUM_WD;
     const price = Lines.price(l, m);
     const pf = price <= 0.01 ? 2.2 : clamp(Math.pow(mode.ref / price, 0.55), 0.3, 2.2);
     const base = (prof / 60) * l.qual * pf * l.rep * Events.demandMult(l.mode) * ADS.demand[adLvl];
@@ -2152,10 +2437,16 @@ const Sim = {
       const r = od[i * n + j] * base * Math.max(em[i], em[j]);
       if (l.loop || j > i) l.Wf[i * n + j] += r; else l.Wb[i * n + j] += r;
     }
+    // trajets avec correspondance : on monte ici, on changera de ligne plus loin
+    for (const x of l.xgen) {
+      if (!x.b.active || !x.b.veh.length) continue;
+      const r = x.r * base * Math.max(em[x.i], em[x.ka]) * Math.min(1.1, x.b.qual || 0);
+      if (l.loop || x.ka > x.i) l.Xf[x.i * n + x.ka] += r; else l.Xb[x.i * n + x.ka] += r;
+    }
     // abandons
     const rate = clamp(0.003 + Math.max(0, l.headway - 12) * 0.0015, 0.003, 0.05);
     let lost = 0;
-    for (const W of [l.Wf, l.Wb]) for (let k = 0; k < W.length; k++) if (W[k] > 0) { const x = W[k] * rate; W[k] -= x; lost += x; }
+    for (const W of [l.Wf, l.Wb, l.Xf, l.Xb, l.Rf, l.Rb]) for (let k = 0; k < W.length; k++) if (W[k] > 0) { const x = W[k] * rate; W[k] -= x; lost += x; }
     l.today.mec += lost; s.today.mec += lost;
   },
 
@@ -2199,7 +2490,7 @@ const Sim = {
       }
       spd = l.C / Math.max(1, cycle);
     }
-    const nA = Math.max(1, l.veh.length);
+    const nA = Math.max(1, l.active ? Lines.running(l) : Lines.targetActive(l, G.s.min));
     l.headway = cycle / nA / 60;
     l.cycleMin = cycle / 60;
     l.speedAvg = l.C / Math.max(1, cycle) * 3.6;
@@ -2269,10 +2560,11 @@ const Sim = {
         ord.forEach((x, i) => lead.set(x, ord[(i + 1) % ord.length]));
       }
       for (const v of l.veh) {
+        if (v.parked) continue;
         const a = MODEL[v.model].acc || ph.a;
         if (!(v.v >= 0)) v.v = 0;
         let t = dt, guard = 0;
-        while (t > 1e-6 && guard++ < 800) {
+        while (t > 1e-6 && guard++ < 800 && !v.parked) {
           if (v.dwell > 0) { const d = Math.min(t, v.dwell); v.dwell -= d; t -= d; if (v.dwell <= 0) v.hold = null; continue; }
           const h = Math.min(t, 1);
           const evt = l.ev[v.ev];
@@ -2321,6 +2613,7 @@ const Sim = {
             }
             if (v.wrap) { v.u -= l.C; v.wrap = false; v.cwrap = false; if (v.u < 0) v.u = 0; }
             this.atStop(l, v, evt);
+            if (v.parked) break;
             v.hold = this.regulate(l, v) ? 'reg' : null;
             v.ev++;
             if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
@@ -2366,24 +2659,40 @@ const Sim = {
     const md = MODEL[v.model];
     // descente
     const off = v.on[k]; v.on[k] = 0; v.load = Math.max(0, v.load - off);
-    if (!l.loop && ((evt.d === 0 && k === n - 1) || (evt.d === 1 && k === 0))) { v.on.fill(0); v.load = 0; }
-    // montée
-    const W = evt.d === 0 ? l.Wf : l.Wb;
+    if (!v.ont) v.ont = new Float64Array(n);
+    const xo = v.ont[k]; v.ont[k] = 0;
+    if (xo > 1e-6) Transfers.hand(l, k, xo);
+    const terminus = l.loop ? k === 0 : (evt.d === 0 && k === n - 1) || (evt.d === 1 && k === 0);
+    if (!l.loop && terminus) { v.on.fill(0); v.ont.fill(0); v.load = 0; }
+    // fin de service pour ce véhicule (grille horaire) : il rentre au dépôt depuis le terminus
+    if (v.toPark && terminus) {
+      // ligne circulaire : les voyageurs encore à bord attendent le véhicule suivant (billet conservé)
+      if (v.load > 1e-6) { const R0 = evt.d === 0 ? l.Rf : l.Rb; for (let j = 0; j < n; j++) if (j !== k && v.on[j] > 0) R0[k * n + j] += v.on[j]; }
+      v.parked = true; v.toPark = false; v.hidden = true; v.on.fill(0); v.ont.fill(0); v.load = 0; v.dwell = 0; v.hold = null;
+      if (G.ui && G.ui.follow === v) G.ui.follow = null;
+      return;
+    }
+    // montée (voyageurs directs, voyageurs qui changeront de ligne, voyageurs en correspondance déjà munis d'un billet)
+    const W = evt.d === 0 ? l.Wf : l.Wb, X = evt.d === 0 ? l.Xf : l.Xb, R = evt.d === 0 ? l.Rf : l.Rb;
     let want = 0;
-    for (let j = 0; j < n; j++) if (j !== k) want += W[k * n + j];
+    for (let j = 0; j < n; j++) if (j !== k) want += W[k * n + j] + X[k * n + j] + R[k * n + j];
     const space = Math.max(0, md.cap - v.load);
     const take = Math.min(space, want);
     if (want > 0 && take > 0) {
       const ratio = take / want;
+      let paying = 0;
       for (let j = 0; j < n; j++) {
         if (j === k) continue;
-        const x = W[k * n + j] * ratio;
-        W[k * n + j] -= x; v.on[j] += x;
+        const i0 = k * n + j;
+        const w = W[i0] * ratio, x = X[i0] * ratio, r = R[i0] * ratio;
+        W[i0] -= w; X[i0] -= x; R[i0] -= r;
+        v.on[j] += w + x + r; v.ont[j] += x;
+        paying += w + x;
       }
       v.load += take;
       const price = Lines.price(l, s.min);
-      const fare = take * price;
-      const adPax = take * ADS.perPax[s.ads[l.mode] || 0];
+      const fare = paying * price;
+      const adPax = paying * ADS.perPax[s.ads[l.mode] || 0];
       if (!s.unlimited) { s.money += fare + adPax; s.today.fares += fare; s.today.ads += adPax; }
       s.today.pax += take;
       l.today.fares += fare; l.today.ads += adPax; l.today.pax += take;
@@ -2412,7 +2721,7 @@ const Sim = {
     d.date = s.min - 1440;
     d.lines = {};
     for (const l of s.lines) {
-      d.lines[l.id] = { pax: Math.round(l.today.pax), fares: Math.round(l.today.fares), ops: Math.round(l.today.ops), ads: Math.round(l.today.ads), mec: Math.round(l.today.mec), fill: l.today.loadN ? l.today.loadSum / l.today.loadN : 0, peak: l.today.loadMax || 0 };
+      d.lines[l.id] = { pax: Math.round(l.today.pax), fares: Math.round(l.today.fares), ops: Math.round(l.today.ops), ads: Math.round(l.today.ads), mec: Math.round(l.today.mec), fill: l.today.loadN ? l.today.loadSum / l.today.loadN : 0, peak: l.today.loadMax || 0, xin: Math.round(l.today.xin || 0), xout: Math.round(l.today.xout || 0) };
       const ratio = l.today.mec / Math.max(1, l.today.pax);
       l.rep = clamp(l.rep + 0.02 - ratio * 0.6, 0.6, 1.05);
       l.hist.unshift(d.lines[l.id]); if (l.hist.length > 30) l.hist.length = 30;
@@ -2492,9 +2801,8 @@ const RealTime = {
     for (const l of s.lines) {
       if (l.status === 'construction' && s.min >= l.buildEnd) l.status = 'active';
       l.active = Lines.isActiveAt(l, s.min);
-      Lines.placeVehicles(l);
-      for (const v of l.veh) v.hidden = !l.active;
-      l.Wf.fill(0); l.Wb.fill(0);
+      Lines.activate(l, s.min);
+      for (const W of [l.Wf, l.Wb, l.Xf, l.Xb, l.Rf, l.Rb]) W.fill(0);
     }
     Traffic.update();
     for (const l of s.lines) Sim.lineQuality(l);
@@ -2576,7 +2884,7 @@ const Save = {
     const r6 = (x) => Math.round(x * 1e9) / 1e9;
     const lines = s.lines.map((l) => ({
       id: l.id, mode: l.mode, num: l.num, color: l.color, name: l.name, loop: l.loop,
-      stops: l.stops, prices: l.prices, hours: l.hours, night: l.night, busLane: l.busLane, signal: l.signal, laneKm: l.laneKm || 0,
+      stops: l.stops, prices: l.prices, hours: l.hours, svc: l.svc, svcPreset: l.svcPreset, night: l.night, busLane: l.busLane, signal: l.signal, laneKm: l.laneKm || 0,
       status: l.status, buildEnd: l.buildEnd, rep: l.rep, created: l.created, hist: l.hist, today: l.today,
       veh: l.veh.map((v) => v.model),
       path: { pts: l.path.pts.map((p) => [r6(p[0]), r6(p[1])]), pairs: l.path.pairs, stopPt: l.path.stopPt },
@@ -3067,8 +3375,115 @@ const Night = {
   },
 };
 
+/* ---------- lignes côte à côte sur un tronçon commun (comme sur un plan de réseau) ----------
+   items : [{ pts, g (identifiant de ligne), w (largeur), ord (ordre dans le faisceau) }]
+   Renvoie dans it.off le décalage de chaque sommet (en unités de largeur), ou null. */
+function bundleOffsets(items, keyOf, gap) {
+  const segs = new Map();
+  const skey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
+  for (const it of items) {
+    it.keys = it.keys || it.pts.map(keyOf);
+    for (let i = 0; i < it.pts.length - 1; i++) {
+      const a = it.keys[i], b = it.keys[i + 1]; if (a === b) continue;
+      const k = skey(a, b);
+      let m = segs.get(k); if (!m) { m = new Map(); segs.set(k, m); }
+      if (!m.has(it.g)) m.set(it.g, it);
+    }
+  }
+  const slot = new Map();
+  for (const [k, m] of segs) {
+    if (m.size < 2) continue;
+    const arr = [...m.values()].sort((x, y) => x.ord - y.ord);
+    const tot = arr.reduce((s, it) => s + it.w + gap, -gap);
+    let c = -tot / 2; const pos = new Map();
+    for (const it of arr) { pos.set(it.g, c + it.w / 2); c += it.w + gap; }
+    slot.set(k, pos);
+  }
+  for (const it of items) it.off = offsetVectors(it.pts, (i) => {
+    const a = it.keys[i], b = it.keys[i + 1]; if (a === b) return 0;
+    const pos = slot.get(skey(a, b)); if (!pos) return 0;
+    const v = pos.get(it.g) || 0;
+    return a < b ? v : -v;
+  });
+}
+/** décalage de chaque sommet d'une polyligne à partir d'un décalage signé par tronçon (raccord en onglet) */
+function offsetVectors(P, segOff) {
+  const N = P.length; if (N < 2) return null;
+  const nx = new Float64Array(N - 1), ny = new Float64Array(N - 1), so = new Float64Array(N - 1), ok = new Uint8Array(N - 1);
+  let any = false;
+  for (let i = 0; i < N - 1; i++) {
+    const dx = P[i + 1][0] - P[i][0], dy = P[i + 1][1] - P[i][1], L = Math.hypot(dx, dy);
+    if (L > 0) { nx[i] = -dy / L; ny[i] = dx / L; ok[i] = 1; }
+    so[i] = segOff(i); if (so[i]) any = true;
+  }
+  if (!any) return null;
+  const off = new Float32Array(2 * N);
+  let prev = -1;
+  const nextOk = new Int32Array(N).fill(-1);
+  for (let i = N - 2, nk = -1; i >= 0; i--) { if (ok[i]) nk = i; nextOk[i] = nk; }
+  for (let i = 0; i < N; i++) {
+    const a = prev, b = i < N - 1 ? nextOk[i] : -1;
+    let ox = 0, oy = 0;
+    if (a < 0 && b >= 0) { ox = nx[b] * so[b]; oy = ny[b] * so[b]; }
+    else if (b < 0 && a >= 0) { ox = nx[a] * so[a]; oy = ny[a] * so[a]; }
+    else if (a >= 0 && b >= 0) {
+      const s1 = so[a], s2 = so[b], det = nx[a] * ny[b] - ny[a] * nx[b];
+      if (Math.abs(det) < 0.2) {
+        if (nx[a] * nx[b] + ny[a] * ny[b] > 0) { ox = (nx[a] * s1 + nx[b] * s2) / 2; oy = (ny[a] * s1 + ny[b] * s2) / 2; }
+        else { ox = nx[a] * s1; oy = ny[a] * s1; }
+      } else {
+        ox = (s1 * ny[b] - s2 * ny[a]) / det; oy = (nx[a] * s2 - nx[b] * s1) / det;
+        const lim = 2.5 * Math.max(Math.abs(s1), Math.abs(s2)), L = Math.hypot(ox, oy);
+        if (L > lim && L > 0) { ox *= lim / L; oy *= lim / L; }
+      }
+    }
+    off[2 * i] = ox; off[2 * i + 1] = oy;
+    if (i < N - 1 && ok[i]) prev = i;
+  }
+  return off;
+}
+const LINE_W = { metro: 8, ter: 6.5, bus: 5, boat: 5 };
+
 const Render = {
-  dirty: true, last: 0, moving: false, zooming: false, o0: null,
+  dirty: true, last: 0, moving: false, zooming: false, o0: null, offSig: '', MX: 0, MY: 0,
+
+  /** recalcule les décalages des lignes qui partagent des tronçons (si le réseau a changé) */
+  ensureOffsets() {
+    const ls = G.s.lines;
+    const sig = ls.map((l) => l.id + ':' + l.pv).join(',');
+    if (sig === this.offSig) return;
+    this.offSig = sig;
+    const q = G.mpu, items = [];
+    const keyOf = (p) => Math.round(p[0] * q) + ',' + Math.round(p[1] * q);
+    for (const l of ls) {
+      const ord = MODE_ORDER.indexOf(l.mode) * 1e5 + l.num * 10 + (l.id % 10) / 10;
+      for (const PP of [l.path, l.pathB]) if (PP) items.push({ pts: PP.pts, g: l.id, w: LINE_W[l.mode], ord, PP });
+    }
+    bundleOffsets(items, keyOf, 1.5);
+    for (const it of items) it.PP.off = it.off;
+    for (const l of ls) {
+      // trajet retour calculé à l'envers (métro, TER, fluvial) : mêmes décalages, sommets inversés
+      const PB = l.P && l.P[1];
+      if (PB && PB !== l.pathB) {
+        const o = l.path.off;
+        if (!o) PB.off = null;
+        else { const N = o.length / 2, r = new Float32Array(o.length); for (let i = 0; i < N; i++) { r[2 * i] = o[2 * (N - 1 - i)]; r[2 * i + 1] = o[2 * (N - 1 - i) + 1]; } PB.off = r; }
+      }
+    }
+  },
+  /** facteur de zoom des lignes (identique pour le calque statique et les véhicules) */
+  lineZf(z) { return z >= 16 ? 1.35 : z >= 14 ? 1 : 0.75; },
+  /** position dessinée d'un arrêt (décalé avec sa ligne) */
+  stopXY(l, k, o, zf, back) {
+    const P = back ? l.pathB : l.path;
+    const st = l.stops[k];
+    let x = (back ? st.bmx : st.mx) * o.k - o.x, y = (back ? st.bmy : st.my) * o.k - o.y;
+    if (P && P.off && P.stopPt) {
+      const i = back ? P.stopPt[l.stops.length - 1 - k] : P.stopPt[k];
+      if (i !== undefined) { x += P.off[2 * i] * zf; y += P.off[2 * i + 1] * zf; }
+    }
+    return [x, y];
+  },
 
   init() {
     const map = G.map, c = map.getContainer();
@@ -3089,9 +3504,12 @@ const Render = {
       if (Math.abs(o.k - this.o0.k) > 1e-6) { this.cvS.style.opacity = '0'; return; }
       const dx = this.o0.x - o.x, dy = this.o0.y - o.y;
       this.cvS.style.transform = `translate(${dx}px,${dy}px)`;
-      this.cvN.style.transform = `translate(${dx}px,${dy}px)`;
-      // glissement plus grand que la marge du calque de nuit : on redessine tout de suite
-      if (this.nf > 0.02 && (Math.abs(dx) > this.W * 0.42 || Math.abs(dy) > this.H * 0.42)) this.drawStatic();
+      const oN = this.oN || this.o0, nx = oN.x - o.x, ny = oN.y - o.y;
+      this.cvN.style.transform = `translate(${nx}px,${ny}px)`;
+      // les calques débordent de l'écran (marges) : les lignes restent entières pendant le glissement ;
+      // au-delà d'une marge, on redessine aussitôt (le voile de nuit seulement si nécessaire)
+      if (this.nf > 0.02 && (Math.abs(nx) > this.W * 0.42 || Math.abs(ny) > this.H * 0.42)) this.drawStatic();
+      else if (Math.abs(dx) > this.MX * 0.85 || Math.abs(dy) > this.MY * 0.85) this.drawStatic({ night: false });
     });
     map.on('moveend', () => { this.moving = false; this.dirty = true; this.drawStatic(); });
     map.on('zoomstart', () => {
@@ -3105,10 +3523,15 @@ const Render = {
     const c = G.map.getContainer();
     this.W = c.clientWidth; this.H = c.clientHeight;
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
-    for (const cv of [this.cvS, this.cvD]) {
-      cv.width = Math.round(this.W * this.dpr); cv.height = Math.round(this.H * this.dpr);
-      cv.style.width = this.W + 'px'; cv.style.height = this.H + 'px';
-    }
+    const cvD = this.cvD;
+    cvD.width = Math.round(this.W * this.dpr); cvD.height = Math.round(this.H * this.dpr);
+    cvD.style.width = this.W + 'px'; cvD.style.height = this.H + 'px';
+    // calque statique avec marges (40 % de l'écran de chaque côté)
+    this.MX = Math.round(this.W * 0.4); this.MY = Math.round(this.H * 0.4);
+    const sw = this.W + 2 * this.MX, sh = this.H + 2 * this.MY;
+    this.cvS.width = Math.round(sw * this.dpr); this.cvS.height = Math.round(sh * this.dpr);
+    this.cvS.style.width = sw + 'px'; this.cvS.style.height = sh + 'px';
+    this.cvS.style.left = -this.MX + 'px'; this.cvS.style.top = -this.MY + 'px';
     // nuit : lumière douce, résolution 1 suffit ; marge d'un demi-écran de chaque côté
     this.cvN.width = this.W * 2; this.cvN.height = this.H * 2;
     this.cvN.style.width = this.W * 2 + 'px'; this.cvN.style.height = this.H * 2 + 'px';
@@ -3129,25 +3552,32 @@ const Render = {
   },
 
   /* ---------- calque statique : zones, trafic, lignes, arrêts ---------- */
-  drawStatic() {
+  drawStatic(opts) {
     if (!G.ready || this.zooming) return;
     this.dirty = false; this.last = performance.now();
     const o = this.origin(); this.o0 = o;
-    const ctx = this.ctxS, W = this.W, H = this.H, s = G.s, w = G.w, z = o.z;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
+    const doNight = !(opts && opts.night === false) || !this.oN || Math.abs(this.oN.k - o.k) > 1e-6;
+    const ctx = this.ctxS, W = this.W, H = this.H, s = G.s, w = G.w, z = o.z, MX = this.MX, MY = this.MY;
+    // coordonnées écran conservées ; le canevas couvre aussi les marges autour de l'écran
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, MX * this.dpr, MY * this.dpr);
+    ctx.clearRect(-MX, -MY, W + 2 * MX, H + 2 * MY);
     this.cvS.style.transform = 'translate(0px,0px)'; this.cvS.style.opacity = '1';
-    const vb = { minx: o.x / o.k - 0.05 * W / o.k, maxx: (o.x + W * 1.05) / o.k, miny: o.y / o.k - 0.05 * H / o.k, maxy: (o.y + H * 1.05) / o.k };
+    const vb = { minx: (o.x - MX - 0.05 * W) / o.k, maxx: (o.x + W + MX + 0.05 * W) / o.k, miny: (o.y - MY - 0.05 * H) / o.k, maxy: (o.y + H + MY + 0.05 * H) / o.k };
+    const L0 = -MX - 10, R0 = W + MX + 10, T0 = -MY - 10, B0 = H + MY + 10;
+    const out = (x, y, m) => x < L0 - m || y < T0 - m || x > R0 + m || y > B0 + m;
     const X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
     const inView = (b) => !(b.maxx < vb.minx || b.minx > vb.maxx || b.maxy < vb.miny || b.miny > vb.maxy);
     const nf = Night.factor();
     this.nf = nf;
     // calque de nuit séparé : voile bleu nuit percé de trous de lumière (la photo reste en version jour)
-    const cn = this.ctxN;
-    cn.setTransform(1, 0, 0, 1, 0, 0);
-    cn.clearRect(0, 0, this.cvN.width, this.cvN.height);
-    this.cvN.style.transform = 'translate(0px,0px)'; this.cvN.style.opacity = '1';
-    if (nf > 0.02) Night.draw(cn, { x: o.x - W / 2, y: o.y - H / 2, k: o.k, z: o.z }, nf, W * 2, H * 2);
+    if (doNight) {
+      const cn = this.ctxN;
+      cn.setTransform(1, 0, 0, 1, 0, 0);
+      cn.clearRect(0, 0, this.cvN.width, this.cvN.height);
+      this.cvN.style.transform = 'translate(0px,0px)'; this.cvN.style.opacity = '1';
+      if (nf > 0.02) Night.draw(cn, { x: o.x - W / 2, y: o.y - H / 2, k: o.k, z: o.z }, nf, W * 2, H * 2);
+      this.oN = o;
+    }
     const za = 1 - 0.7 * nf;
 
     /* zones */
@@ -3204,7 +3634,7 @@ const Render = {
         const c = cls[e]; if (c > maxCls) continue;
         const a = ea[e], b = eb[e];
         const x1 = nx[a] * o.k - o.x, y1 = ny[a] * o.k - o.y, x2 = nx[b] * o.k - o.x, y2 = ny[b] * o.k - o.y;
-        if ((x1 < -10 && x2 < -10) || (x1 > W + 10 && x2 > W + 10) || (y1 < -10 && y2 < -10) || (y1 > H + 10 && y2 > H + 10)) continue;
+        if ((x1 < L0 && x2 < L0) || (x1 > R0 && x2 > R0) || (y1 < T0 && y2 < T0) || (y1 > B0 && y2 > B0)) continue;
         const t = tr[e];
         const bk = c === 4 ? 4 : t < 0.45 ? 0 : t < 0.7 ? 1 : t < 0.9 ? 2 : 3;
         buckets[c * 5 + bk].push(x1, y1, x2, y2);
@@ -3229,7 +3659,7 @@ const Render = {
       for (let e = 0; e < rn.nE; e++) {
         const a = rn.ea[e], b2 = rn.eb[e];
         const x1 = X(rn.x[a]), y1 = Y(rn.y[a]), x2 = X(rn.x[b2]), y2 = Y(rn.y[b2]);
-        if ((x1 < -10 && x2 < -10) || (x1 > W + 10 && x2 > W + 10) || (y1 < -10 && y2 < -10) || (y1 > H + 10 && y2 > H + 10)) continue;
+        if ((x1 < L0 && x2 < L0) || (x1 > R0 && x2 > R0) || (y1 < T0 && y2 < T0) || (y1 > B0 && y2 > B0)) continue;
         ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
       }
       ctx.lineCap = 'butt'; ctx.setLineDash([]);
@@ -3244,8 +3674,9 @@ const Render = {
       ctx.strokeStyle = INK; ctx.lineWidth = z >= 15 ? 3 : 2; ctx.stroke();
     }
 
-    /* lignes */
-    const zf = z >= 16 ? 1.35 : z >= 14 ? 1 : 0.75;
+    /* lignes (côte à côte quand elles partagent une rue ou un tunnel) */
+    const zf = this.lineZf(z);
+    this.ensureOffsets();
     const order = [...s.lines].sort((a, b) => MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode));
     for (const l of order) {
       if (!l.bbox) this.lineBox(l);
@@ -3253,15 +3684,16 @@ const Render = {
       ctx.beginPath();
       for (const PP of [l.path, l.pathB]) {
         if (!PP) continue;
-        const P = PP.pts;
+        const P = PP.pts, off = PP.off;
         let lx = -1e9, ly = -1e9;
         P.forEach((p, i) => {
-          const x = X(p[0]), y = Y(p[1]);
+          let x = X(p[0]), y = Y(p[1]);
+          if (off) { x += off[2 * i] * zf; y += off[2 * i + 1] * zf; }
           if (i === 0) { ctx.moveTo(x, y); lx = x; ly = y; } else if (Math.abs(x - lx) + Math.abs(y - ly) > 0.8 || i === P.length - 1) { ctx.lineTo(x, y); lx = x; ly = y; }
         });
       }
       if (l.loop) ctx.closePath();
-      const lw = ({ metro: 8, ter: 6.5, bus: 5, boat: 5 }[l.mode]) * zf;
+      const lw = LINE_W[l.mode] * zf;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.setLineDash([]);
       if (G.ui.selLine === l) { ctx.strokeStyle = 'rgba(35,35,35,.28)'; ctx.lineWidth = lw + 12; ctx.stroke(); }
@@ -3274,14 +3706,28 @@ const Render = {
       ctx.setLineDash([]);
     }
 
+    /* correspondances : liaison piétonne entre les quais de deux lignes */
+    this.xpos = [];
+    if (z >= 12.5) {
+      ctx.lineCap = 'round'; ctx.setLineDash([]);
+      for (const h of Transfers.hubs) {
+        const [x1, y1] = this.stopXY(h.A, h.ka, o, zf), [x2, y2] = this.stopXY(h.B, h.kb, o, zf);
+        if (out(x1, y1, 30) && out(x2, y2, 30)) continue;
+        this.xpos.push({ x: (x1 + x2) / 2, y: (y1 + y2) / 2, h });
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        ctx.strokeStyle = INK; ctx.lineWidth = 9 * zf; ctx.stroke();
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4.6 * zf; ctx.stroke();
+      }
+    }
+
     /* arrêts + noms */
     const labels = [];
     for (const l of order) {
       if (!inView(l.bbox)) continue;
       const showNames = s.settings.names && ((l.mode === 'metro' || l.mode === 'ter') ? z >= 14 : z >= 16);
-      l.stops.forEach((st) => {
-        const x = X(st.mx), y = Y(st.my);
-        if (x < -20 || y < -20 || x > W + 20 || y > H + 20) return;
+      l.stops.forEach((st, k) => {
+        const [x, y] = this.stopXY(l, k, o, zf);
+        if (out(x, y, 10)) return;
         ctx.setLineDash([]);
         ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = INK;
         if (l.mode === 'metro') {
@@ -3298,7 +3744,7 @@ const Render = {
           ctx.lineWidth = 2.4 * zf; ctx.stroke();
           // arrêt du sens retour, de l'autre côté de la rue
           if (st.bmx !== undefined && dist(st.bmx, st.bmy, st.mx, st.my) > 15) {
-            const bx = X(st.bmx), by = Y(st.bmy);
+            const [bx, by] = this.stopXY(l, k, o, zf, true);
             ctx.beginPath(); ctx.arc(bx, by, 3.4 * zf, 0, 7); ctx.fill();
             ctx.lineWidth = 1.8 * zf; ctx.stroke();
           }
@@ -3310,7 +3756,7 @@ const Render = {
     this.stpos = [];
     for (const g of R.stations) {
       const x = X(g.mx), y = Y(g.my);
-      if (x < -30 || y < -30 || x > W + 30 || y > H + 30) continue;
+      if (out(x, y, 20)) continue;
       this.stpos.push({ x, y, g });
       this.platform(ctx, x, y, g.ang, zf, '#FFFFFF');
       if (s.settings.names && z >= 13.5) labels.push({ x, y, t: g.name, pri: 0 });
@@ -3325,7 +3771,7 @@ const Render = {
       pois.sort((a, b) => (POI_ICON[b.kind].major ? 1 : 0) - (POI_ICON[a.kind].major ? 1 : 0) || b.w - a.w);
       for (const p of pois) {
         const x = X(p.mx), y = Y(p.my);
-        if (x < -15 || y < -15 || x > W + 15 || y > H + 15) continue;
+        if (out(x, y, 5)) continue;
         if (placed.some((q) => (q[0] - x) ** 2 + (q[1] - y) ** 2 < (2 * r + 3) ** 2)) continue;
         placed.push([x, y]);
         this.poipos.push({ x, y, p });
@@ -3357,7 +3803,7 @@ const Render = {
     for (const e of showEv) {
       const pos = Events.where(e); if (!pos) continue;
       const x = X(pos[0]), y = Y(pos[1]);
-      if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+      if (out(x, y, 10)) continue;
       this.evpos.push({ x, y, e });
       const col = EV_COL[e.kind] || INK, up = e.start > s.min;
       ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
@@ -3416,7 +3862,12 @@ const Render = {
         if (v.hidden) continue;
         const md = MODEL[v.model];
         const p = Lines.posOf(l, v, (md.len || 12) / 2);
-        const x = X(p.mx), y = Y(p.my);
+        let x = X(p.mx), y = Y(p.my);
+        const PO = l.P[p.dir] && l.P[p.dir].off;
+        if (PO) {
+          const i = p.seg, j = Math.min(PO.length / 2 - 1, i + 1), t = p.t || 0, zl = this.lineZf(z);
+          x += (PO[2 * i] * (1 - t) + PO[2 * j] * t) * zl; y += (PO[2 * i + 1] * (1 - t) + PO[2 * j + 1] * t) * zl;
+        }
         if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
         // rotation lissée : la corde suit déjà les virages ; les demi-tours au terminus sont animés
         if (v.angD === undefined) v.angD = p.ang;
@@ -3491,7 +3942,9 @@ const Render = {
       }
       b.stops.forEach((st, i) => {
         const x = X(st.mx), y = Y(st.my);
-        ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+        if (b.edit && b.sel === i) { ctx.beginPath(); ctx.arc(x, y, 15, 0, 7); ctx.fillStyle = 'rgba(242,183,5,.55)'; ctx.fill(); }
+        const isNew = b.edit && !b.orig.has(Math.round(st.mx * G.mpu) + ',' + Math.round(st.my * G.mpu));
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fillStyle = isNew ? '#F2B705' : '#FFFFFF'; ctx.fill();
         ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
         ctx.fillStyle = INK; ctx.font = '600 11px ' + FONT;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y + 0.5);
@@ -3532,9 +3985,418 @@ const Render = {
     });
     if (best) return best;
     for (const it of this.stpos || []) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 20 * 20) return { type: 'station', g: it.g };
+    for (const it of this.xpos || []) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 14 * 14) return { type: 'stop', l: it.h.A, k: it.h.ka, st: it.h.A.stops[it.h.ka] };
     let bp = null, bpd = 16 * 16;
     for (const it of this.poipos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bpd) { bpd = d; bp = { type: 'poi', p: it.p }; } }
     return bp;
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — plan schématique du réseau (sans carte, façon plan de métro)
+   Disposition : positions réelles, puis relaxation vers des tronçons à 0/45/90°
+   et des interstations régulières ; export en image PNG à partager.
+   ===================================================================== */
+
+const Plan = {
+  filter: 'all', layout: null,
+
+  open() {
+    if (!G.s.lines.length) { UI.toast('Construisez d’abord une ligne pour voir le plan du réseau.', 'info'); return; }
+    UI.close(); UI.closeCard();
+    let el = document.getElementById('plan');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'plan';
+      el.innerHTML = `<div class="plan-h"><button class="icon-b" data-act="planClose" aria-label="Fermer">${icon('close')}</button><b>Plan du réseau</b><button class="btn sm primary" data-act="planShare">Partager l’image</button></div>
+        <div class="seg plan-f" id="planFilter"></div><div class="plan-c"><canvas id="planCv"></canvas></div>`;
+      document.getElementById('game').appendChild(el);
+      window.addEventListener('resize', () => { if (!el.hidden) this.draw(); });
+    }
+    el.hidden = false;
+    this.layout = null;
+    this.refresh();
+  },
+  close() { const el = document.getElementById('plan'); if (el) el.hidden = true; },
+  setFilter(f) { this.filter = f; this.layout = null; this.refresh(); },
+  modesFor(f) { return f === 'rail' ? ['metro', 'ter'] : f === 'bus' ? ['bus'] : MODE_ORDER; },
+  refresh() {
+    const has = (ms) => G.s.lines.some((l) => ms.includes(l.mode));
+    const opts = [['all', 'Tout le réseau']];
+    if (has(['metro', 'ter']) && has(['bus', 'boat'])) opts.push(['rail', 'Métro et TER']);
+    if (has(['bus']) && has(['metro', 'ter', 'boat'])) opts.push(['bus', 'Bus']);
+    if (!opts.some((o) => o[0] === this.filter)) this.filter = 'all';
+    const fe = document.getElementById('planFilter');
+    fe.hidden = opts.length < 2;
+    fe.innerHTML = opts.map(([k, t]) => `<button class="${this.filter === k ? 'on' : ''}" data-act="planFilter" data-arg="${k}">${t}</button>`).join('');
+    this.draw();
+  },
+
+  /* ---------- graphe : stations regroupées (arrêts proches et correspondances) ---------- */
+  build(modes) {
+    const lines = G.s.lines.filter((l) => modes.includes(l.mode)).sort((a, b) => MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode) || a.num - b.num);
+    const stops = [];
+    lines.forEach((l) => l.stops.forEach((st, k) => stops.push({ l, k, st })));
+    const par = stops.map((_, i) => i);
+    const find = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+    const uni = (a, b) => { a = find(a); b = find(b); if (a !== b) par[b] = a; };
+    const idx = new Map(); stops.forEach((s, i) => idx.set(s.l.id + ':' + s.k, i));
+    for (let i = 0; i < stops.length; i++) for (let j = i + 1; j < stops.length; j++) {
+      if (stops[i].l === stops[j].l) continue;
+      if (dist(stops[i].st.mx, stops[i].st.my, stops[j].st.mx, stops[j].st.my) < 120) uni(i, j);
+    }
+    for (const h of Transfers.hubs) {
+      const a = idx.get(h.A.id + ':' + h.ka), b = idx.get(h.B.id + ':' + h.kb);
+      if (a !== undefined && b !== undefined) uni(a, b);
+    }
+    const nodes = new Map();
+    stops.forEach((s, i) => {
+      const r = find(i);
+      let n = nodes.get(r);
+      if (!n) { n = { id: nodes.size, mx: 0, my: 0, cnt: 0, names: [], lines: new Set() }; nodes.set(r, n); }
+      n.mx += s.st.mx; n.my += s.st.my; n.cnt++; n.lines.add(s.l.id);
+      n.names.push({ t: s.st.name, pri: MODE_ORDER.indexOf(s.l.mode) === 1 || s.l.mode === 'ter' ? 0 : 1 });
+      s.node = n;
+    });
+    const N = [...nodes.values()];
+    for (const n of N) {
+      n.mx /= n.cnt; n.my /= n.cnt;
+      n.names.sort((a, b) => a.pri - b.pri);
+      n.base = n.names[0].t.replace(/ (II|III|IV|V|VI|\d+)$/, '');
+    }
+    // nom simplifié (« Gare II » → « Gare ») seulement s'il reste unique sur le plan
+    const cnt = new Map();
+    for (const n of N) cnt.set(n.base, (cnt.get(n.base) || 0) + 1);
+    for (const n of N) n.name = cnt.get(n.base) > 1 ? n.names[0].t : n.base;
+    const seqs = lines.map((l) => {
+      const seq = [];
+      for (const s of stops) if (s.l === l && seq[seq.length - 1] !== s.node.id) seq.push(s.node.id);
+      if (l.loop && seq.length > 2 && seq[0] === seq[seq.length - 1]) seq.pop();
+      return { l, seq };
+    });
+    const ekeys = new Set(), edges = [];
+    for (const { l, seq } of seqs) {
+      const m = seq.length;
+      for (let i = 0; i < m - 1 + (l.loop && m > 2 ? 1 : 0); i++) {
+        const a = seq[i], b = seq[(i + 1) % m]; if (a === b) continue;
+        const k = Math.min(a, b) + ':' + Math.max(a, b);
+        if (!ekeys.has(k)) { ekeys.add(k); edges.push([Math.min(a, b), Math.max(a, b)]); }
+      }
+    }
+    return { lines, nodes: N, seqs, edges };
+  },
+
+  /* ---------- disposition octolinéaire ---------- */
+  relax(g) {
+    const N = g.nodes, E = g.edges;
+    if (!N.length) return;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const n of N) { minx = Math.min(minx, n.mx); maxx = Math.max(maxx, n.mx); miny = Math.min(miny, n.my); maxy = Math.max(maxy, n.my); }
+    const sc = 1 / Math.max(1e-12, maxx - minx, maxy - miny);
+    for (const n of N) { n.gx = (n.mx - minx) * sc; n.gy = (n.my - miny) * sc; n.x = n.gx; n.y = n.gy; }
+    const lens = E.map(([a, b]) => Math.hypot(N[a].x - N[b].x, N[a].y - N[b].y)).sort((p, q) => p - q);
+    const Lt = Math.max(1e-4, lens.length ? lens[Math.floor(lens.length / 2)] : 0.1);
+    const triples = [];
+    for (const { l, seq } of g.seqs) {
+      const m = seq.length;
+      for (let i = 1; i < m - 1; i++) triples.push([seq[i - 1], seq[i], seq[i + 1]]);
+      if (l.loop && m > 3) { triples.push([seq[m - 2], seq[m - 1], seq[0]]); triples.push([seq[m - 1], seq[0], seq[1]]); }
+    }
+    const A8 = Math.PI / 4;
+    for (let it = 0; it < 420; it++) {
+      const k = it < 300 ? 0.35 : 0.5;
+      for (const [a, b] of E) {
+        const p = N[a], q = N[b];
+        const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1e-9;
+        const ang = Math.round(Math.atan2(dy, dx) / A8) * A8;
+        const L = lerp(len, Lt, 0.45);
+        const cx = (Math.cos(ang) * L - dx) * k * 0.5, cy = (Math.sin(ang) * L - dy) * k * 0.5;
+        p.x -= cx; p.y -= cy; q.x += cx; q.y += cy;
+      }
+      // les lignes cherchent à rester droites aux stations de passage
+      for (const [a, b, c] of triples) {
+        const p = N[a], q = N[b], r = N[c];
+        q.x += ((p.x + r.x) / 2 - q.x) * 0.04; q.y += ((p.y + r.y) / 2 - q.y) * 0.04;
+      }
+      // les stations ne se superposent pas
+      const R = Lt * 0.85;
+      for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) {
+        const p = N[i], q = N[j];
+        const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+        if (d < R) {
+          const f = (R - Math.max(d, 1e-6)) / Math.max(d, 1e-6) * 0.25;
+          const ux = d > 1e-6 ? dx : (i % 2 ? 1 : -1) * 1e-3, uy = d > 1e-6 ? dy : 1e-3;
+          p.x -= ux * f; p.y -= uy * f; q.x += ux * f; q.y += uy * f;
+        }
+      }
+      // fidélité à la géographie
+      const ga = it < 300 ? 0.02 : 0.005;
+      for (const n of N) { n.x += (n.gx - n.x) * ga; n.y += (n.gy - n.y) * ga; }
+    }
+    this.Lt = Lt;
+    this.snap(g, Lt / 4);
+  },
+
+  /** accrochage sur une grille puis petites retouches : tronçons exactement à 0, 45 ou 90° */
+  snap(g, gs) {
+    const N = g.nodes, E = g.edges;
+    const adj = N.map(() => []);
+    for (const [a, b] of E) { adj[a].push(b); adj[b].push(a); }
+    const occ = new Map(), key = (x, y) => x + ',' + y;
+    const order = N.map((n, i) => i).sort((a, b) => adj[b].length - adj[a].length);
+    for (const i of order) {
+      const n = N[i], cx = Math.round(n.x / gs), cy = Math.round(n.y / gs);
+      let done = false;
+      for (let r = 0; r < 8 && !done; r++) for (let dx = -r; dx <= r && !done; dx++) for (let dy = -r; dy <= r && !done; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || occ.has(key(cx + dx, cy + dy))) continue;
+        n.cx = cx + dx; n.cy = cy + dy; occ.set(key(n.cx, n.cy), i); done = true;
+      }
+    }
+    const octo = (a, b) => { const dx = Math.abs(N[a].cx - N[b].cx), dy = Math.abs(N[a].cy - N[b].cy); return dx === 0 || dy === 0 || dx === dy; };
+    const bad = (i, x, y) => {
+      let c = 0;
+      for (const j of adj[i]) {
+        const dx = Math.abs(x - N[j].cx), dy = Math.abs(y - N[j].cy);
+        if (dx === 0 && dy === 0) return 99;
+        if (!(dx === 0 || dy === 0 || dx === dy)) c++;
+        if (Math.max(dx, dy) < 2) c += 0.5; // tronçon trop court pour être lisible
+      }
+      return c;
+    };
+    for (let pass = 0; pass < 4; pass++) {
+      let moved = 0;
+      for (const i of [...order].reverse()) {
+        const n = N[i];
+        if (adj[i].every((j) => octo(i, j))) continue;
+        let best = bad(i, n.cx, n.cy), bx = n.cx, by = n.cy;
+        for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+          if (!dx && !dy) continue;
+          const x = n.cx + dx, y = n.cy + dy;
+          if (occ.has(key(x, y))) continue;
+          const c = bad(i, x, y) + (Math.abs(dx) + Math.abs(dy)) * 0.05;
+          if (c < best - 1e-9) { best = c; bx = x; by = y; }
+        }
+        if (bx !== n.cx || by !== n.cy) { occ.delete(key(n.cx, n.cy)); n.cx = bx; n.cy = by; occ.set(key(bx, by), i); moved++; }
+      }
+      if (!moved) break;
+    }
+    for (const n of N) { n.x = n.cx * gs; n.y = n.cy * gs; }
+  },
+
+  /** tracé d'un tronçon entre deux stations : droit si déjà à 0/45/90°, sinon un coude arrondi */
+  edgePts(p, q) {
+    const dx = q[0] - p[0], dy = q[1] - p[1], ax = Math.abs(dx), ay = Math.abs(dy);
+    if (ax < 1e-9 && ay < 1e-9) return [p, q];
+    const ang = Math.atan2(dy, dx), A8 = Math.PI / 4;
+    if (Math.abs(ang - Math.round(ang / A8) * A8) < 0.03) return [p, q];
+    const c = this.corner(p, q);
+    return c.length ? [p, ...c, q] : [p, q];
+  },
+  corner(p, q) {
+    const dx = q[0] - p[0], dy = q[1] - p[1], ax = Math.abs(dx), ay = Math.abs(dy);
+    const sx = Math.sign(dx) || 1, sy = Math.sign(dy) || 1;
+    const c = ax > ay ? [p[0] + sx * (ax - ay), p[1]] : [p[0], p[1] + sy * (ay - ax)];
+    const l1 = Math.hypot(c[0] - p[0], c[1] - p[1]), l2 = Math.hypot(q[0] - c[0], q[1] - c[1]);
+    if (l1 < 1e-6 || l2 < 1e-6) return [];
+    const r = Math.min(l1, l2) * 0.45;
+    const p1 = [c[0] - (c[0] - p[0]) / l1 * r, c[1] - (c[1] - p[1]) / l1 * r];
+    const p2 = [c[0] + (q[0] - c[0]) / l2 * r, c[1] + (q[1] - c[1]) / l2 * r];
+    const out = [p1];
+    for (let k = 1; k < 4; k++) { const t = k / 4, u = 1 - t; out.push([u * u * p1[0] + 2 * u * t * c[0] + t * t * p2[0], u * u * p1[1] + 2 * u * t * c[1] + t * t * p2[1]]); }
+    out.push(p2);
+    return out;
+  },
+
+  /* ---------- dessin ---------- */
+  draw() {
+    const cv = document.getElementById('planCv'); if (!cv) return;
+    const box = cv.parentElement, W = box.clientWidth, H = box.clientHeight;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.render(ctx, W, H, Math.min(1.15, Math.max(0.8, W / 420)), false);
+  },
+  ensureLayout() {
+    if (this.layout) return this.layout;
+    const g = this.build(this.modesFor(this.filter));
+    this.relax(g);
+    this.layout = g;
+    return g;
+  },
+  /** dessine le plan dans un rectangle W×H (s : échelle des traits et textes) */
+  render(ctx, W, H, s, forImage) {
+    const g = this.ensureLayout(), N = g.nodes;
+    ctx.fillStyle = '#F4F2EC'; ctx.fillRect(0, 0, W, H);
+    // en-tête et légende (dans l'image seulement : à l'écran, la barre du haut suffit)
+    let top = 16 * s, bottom = 16 * s;
+    const legend = g.lines.map((l) => ({ l, t: l.name }));
+    const legRows = [];
+    ctx.font = `500 ${12.5 * s}px ${FONT}`;
+    {
+      let row = [], x = 0; const maxW = W - 32 * s;
+      for (const it of legend) {
+        const w = 34 * s + Math.min(ctx.measureText(it.t).width, 230 * s) + 18 * s;
+        if (x + w > maxW && row.length) { legRows.push(row); row = []; x = 0; }
+        row.push({ ...it, w }); x += w;
+      }
+      if (row.length) legRows.push(row);
+    }
+    if (forImage) top = 78 * s;
+    bottom = legRows.length * 26 * s + 22 * s + (forImage ? 18 * s : 0);
+    // mise à l'échelle de la disposition
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const n of N) { minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x); miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); }
+    const padX = 70 * s, padY = 34 * s;
+    const aw = W - 2 * padX, ah = H - top - bottom - 2 * padY;
+    const k = Math.min(aw / Math.max(1e-9, maxx - minx), ah / Math.max(1e-9, maxy - miny));
+    const ox = padX + (aw - (maxx - minx) * k) / 2 - minx * k, oy = top + padY + (ah - (maxy - miny) * k) / 2 - miny * k;
+    const P = (n) => [Math.round((n.x * k + ox) * 2) / 2, Math.round((n.y * k + oy) * 2) / 2];
+    // polylignes des lignes (coudes identiques pour les lignes qui partagent un tronçon)
+    const LW = { metro: 7, ter: 6, bus: 4.5, boat: 4.5 };
+    const items = [];
+    for (const { l, seq } of g.seqs) {
+      const m = seq.length; if (m < 2) continue;
+      const pts = [P(N[seq[0]])];
+      const cnt = m - 1 + (l.loop && m > 2 ? 1 : 0);
+      for (let i = 0; i < cnt; i++) {
+        const a = seq[i], b = seq[(i + 1) % m];
+        const pa = P(N[a]), pb = P(N[b]);
+        let mid = a < b ? this.edgePts(pa, pb).slice(1, -1) : this.edgePts(pb, pa).slice(1, -1).reverse();
+        for (const p of mid) pts.push(p);
+        pts.push(pb);
+      }
+      items.push({ pts, g: l.id, w: LW[l.mode] * s, ord: MODE_ORDER.indexOf(l.mode) * 1e5 + l.num, l });
+    }
+    bundleOffsets(items, (p) => Math.round(p[0] * 4) + ',' + Math.round(p[1] * 4), 1.6 * s);
+    const opts = (it) => it.pts.map((p, i) => it.off ? [p[0] + it.off[2 * i], p[1] + it.off[2 * i + 1]] : p);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const it of items) {
+      const q = opts(it); it.q = q;
+      ctx.beginPath(); q.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      if (it.l.loop) ctx.closePath();
+      ctx.setLineDash([]); ctx.strokeStyle = '#F4F2EC'; ctx.lineWidth = it.w + 3 * s; ctx.stroke();
+      if (it.l.mode === 'boat') ctx.setLineDash([it.w * 2.2, it.w * 1]);
+      ctx.strokeStyle = it.l.color; ctx.lineWidth = it.w; ctx.stroke();
+      if (it.l.mode === 'ter') { ctx.setLineDash([it.w, it.w * 1.3]); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = it.w * 0.3; ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+    // stations
+    const boxes = [];
+    const segsAll = items.map((it) => it.q);
+    for (const n of N) {
+      const [x, y] = P(n), multi = n.lines.size > 1;
+      // largeur du faisceau à cet endroit
+      let half = 0;
+      for (const it of items) {
+        if (!it.off) continue;
+        it.pts.forEach((p, i) => { if (Math.abs(p[0] - x) < 0.6 && Math.abs(p[1] - y) < 0.6) half = Math.max(half, Math.hypot(it.off[2 * i], it.off[2 * i + 1]) + it.w / 2); });
+      }
+      const r = multi ? Math.max(7 * s, half + 3.5 * s) : 5 * s;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+      ctx.lineWidth = (multi ? 3 : 2.4) * s; ctx.strokeStyle = INK; ctx.stroke();
+      n.px = x; n.py = y; n.r = r;
+      boxes.push([x - r, y - r, 2 * r, 2 * r]);
+    }
+    // noms : position libre autour de la station, sans chevauchement
+    const fs = 12 * s;
+    ctx.font = `500 ${fs}px ${FONT}`; ctx.textBaseline = 'middle';
+    const hitSeg = (bx) => {
+      for (const q of segsAll) for (let i = 0; i < q.length - 1; i++) {
+        const [x1, y1] = q[i], [x2, y2] = q[i + 1];
+        for (let t = 0; t <= 1; t += 0.25) { const x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t; if (x > bx[0] && x < bx[0] + bx[2] && y > bx[1] && y < bx[1] + bx[3]) return true; }
+      }
+      return false;
+    };
+    const order = [...N].sort((a, b) => b.lines.size - a.lines.size);
+    for (const n of order) {
+      const t = n.name, tw = ctx.measureText(t).width, th = fs * 1.25, gap = n.r + 4 * s;
+      const cand = [[gap, -th / 2, 'left'], [-gap - tw, -th / 2, 'left'], [-tw / 2, -gap - th, 'left'], [-tw / 2, gap, 'left'],
+        [gap * 0.75, -gap * 0.75 - th, 'left'], [gap * 0.75, gap * 0.75, 'left'], [-gap * 0.75 - tw, -gap * 0.75 - th, 'left'], [-gap * 0.75 - tw, gap * 0.75, 'left']];
+      let pick = null;
+      for (const [dx, dy] of cand) {
+        const bx = [n.px + dx - 2, n.py + dy, tw + 4, th];
+        if (bx[0] < 2 || bx[0] + bx[2] > W - 2 || bx[1] < top - 10 * s || bx[1] + bx[3] > H - bottom + 6 * s) continue;
+        if (boxes.some((b) => bx[0] < b[0] + b[2] && bx[0] + bx[2] > b[0] && bx[1] < b[1] + b[3] && bx[1] + bx[3] > b[1])) continue;
+        if (hitSeg(bx)) continue;
+        pick = bx; break;
+      }
+      if (!pick) {
+        // dernier recours : on accepte de croiser une ligne, pas un autre nom
+        for (const [dx, dy] of cand) {
+          const bx = [n.px + dx - 2, n.py + dy, tw + 4, th];
+          if (bx[0] < 2 || bx[0] + bx[2] > W - 2) continue;
+          if (boxes.some((b) => bx[0] < b[0] + b[2] && bx[0] + bx[2] > b[0] && bx[1] < b[1] + b[3] && bx[1] + bx[3] > b[1])) continue;
+          pick = bx; break;
+        }
+      }
+      if (!pick) continue;
+      boxes.push(pick);
+      ctx.textAlign = 'left';
+      ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(244,242,236,.95)'; ctx.lineWidth = 4 * s;
+      ctx.font = `${n.lines.size > 1 ? 600 : 500} ${fs}px ${FONT}`;
+      ctx.strokeText(t, pick[0] + 2, pick[1] + th / 2 + 0.5);
+      ctx.fillStyle = INK; ctx.fillText(t, pick[0] + 2, pick[1] + th / 2 + 0.5);
+    }
+    // en-tête (image)
+    if (forImage) {
+      ctx.textAlign = 'left'; ctx.fillStyle = INK;
+      ctx.font = `600 ${30 * s}px ${FONT}`; ctx.fillText(G.s.city.nom, 24 * s, 34 * s);
+      ctx.font = `400 ${15 * s}px ${FONT}`; ctx.fillStyle = '#5b5b5b';
+      const nb = g.lines.length;
+      ctx.fillText('Plan du réseau · ' + nb + ' ligne' + (nb > 1 ? 's' : '') + ' · ' + N.length + ' stations · ' + Time.label(G.s.min).day, 24 * s, 60 * s);
+    }
+    // légende
+    let ly = H - bottom + 16 * s;
+    ctx.strokeStyle = 'rgba(35,35,35,.15)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(16 * s, ly - 6 * s); ctx.lineTo(W - 16 * s, ly - 6 * s); ctx.stroke();
+    for (const row of legRows) {
+      let x = 16 * s; const y = ly + 10 * s;
+      for (const it of row) {
+        const l = it.l, lab = Lines.label(l);
+        ctx.font = `600 ${11.5 * s}px ${FONT}`;
+        const bw = Math.max(24 * s, ctx.measureText(lab).width + 12 * s);
+        Render.rr(ctx, x, y - 10 * s, bw, 20 * s, l.mode === 'metro' ? 10 * s : 4 * s);
+        ctx.fillStyle = l.color; ctx.fill();
+        ctx.fillStyle = inkOn(l.color); ctx.textAlign = 'center'; ctx.fillText(lab, x + bw / 2, y + 0.5);
+        ctx.textAlign = 'left'; ctx.fillStyle = INK; ctx.font = `500 ${12.5 * s}px ${FONT}`;
+        let t = it.t; while (ctx.measureText(t).width > 230 * s && t.length > 4) t = t.slice(0, -2);
+        if (t !== it.t) t += '…';
+        ctx.fillText(t, x + bw + 6 * s, y + 0.5);
+        x += it.w;
+      }
+      ly += 26 * s;
+    }
+    if (forImage) {
+      ctx.font = `400 ${11 * s}px ${FONT}`; ctx.fillStyle = '#8a8a8a'; ctx.textAlign = 'right';
+      ctx.fillText('Correspondance', W - 16 * s, H - 12 * s);
+    }
+  },
+
+  /** image haute définition : partage (Android) ou téléchargement */
+  async share() {
+    const g = this.ensureLayout();
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const n of g.nodes) { minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x); miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); }
+    const ar = clamp((maxy - miny) / Math.max(1e-9, maxx - minx), 0.55, 1.6);
+    const s = 2, W = 1800, H = Math.round(W * ar * 0.92 + 200 * s + Math.ceil(g.lines.length / 3) * 26 * s);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    this.render(cv.getContext('2d'), W, H, s, true);
+    const name = 'plan-' + (G.s.city.nom || 'reseau').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-') + '.png';
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+    if (!blob) { UI.toast('Image impossible à générer.', 'bad'); return; }
+    const file = new File([blob], name, { type: 'image/png' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Plan du réseau · ' + G.s.city.nom });
+        return;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    UI.toast('Image du plan enregistrée dans vos téléchargements.', 'ok');
   },
 };
 
@@ -3736,13 +4598,17 @@ const UI = {
     for (const ln of G.s.lines) ln.stops.forEach((s2, k2) => { if (dist(s2.mx, s2.my, st.mx, st.my) < 60) near.push([ln, k2]); });
     const rows = near.map(([ln, k2]) => {
       const n = ln.stops.length;
-      let w = 0; for (let j = 0; j < n; j++) w += ln.Wf[k2 * n + j] + ln.Wb[k2 * n + j];
+      let w = 0; for (let j = 0; j < n; j++) w += ln.Wf[k2 * n + j] + ln.Wb[k2 * n + j] + ln.Xf[k2 * n + j] + ln.Xb[k2 * n + j] + ln.Rf[k2 * n + j] + ln.Rb[k2 * n + j];
       const hw = ln.active ? '~' + Math.max(1, Math.round(ln.headway)) + ' min' : ln.status === 'construction' ? 'en travaux' : 'hors service';
       return `<button class="lrow" data-act="openLine" data-arg="${ln.id}">${badgeFull(ln)}<span class="lrow-t">${esc(ln.name)}</span><span class="lrow-v"><b>${fmtInt(w)}</b> en attente<br><small>passage ${hw}</small></span></button>`;
     }).join('');
     const z = G.w.zoneAt(st.mx, st.my);
+    const seen = new Set(near.map(([ln]) => ln.id));
+    const xs = [];
+    for (const [ln, k2] of near) for (const x of Transfers.at(ln, k2)) if (!seen.has(x.line.id)) { seen.add(x.line.id); xs.push(x); }
+    const xrows = xs.map((x) => `<button class="lrow" data-act="openLine" data-arg="${x.line.id}">${badgeFull(x.line)}<span class="lrow-t">${esc(x.line.stops[x.k].name)}<small>correspondance · ${Math.max(1, Math.round(x.walk / 70))} min à pied (${Math.round(x.walk)} m)</small></span></button>`).join('');
     this.card(`<div class="card-h"><div class="plate">${esc(st.name)}</div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
-      ${z ? `<p class="sub">${esc(z.name)} · ${esc(z.commune)}</p>` : ''}${rows}`);
+      ${z ? `<p class="sub">${esc(z.name)} · ${esc(z.commune)}</p>` : ''}${rows}${xrows ? `<div class="sec">Correspondances</div>${xrows}` : ''}`);
   },
   showZone(z) {
     G.ui.selZone = z; G.ui.selVeh = null; G.ui.cardType = 'zone';
@@ -3750,7 +4616,7 @@ const UI = {
     const buyable = G.w.purchasable(z);
     const t = IRIS_TYPES[z.type] || 'Zone';
     this.card(`<div class="card-h"><div class="card-t"><b>${esc(z.name)}</b><small>${esc(z.commune)} · quartier ${esc(t.toLowerCase())}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
-      <div class="kv"><span>Habitants (estim.)</span><b>${fmtInt(z.pop)}</b></div>
+      <div class="kv"><span>Habitants ${z.popReal ? '(' + esc(z.popReal) + ')' : '(estim.)'}</span><b>${fmtInt(z.pop)}</b></div>
       <div class="kv"><span>Emplois (estim.)</span><b>${fmtInt(z.jobs)}</b></div>
       <div class="kv"><span>Densité</span><b>${fmtInt(z.density)} hab./km²</b></div>
       <div class="kv"><span>Surface</span><b>${z.areaKm2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} km²</b></div>
@@ -3864,7 +4730,7 @@ const SHEETS = {
         return `<button class="lrow" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="lrow-t">${esc(l.name)}<small>${l.veh.length} véhicule${l.veh.length > 1 ? 's' : ''} · ${l.stops.length} arrêts · ${fmtKm(l.path.L)} ${st}</small></span><span class="lrow-v"><b>${fmtInt(t.pax)}</b> voy.<br><small>${fmtPct(t.fill)} rempli</small></span></button>`;
       }).join('');
     }).join('');
-    return { title: 'Réseau', html: rows + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
+    return { title: 'Réseau', html: `<button class="btn wide" data-act="openPlan">${icon('target')} Plan schématique du réseau</button>` + rows + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
   },
 
   line(id) {
@@ -3886,6 +4752,12 @@ const SHEETS = {
     const laneCost = Math.round(laneKm * 90000 * G.s.costMul / 1000) * 1000;
     const sigCost = Math.round(l.stops.length * 25000 * G.s.costMul / 1000) * 1000;
     const status = l.status === 'construction' ? `<p class="note warn">Chantier en cours : ouverture le ${Time.label(l.buildEnd).day} à ${Time.label(l.buildEnd).time}.</p>` : Events.halted(l) ? '<p class="note bad">Ligne interrompue (événement en cours).</p>' : '';
+    const xc = []; l.stops.forEach((_, k) => { for (const x of Transfers.at(l, k)) xc.push(x); });
+    const svcRows = SERVICE_KEYS.filter(([k]) => k !== 'night' || l.night).map(([k, lab, sub]) => {
+      const cur = l.svc[k] ?? 1, nv = Math.max(1, Math.round(l.veh.length * cur));
+      return `<div class="vrow"><div><b>${lab}</b><small>${sub} · ${l.veh.length ? nv + ' véhicule' + (nv > 1 ? 's' : '') : '—'}</small></div><select data-change="svc" data-arg="${l.id}|${k}">${SERVICE_STEPS.map((v) => `<option value="${v}" ${Math.abs(v - cur) < 0.01 ? 'selected' : ''}>${Math.round(v * 100)} %</option>`).join('')}</select></div>`;
+    }).join('');
+    const presets = Object.entries(SERVICE_PRESETS).map(([k, p]) => `<button class="${l.svcPreset === k ? 'on' : ''}" data-act="svcPreset" data-arg="${l.id}|${k}">${p.label}</button>`).join('');
     const swatches = LINE_COLORS.map((c) => `<button class="sw ${c === l.color ? 'on' : ''}" style="background:${c}" data-act="lineColor" data-arg="${l.id}|${c}" aria-label="Couleur ${c}"></button>`).join('');
     const html = `${status}
       <div class="stops">${l.stops.map((s2, i) => `<span>${i ? '<i></i>' : ''}${esc(s2.name)}</span>`).join('')}</div>
@@ -3896,12 +4768,15 @@ const SHEETS = {
         <div><small>Mécontents</small><b>${fmtInt(t.mec)}</b></div>
       </div>
       ${statLine('Passage', l.veh.length ? 'toutes les ~' + Math.max(1, Math.round(l.headway)) + ' min' : '—')}
+      ${statLine('En service', l.active ? Lines.running(l) + ' / ' + l.veh.length + ' véhicules · ' + SERVICE_KEYS.find((k) => k[0] === Lines.serviceKey(G.s.min))[1].toLowerCase() : 'au dépôt')}
       ${statLine('Tour complet', l.cycleMin ? Math.round(l.cycleMin) + ' min' : '—')}
       ${statLine('Vitesse commerciale', Math.round(l.speedAvg || 0) + ' km/h')}
       ${statLine('Capacité totale', fmtInt(cap) + ' places')}
       ${statLine('Population desservie', fmtInt(l.catchPop || 0))}
       ${l.mode === 'bus' ? statLine('Limitations sur le parcours', limRange(l)) : ''}
       ${l.mode === 'bus' ? statLine('Feux · stops · cédez-le-passage', ['sig', 'stop', 'yield'].map((t) => (l.ctl || []).filter((c) => c.t === t).length).join(' · ')) : ''}
+      ${xc.length ? statLine('Correspondances', xc.map((x) => Lines.label(x.line)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')) : ''}
+      ${xc.length ? statLine('Voyageurs en correspondance', fmtInt(l.today.xin || 0) + ' arrivés · ' + fmtInt(l.today.xout || 0) + ' partis') : ''}
       ${y ? statLine('Hier', fmtInt(y.pax) + ' voy. · ' + fmtEur(y.fares + y.ads - y.ops)) : ''}
       ${section('Véhicules')}${vrows}
       <details class="cat"><summary>${icon('plus')} Acheter un véhicule</summary>${cat}</details>
@@ -3910,11 +4785,15 @@ const SHEETS = {
       <div class="vrow"><div><b>Premier départ</b></div><select data-change="hStart" data-arg="${l.id}" ${l.night ? 'disabled' : ''}>${hourOpts([240, 270, 300, 330, 360, 390, 420], l.hours.start)}</select></div>
       <div class="vrow"><div><b>Fin de service</b></div><select data-change="hEnd" data-arg="${l.id}" ${l.night ? 'disabled' : ''}>${hourOpts([1260, 1320, 1380, 0, 30, 60, 120], l.hours.end)}</select></div>
       <label class="tgl"><input type="checkbox" data-change="night" data-arg="${l.id}" ${l.night ? 'checked' : ''}><span>Service de nuit (24 h/24)</span></label>
+      ${section('Grille horaire')}
+      <p class="sub">Part de la flotte en service selon la période. Les véhicules en trop rentrent au dépôt depuis le terminus (sans coût d’exploitation) et ressortent pour les renforts.</p>
+      <div class="seg wrap">${presets}${l.svcPreset === 'perso' ? '<button class="on">Personnalisée</button>' : ''}</div>${svcRows}
       ${l.mode === 'bus' ? `${section('Aménagements')}
         <div class="vrow"><div><b>Couloirs de bus</b><small>${laneKm.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km sur axes principaux · les bus évitent 75 % des bouchons</small></div>${l.busLane ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="busLane" data-arg="${l.id}">${fmtEur(laneCost)}</button>`}</div>
         <div class="vrow"><div><b>Priorité aux feux</b><small>+10 % de vitesse</small></div>${l.signal ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="signal" data-arg="${l.id}">${fmtEur(sigCost)}</button>`}</div>` : ''}
       ${section('Couleur')}<div class="swatches">${swatches}</div>
       ${section('Actions')}
+      <button class="btn wide" data-act="editLine" data-arg="${l.id}">${icon('plus')} Modifier les arrêts (ajouter, déplacer, retirer)</button>
       ${l.mode !== 'metro' ? `<button class="btn wide" data-act="reroute" data-arg="${l.id}">${icon('undo')} Recalculer l’itinéraire (sens de circulation)</button>` : ''}
       <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
     return { title: `${badgeFull(l)}<span>${esc(l.name)}</span>`, html };
@@ -3995,6 +4874,8 @@ const SHEETS = {
       <div><small>Habitants du territoire</small><b>${fmtInt(owned.reduce((a, z) => a + z.pop, 0))}</b></div>
       <div><small>Voitures en moins</small><b>${fmtPct(s.modalShift || 0)}</b></div>
       <div><small>Recette / voyageur</small><b>${t.pax ? (t.fares / t.pax).toFixed(2).replace('.', ',') + ' €' : '—'}</b></div>
+      <div><small>Correspondances aujourd’hui</small><b>${fmtInt(t.xfer || 0)}</b></div>
+      <div><small>Pôles d’échange</small><b>${Transfers.hubs.length}</b></div>
     </div>
     ${section('Voyageurs des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: x.pax, l: Time.dayLabel(x.date) })), true)}
     <label class="tgl"><input type="checkbox" data-change="statsAdv" ${u.statsAdv ? 'checked' : ''}><span>Statistiques détaillées par ligne</span></label>`;
@@ -4103,6 +4984,7 @@ const Build = {
   },
   bar() {
     const b = this.b; if (!b) return;
+    if (b.edit) return this.editBar();
     const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
     const cost = Lines.costOf(b.mode, b.stops, path);
     $('#buildbar').innerHTML = `<div class="bb-t">${pict(b.mode)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}${b.loop ? ' · circulaire' : ''}</b><small>Infrastructure : ${fmtEur(cost)}</small></div></div>
@@ -4134,6 +5016,7 @@ const Build = {
     return n.trim();
   },
   tap(mx, my) {
+    if (this.b.edit) return this.editTap(mx, my);
     const b = this.b, w = G.w, mode = b.mode;
     let st = null;
     // reprise de la 1re station : ligne circulaire
@@ -4194,6 +5077,190 @@ const Build = {
     if (navigator.vibrate) navigator.vibrate(12);
     this.bar();
   },
+  /* ---- modification d'une ligne existante : ajouter, déplacer, retirer des arrêts ---- */
+  startEdit(line) {
+    const net = Lines.netFor(line.mode);
+    if (line.mode !== 'metro' && (!net || !net.nE)) { UI.toast('Le réseau est encore en chargement, patientez quelques secondes.', 'warn'); return; }
+    UI.close(); UI.closeCard(); if (RailBuild.b) RailBuild.cancel();
+    const stops = line.stops.map((st) => this.editStop(line.mode, st));
+    if (stops.some((x) => !x)) { UI.toast('Réseau pas encore chargé autour de tous les arrêts. Réessayez dans un instant.', 'warn'); return; }
+    const key = (st) => Math.round(st.mx * G.mpu) + ',' + Math.round(st.my * G.mpu);
+    this.b = { mode: line.mode, stops, segs: [], loop: line.loop, color: line.color, edit: line, tool: 'add', sel: -1, hist: [], orig: new Set(line.stops.map(key)), oldL: line.path.L, oldN: line.stops.length };
+    if (!this.reseg()) { this.b = null; UI.toast('Impossible de recalculer le tracé actuel de cette ligne.', 'warn'); return; }
+    $('#buildbar').hidden = false; $('#buildbar').classList.add('edit'); $('#nav').classList.add('dim');
+    this.bar();
+    ACT.centerLine(line.id);
+    UI.toast('Ajouter : touchez la carte, l’arrêt s’insère au meilleur endroit. Déplacer ou Retirer : touchez un arrêt.', 'info');
+  },
+  editStop(mode, st) {
+    const net = Lines.netFor(mode);
+    if (mode === 'metro') return { ...st };
+    let i = st.nid != null && net.idx.has(st.nid) ? net.idx.get(st.nid) : -1;
+    if (i < 0) {
+      const c = net.nearestList(st.mx, st.my, mode === 'bus' ? 250 : 450, mode === 'bus' ? (n) => net.busNode(n) : null, 1);
+      i = c.length ? c[0] : -1;
+    }
+    if (i < 0) return null;
+    return { ...st, node: i, mx: net.x[i], my: net.y[i], nid: net.ids[i] };
+  },
+  /** nouvel arrêt à l'endroit touché (sans contrainte d'ordre : l'insertion décide) */
+  makeStop(mx, my) {
+    const b = this.b, w = G.w, mode = b.mode;
+    let st = null;
+    if (mode === 'metro') {
+      const ex = this.allStops('metro').find((s) => dist(s.mx, s.my, mx, my) < 90);
+      st = ex ? { mx: ex.mx, my: ex.my, name: ex.name, shared: true } : { mx, my };
+    } else if (mode === 'bus') {
+      const ex = this.allStops('bus').find((s) => dist(s.mx, s.my, mx, my) < 35);
+      const net = w.road;
+      const cands = ex && ex.nid != null && net.idx.has(ex.nid) ? [net.idx.get(ex.nid)] : net.nearestList(mx, my, 180, (n) => net.busNode(n), 8);
+      if (!cands.length) { UI.toast('Aucune rue à proximité : touchez plus près d’une route.', 'warn'); return null; }
+      const i = cands[0];
+      st = { mx: net.x[i], my: net.y[i], node: i, nid: net.ids[i], name: ex ? ex.name : null, shared: !!ex, cands };
+    } else if (mode === 'ter') {
+      const gares = w.pois.filter((p) => p.kind === 'station' && p.train && dist(p.mx, p.my, mx, my) < 700).sort((a, c) => dist(a.mx, a.my, mx, my) - dist(c.mx, c.my, mx, my));
+      if (!gares.length) { UI.toast('Pas de gare ici. Touchez près d’une gare existante.', 'warn'); return null; }
+      const g = gares[0], i = w.rail.nearest(g.mx, g.my, 450);
+      if (i < 0) { UI.toast('Cette gare n’est reliée à aucune voie chargée.', 'warn'); return null; }
+      st = { mx: w.rail.x[i], my: w.rail.y[i], node: i, nid: w.rail.ids[i], name: g.name || null };
+    } else {
+      const i = w.water.nearest(mx, my, 300);
+      if (i < 0) { UI.toast('Touchez directement le fleuve ou le canal.', 'warn'); return null; }
+      st = { mx: w.water.x[i], my: w.water.y[i], node: i, nid: w.water.ids[i] };
+    }
+    const z = w.zoneAt(st.mx, st.my);
+    if (!z || !z.owned) { UI.toast('Cet emplacement est hors de votre zone d’exploitation.', 'warn'); return null; }
+    if (b.stops.some((o, k) => k !== b.sel && dist(o.mx, o.my, st.mx, st.my) < 60)) { UI.toast('Trop près d’un arrêt existant de la ligne.', 'warn'); return null; }
+    if (!st.name) st.name = this.stopName(st.mx, st.my, mode);
+    else { const used = new Set(b.stops.map((s) => s.name)); let n = st.name, k = 2; while (used.has(n)) n = st.name + ' ' + k++; st.name = n; }
+    return st;
+  },
+  segFor(A, B) {
+    const mode = this.b.mode;
+    if (mode === 'bus') {
+      const net = G.w.road;
+      for (const c of (B.cands && B.cands.length ? B.cands : [B.node])) {
+        const sg = Lines.segNodes(net, A.node, c);
+        if (Lines.okRoute(sg, net, A.node, c)) {
+          if (c !== B.node) { B.node = c; B.mx = net.x[c]; B.my = net.y[c]; B.nid = net.ids[c]; }
+          return sg;
+        }
+      }
+      return null;
+    }
+    const sg = Lines.segment(mode, A, B);
+    if (sg && sg.pts.length < 2) sg.pts.push([B.mx, B.my]);
+    return sg;
+  },
+  reseg() {
+    const b = this.b, n = b.stops.length, segs = [];
+    for (let k = 0; k < n - 1 + (b.loop ? 1 : 0); k++) {
+      const sg = this.segFor(b.stops[k], b.stops[(k + 1) % n]);
+      if (!sg) return false;
+      segs.push(sg);
+    }
+    b.segs = segs;
+    return true;
+  },
+  snap() { const b = this.b; b.hist.push(b.stops.map((st) => ({ ...st }))); if (b.hist.length > 30) b.hist.shift(); },
+  editTap(mx, my) {
+    const b = this.b, o = Render.origin();
+    let hitK = -1, bd = 26 * 26;
+    b.stops.forEach((st, k) => { const d = ((st.mx - mx) * o.k) ** 2 + ((st.my - my) * o.k) ** 2; if (d < bd) { bd = d; hitK = k; } });
+    const fail = (msg) => { b.stops = b.hist.pop(); this.reseg(); UI.toast(msg, 'warn'); };
+    if (b.tool === 'remove') {
+      if (hitK < 0) { UI.toast('Touchez un arrêt de la ligne pour le retirer.', 'info'); return; }
+      const min = b.loop ? 3 : 2;
+      if (b.stops.length <= min) { UI.toast('Une ligne garde au moins ' + min + ' arrêts.', 'warn'); return; }
+      this.snap(); b.stops.splice(hitK, 1);
+      if (!this.reseg()) return fail('Sans cet arrêt, aucun itinéraire n’est possible.');
+    } else if (b.tool === 'move') {
+      if (b.sel < 0 || hitK === b.sel) {
+        if (hitK < 0) { UI.toast('Touchez d’abord l’arrêt à déplacer.', 'info'); return; }
+        b.sel = hitK === b.sel ? -1 : hitK; this.bar();
+        if (b.sel >= 0) UI.toast('Touchez maintenant le nouvel emplacement de « ' + b.stops[b.sel].name + ' ».', 'info');
+        return;
+      }
+      const st = this.makeStop(mx, my); if (!st) return;
+      this.snap(); b.stops[b.sel] = st;
+      if (!this.reseg()) return fail('Pas d’itinéraire possible avec cet emplacement.');
+      b.sel = -1;
+    } else {
+      if (hitK >= 0) { UI.toast('Cet arrêt est déjà sur la ligne : choisissez « Déplacer » ou « Retirer ».', 'info'); return; }
+      const st = this.makeStop(mx, my); if (!st) return;
+      // insertion là où le détour est le plus court (ou en prolongement d'un terminus)
+      const S = b.stops, n = S.length, d = (a, c) => dist(a.mx, a.my, c.mx, c.my);
+      let pos = n, best = Infinity;
+      if (!b.loop) { best = d(st, S[n - 1]); const c0 = d(st, S[0]); if (c0 < best) { best = c0; pos = 0; } }
+      for (let k = 0; k < n - 1 + (b.loop ? 1 : 0); k++) {
+        const A = S[k], B = S[(k + 1) % n], c = d(A, st) + d(st, B) - d(A, B);
+        if (c < best) { best = c; pos = k + 1; }
+      }
+      this.snap(); S.splice(pos, 0, st);
+      if (!this.reseg()) return fail('Pas d’itinéraire possible jusqu’à cet arrêt.');
+    }
+    if (navigator.vibrate) navigator.vibrate(12);
+    this.bar(); Render.dirty = true;
+  },
+  editCost(path) {
+    const b = this.b, m = G.s.costMul;
+    const key = (st) => Math.round(st.mx * G.mpu) + ',' + Math.round(st.my * G.mpu);
+    const per = { bus: 8000, metro: 350000, ter: 40000, boat: 60000 }[b.mode];
+    let c = 0;
+    for (const st of b.stops) if (!b.orig.has(key(st))) c += st.shared ? per * 0.35 : per;
+    if (b.mode === 'metro' && path) c += Math.max(0, path.L - b.oldL) / 1000 * 0.6e6;
+    return Math.round(c * m / 1000) * 1000;
+  },
+  editBar() {
+    const b = this.b;
+    const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
+    const cost = this.editCost(path);
+    const tools = [['add', 'Ajouter'], ['move', 'Déplacer'], ['remove', 'Retirer']].map(([k, t]) => `<button class="${b.tool === k ? 'on' : ''}" data-act="bTool" data-arg="${k}">${t}</button>`).join('');
+    $('#buildbar').innerHTML = `<div class="seg bb-tools">${tools}</div>
+      <div class="bb-t">${badge(b.edit)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}</b><small>${b.tool === 'move' && b.sel >= 0 ? 'Nouvel emplacement de ' + esc(b.stops[b.sel].name) : 'Travaux : ' + fmtEur(cost)}</small></div></div>
+      <div class="bb-a"><button class="icon-b" data-act="bUndo" aria-label="Annuler la dernière modification" ${b.hist.length ? '' : 'disabled'}>${icon('undo')}</button><button class="icon-b" data-act="bCancel" aria-label="Abandonner">${icon('close')}</button><button class="btn primary sm" data-act="bOk">${icon('check')} Valider</button></div>`;
+  },
+  confirmEdit() {
+    const b = this.b, line = b.edit;
+    const path = Lines.assemble(b.stops, b.segs, b.loop);
+    let pathB = null;
+    if (b.mode === 'bus' && !b.loop) {
+      const bk = Lines.buildBack('bus', b.stops);
+      if (!bk) { UI.toast('Impossible de trouver un trajet retour respectant les sens de circulation.', 'warn'); return; }
+      const net = G.w.road;
+      pathB = bk.path;
+      b.stops.forEach((st, k) => { const n = bk.back[k]; st.bmx = net.x[n]; st.bmy = net.y[n]; st.bnid = net.ids[n]; });
+    }
+    const cost = this.editCost(path);
+    G.ui.editPend = { path, pathB, cost };
+    const key = (st) => Math.round(st.mx * G.mpu) + ',' + Math.round(st.my * G.mpu);
+    const now = new Set(b.stops.map(key));
+    const added = b.stops.filter((st) => !b.orig.has(key(st))).length, removed = [...b.orig].filter((k) => !now.has(k)).length;
+    UI.modal(`<div class="plate big">${badgeFull(line)} Modifier la ligne</div>
+      <p class="sub">${esc(b.stops[0].name)} → ${esc(b.loop ? b.stops[0].name : b.stops[b.stops.length - 1].name)}</p>
+      <table class="tbl mini"><tbody>
+        <tr><th>Arrêts</th><td>${b.oldN} → ${b.stops.length}</td></tr>
+        <tr><th>Nouveaux · supprimés</th><td>${added} · ${removed}</td></tr>
+        <tr><th>Longueur</th><td>${fmtKm(b.oldL)} → ${fmtKm(path.L)}</td></tr>
+        <tr class="tot"><th>Travaux</th><td>${Eco.free() ? 'gratuit' : fmtEur(cost)}</td></tr>
+      </tbody></table>
+      <p class="note">Les véhicules, les tarifs, la grille horaire et l’historique de la ligne sont conservés.</p>
+      <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bEditApply" ${Eco.canAfford(cost) ? '' : 'disabled'}>Appliquer</button></div>`);
+  },
+  applyEdit() {
+    const b = this.b, q = G.ui.editPend; if (!b || !q) return;
+    const line = b.edit;
+    if (q.cost > 0 && !Eco.spend(q.cost, 'capex')) return;
+    Lines.applyEdit(line, b.stops, q.path, q.pathB);
+    Transfers.rebuild();
+    Render.lineBox(line); Sim.lineQuality(line);
+    Events.log('Ligne ' + Lines.label(line) + ' modifiée : ' + line.name + '.', 'ok');
+    UI.closeModal(); this.cancel();
+    UI.toast('Ligne ' + Lines.label(line) + ' modifiée.', 'ok');
+    Render.dirty = true; UI.refreshTop(); Save.auto();
+    UI.open('line', line.id);
+  },
+
   closeLoop() {
     const b = this.b;
     const f = b.stops[0], last = b.stops[b.stops.length - 1];
@@ -4204,15 +5271,17 @@ const Build = {
   },
   undo() {
     const b = this.b; if (!b) return;
+    if (b.edit) { if (b.hist.length) { b.stops = b.hist.pop(); b.sel = -1; this.reseg(); this.bar(); Render.dirty = true; } return; }
     if (b.loop) { b.loop = false; b.segs.pop(); }
     else if (b.stops.length) { b.stops.pop(); if (b.segs.length >= b.stops.length && b.segs.length) b.segs.pop(); }
     this.bar();
   },
   cancel() {
-    this.b = null; $('#buildbar').hidden = true; $('#nav').classList.remove('dim');
+    this.b = null; $('#buildbar').hidden = true; $('#buildbar').classList.remove('edit'); $('#nav').classList.remove('dim'); Render.dirty = true;
   },
   confirm() {
     const b = this.b; if (!b || b.stops.length < 2) return;
+    if (b.edit) return this.confirmEdit();
     const path = Lines.assemble(b.stops, b.segs, b.loop);
     b.pathB = null;
     if (b.mode === 'bus' && !b.loop) {
@@ -4253,6 +5322,7 @@ const Build = {
     if (!Eco.spend(total, 'capex')) return;
     b.path = q.path;
     const line = Lines.create(b, { model: q.model, count: q.count, color: q.color });
+    Transfers.rebuild();
     Render.lineBox(line);
     Sim.lineQuality(line);
     Events.log('Nouvelle ligne ' + MODES[line.mode].label.toLowerCase() + ' ' + Lines.label(line) + ' : ' + line.name + '.', 'ok');
@@ -4267,7 +5337,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8.1';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -4333,6 +5403,7 @@ const ACT = {
   bColor(c) { G.ui.bSel.color = c; Build.b.color = c; Build.dialog(); },
   bCount(d) { G.ui.bSel.count = clamp(G.ui.bSel.count + +d, 1, 40); Build.dialog(); },
   bBuild() { Build.build(); },
+  bEditApply() { Build.applyEdit(); },
   buyVeh(arg) {
     const [id, m] = arg.split('|'); const l = findLine(id); if (!l) return;
     if (Lines.addVehicle(l, m)) { UI.toast(MODEL[m].name + ' ajouté à la ligne ' + Lines.label(l) + '.', 'ok'); Sim.lineQuality(l); }
@@ -4372,10 +5443,22 @@ const ACT = {
     const b = l.bbox;
     G.map.fitBounds([[myToLat(b.maxy), mxToLon(b.minx)], [myToLat(b.miny), mxToLon(b.maxx)]], { padding: [40, 40], paddingBottomRight: [20, Math.round(window.innerHeight * 0.45)] });
   },
+  editLine(id) { const l = findLine(id); if (l) Build.startEdit(l); },
+  bTool(t) { if (Build.b) { Build.b.tool = t; Build.b.sel = -1; Build.bar(); Render.dirty = true; } },
+  svcPreset(arg) {
+    const [id, k] = arg.split('|'); const l = findLine(id); if (!l || !SERVICE_PRESETS[k]) return;
+    l.svc = { ...SERVICE_PRESETS[k].v }; l.svcPreset = k;
+    if (l.active) Lines.adjustFleet(l, G.s.min);
+    Sim.lineQuality(l); UI.refreshSheet();
+  },
+  openPlan() { Plan.open(); },
+  planClose() { Plan.close(); },
+  planShare() { Plan.share(); },
+  planFilter(f) { Plan.setFilter(f); },
   delLine(id, el) {
     const l = findLine(id); if (!l) return;
     if (!el.dataset.confirm) { el.dataset.confirm = '1'; el.textContent = 'Confirmer : supprimer'; return; }
-    Lines.remove(l); UI.close(); Render.dirty = true;
+    Lines.remove(l); Transfers.rebuild(); UI.close(); Render.dirty = true;
     UI.toast('Ligne supprimée. Véhicules revendus.', 'info');
   },
   buyZone(code) {
@@ -4443,6 +5526,14 @@ const CHG = {
   hStart(v, el) { const l = findLine(el.dataset.arg); if (l) { l.hours.start = +v; } },
   hEnd(v, el) { const l = findLine(el.dataset.arg); if (l) { l.hours.end = +v; } },
   night(_, el) { const l = findLine(el.dataset.arg); if (l) { l.night = el.checked; UI.refreshSheet(); } },
+  svc(v, el) {
+    const [id, k] = el.dataset.arg.split('|'); const l = findLine(id); if (!l) return;
+    l.svc[k] = +v;
+    const pk = Object.entries(SERVICE_PRESETS).find(([, p]) => SERVICE_KEYS.every(([kk]) => Math.abs((p.v[kk] ?? 1) - (l.svc[kk] ?? 1)) < 0.01));
+    l.svcPreset = pk ? pk[0] : 'perso';
+    if (l.active) Lines.adjustFleet(l, G.s.min);
+    Sim.lineQuality(l); UI.refreshSheet();
+  },
   setting(_, el) {
     G.s.settings[el.dataset.arg] = el.checked; Render.dirty = true;
     if (el.dataset.arg === 'realWeather') { if (el.checked) RealWeather.refresh(true); else { G.s.wxReal = null; UI.refreshTop(); } }
@@ -4654,6 +5745,7 @@ const Game = {
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     Rail.inject();
     for (const l of G.s.lines) { Lines.prepare(l); Render.lineBox(l); }
+    Transfers.rebuild();
     G.ready = true;
     Render.resize(); Render.dirty = true;
     UI.refreshTop(); UI.updateTint(); UI.refreshInfoBadge();
@@ -4661,7 +5753,9 @@ const Game = {
     for (const l of G.s.lines) Sim.lineQuality(l);
     if (isNew) setTimeout(() => UI.toast('Touchez « Construire » pour créer votre première ligne de bus.', 'info'), 1200);
     Loader.ensureAround().then(() => {
-      for (const l of G.s.lines) { Lines.resolveEdges(l); if (!l.catchPop) Lines.computeOD(l); Sim.lineQuality(l); }
+      for (const l of G.s.lines) { Lines.resolveEdges(l); if (!l.catchPop) Lines.computeOD(l); }
+      Transfers.rebuild();
+      for (const l of G.s.lines) Sim.lineQuality(l);
     });
   },
 

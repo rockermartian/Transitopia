@@ -118,6 +118,7 @@ small{font-size:12.5px;color:var(--muted)}
 .speed button{width:35px;display:grid;place-items:center;border-radius:19px;font:600 14px/1 var(--f-display)}
 .speed button .ic{width:18px;height:18px}
 #btnSpeed{background:var(--ink);color:#fff}
+#btnSpeed.rt{background:var(--bad);font-size:12px;width:40px}
 
 #chip{position:absolute;z-index:880;top:calc(62px + var(--sat));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:var(--panel);box-shadow:var(--shadow);padding:6px 14px;border-radius:20px;font-size:13px;white-space:nowrap;color:var(--ink-2)}
 .spin{width:14px;height:14px;border:2.5px solid var(--panel-3);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}
@@ -1881,17 +1882,19 @@ const Events = {
   daily() {
     const s = G.s, m = s.min, month = Time.month(m);
     // météo du jour
-    const r = Math.random();
-    let w = 'sun';
-    const winter = month === 11 || month <= 1, summer = month >= 5 && month <= 7;
-    if (winter && r < 0.1) w = 'snow';
-    else if (summer && r < 0.15) w = 'heat';
-    else if (r < 0.04) w = 'storm';
-    else if (r < 0.3) w = 'rain';
-    s.weather = w;
-    if (w !== 'sun') this.log('Météo : ' + EV_INFO[w].title.toLowerCase() + ' aujourd’hui.', w);
-    if (w === 'storm' && s.lines.some((l) => l.mode === 'boat')) UI.toast('Tempête : les navettes fluviales restent à quai aujourd’hui.', 'warn');
-    if (w === 'snow') UI.toast('Neige : les bus roulent au ralenti.', 'warn');
+    if (!RealWeather.active()) {
+      const r = Math.random();
+      let w = 'sun';
+      const winter = month === 11 || month <= 1, summer = month >= 5 && month <= 7;
+      if (winter && r < 0.1) w = 'snow';
+      else if (summer && r < 0.15) w = 'heat';
+      else if (r < 0.04) w = 'storm';
+      else if (r < 0.3) w = 'rain';
+      s.weather = w;
+      if (w !== 'sun') this.log('Météo : ' + EV_INFO[w].title.toLowerCase() + ' aujourd’hui.', w);
+      if (w === 'storm' && s.lines.some((l) => l.mode === 'boat')) UI.toast('Tempête : les navettes fluviales restent à quai aujourd’hui.', 'warn');
+      if (w === 'snow') UI.toast('Neige : les bus roulent au ralenti.', 'warn');
+    }
     // purge
     s.events = s.events.filter((e) => e.end > m - 1440);
     const modes = new Set(s.lines.map((l) => l.mode));
@@ -2319,9 +2322,10 @@ const Sim = {
   },
 
   /** progression pendant l'absence (mode « idle ») */
-  offline(realSec) {
+  offline(realSec, gameMinForced) {
     const s = G.s;
-    const gameMin = Math.min(realSec, 5 * 1440); // 1 min de jeu par seconde réelle, plafonné à 5 jours
+    // 1 min de jeu par seconde réelle (ou durée réelle en mode temps réel), plafonné à 5 jours
+    const gameMin = Math.min(gameMinForced ?? realSec, 5 * 1440);
     if (gameMin < 30) return null;
     const perMin = this.avgDailyProfit() / 1440;
     const gain = s.unlimited ? 0 : perMin * gameMin;
@@ -2338,6 +2342,102 @@ const Sim = {
     s.min += Math.floor(gameMin); s.sec = s.min * 60; s.nextMin = s.min + 1;
     s.events = s.events.filter((e) => e.end > s.min);
     return { gameMin, gain };
+  },
+};
+
+/* ---------- temps réel ---------- */
+const RealTime = {
+  /** heure de Paris « murale », exprimée comme une date UTC (même convention que l'horloge du jeu) */
+  parisMs(d = new Date()) {
+    const f = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+    const p = {}; for (const x of f.formatToParts(d)) p[x.type] = x.value;
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  },
+  targetSec() { return (this.parisMs() - G.s.startMs) / 1000; },
+  /** cale l'horloge du jeu sur l'heure réelle : rattrapage simulé si l'écart est court, saut sinon */
+  sync() {
+    const s = G.s; if (!s) return;
+    const target = this.targetSec(), gap = target - s.sec;
+    if (Math.abs(gap) < 5) return;
+    if (gap > 0 && gap <= 3 * 3600) {
+      let r = gap;
+      while (r > 0) { const st = Math.min(r, 600); Sim.advance(st); r -= st; }
+      return;
+    }
+    this.jump(target);
+  },
+  jump(targetSec) {
+    const s = G.s;
+    const dayBefore = Math.floor(s.min / 1440);
+    s.sec = targetSec; s.min = Math.floor(targetSec / 60); s.nextMin = s.min + 1;
+    if (Math.floor(s.min / 1440) !== dayBefore) Sim.newDay();
+    s.events = s.events.filter((e) => e.end > s.min && e.start < s.min + 2880);
+    for (const l of s.lines) {
+      if (l.status === 'construction' && s.min >= l.buildEnd) l.status = 'active';
+      l.active = Lines.isActiveAt(l, s.min);
+      Lines.placeVehicles(l);
+      for (const v of l.veh) v.hidden = !l.active;
+      l.Wf.fill(0); l.Wb.fill(0);
+    }
+    Traffic.update();
+    for (const l of s.lines) Sim.lineQuality(l);
+    UI.updateTint(); UI.refreshTop(); UI.refreshInfoBadge(); Render.dirty = true;
+  },
+  enable() {
+    const s = G.s;
+    s.realtime = true; G.speed = 'rt'; G.paused = false;
+    this.sync();
+    Events.log('Temps réel activé : l’horloge suit l’heure de Paris.', 'info');
+    if (s.settings.realWeather) RealWeather.refresh(true);
+    UI.refreshTop();
+  },
+  disable() { G.s.realtime = false; G.speed = 1; UI.refreshTop(); },
+};
+
+/* ---------- météo réelle (modèles Météo-France via Open-Meteo, sans clé) ---------- */
+const WMO = {
+  0: 'Ciel dégagé', 1: 'Peu nuageux', 2: 'Partiellement nuageux', 3: 'Couvert', 45: 'Brouillard', 48: 'Brouillard givrant',
+  51: 'Bruine légère', 53: 'Bruine', 55: 'Bruine dense', 56: 'Bruine verglaçante', 57: 'Bruine verglaçante',
+  61: 'Pluie faible', 63: 'Pluie', 65: 'Forte pluie', 66: 'Pluie verglaçante', 67: 'Pluie verglaçante',
+  71: 'Neige faible', 73: 'Neige', 75: 'Forte neige', 77: 'Grains de neige', 80: 'Averses', 81: 'Averses', 82: 'Fortes averses',
+  85: 'Averses de neige', 86: 'Fortes averses de neige', 95: 'Orage', 96: 'Orage avec grêle', 99: 'Orage avec grêle',
+};
+const RealWeather = {
+  fetching: false, failNote: false,
+  active() { const s = G.s; return !!(s && s.settings.realWeather && s.wxReal && Date.now() - s.wxReal.t < 3 * 3600e3); },
+  async refresh(force) {
+    const s = G.s; if (!s || !s.settings.realWeather || this.fetching) return;
+    if (!force && s.wxReal && Date.now() - s.wxReal.t < 15 * 60e3) return;
+    this.fetching = true;
+    const q = 'latitude=' + s.city.lat.toFixed(4) + '&longitude=' + s.city.lon.toFixed(4) +
+      '&current=temperature_2m,precipitation,rain,snowfall,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m&timezone=Europe%2FParis';
+    try {
+      let j, src = 'Météo-France (AROME/ARPEGE)';
+      try { j = await fetchJSON('https://api.open-meteo.com/v1/meteofrance?' + q, {}, 15000); }
+      catch (e) { j = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + q, {}, 15000); src = 'Open-Meteo'; }
+      const c = j.current || {};
+      const prev = s.weather;
+      s.wxReal = { t: Date.now(), temp: c.temperature_2m, code: c.weather_code, wind: c.wind_speed_10m, gust: c.wind_gusts_10m, label: WMO[c.weather_code] || '—', src, at: c.time };
+      s.weather = this.map(c);
+      this.failNote = false;
+      if (prev !== s.weather) {
+        Events.log('Météo réelle : ' + s.wxReal.label.toLowerCase() + ', ' + Math.round(c.temperature_2m) + ' °C.', s.weather);
+        if (s.weather === 'storm' && s.lines.some((l) => l.mode === 'boat')) UI.toast('Vent violent : les navettes fluviales restent à quai.', 'warn');
+      }
+      Traffic.update(); for (const l of s.lines) Sim.lineQuality(l);
+      UI.refreshTop(); if (UI.sheetOpen()) UI.refreshSheet();
+    } catch (e) {
+      if (!this.failNote) { UI.toast('Météo réelle indisponible pour le moment, nouvel essai dans 15 min.', 'warn'); this.failNote = true; }
+    } finally { this.fetching = false; }
+  },
+  /** codes météo OMM -> météo du jeu */
+  map(c) {
+    const code = c.weather_code ?? 0;
+    if (code >= 95 || (c.wind_gusts_10m ?? 0) >= 75 || (c.wind_speed_10m ?? 0) >= 55) return 'storm';
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86 || (c.snowfall ?? 0) > 0) return 'snow';
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || (c.rain ?? 0) > 0.1) return 'rain';
+    if ((c.temperature_2m ?? 0) >= 31) return 'heat';
+    return 'sun';
   },
 };
 
@@ -3394,12 +3494,13 @@ const UI = {
       : `<b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b><small>${prof === null ? 'trésorerie' : (prof >= 0 ? '+' : '') + fmtEur(prof) + ' hier'}</small>`;
     const mod = Time.mod(s.min), ah = ((mod / 60) % 12) * 30, am = (mod % 60) * 6;
     const night = Time.night(s.min);
-    $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${t.day}</small></span>`;
+    $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${RealWeather.active() ? Math.round(s.wxReal.temp) + '° ' : ''}${t.day}</small></span>`;
     $('#wx').innerHTML = icon(EV_INFO[Events.weather()].icon);
     $('#wx').title = EV_INFO[Events.weather()].title;
     $('#btnPlay').innerHTML = G.paused ? icon('play') : icon('pause');
     $('#btnPlay').setAttribute('aria-label', G.paused ? 'Reprendre' : 'Pause');
-    $('#btnSpeed').textContent = '×' + G.speed;
+    $('#btnSpeed').textContent = G.speed === 'rt' ? 'Réel' : '×' + G.speed;
+    $('#btnSpeed').classList.toggle('rt', G.speed === 'rt');
   },
   refreshInfoBadge() {
     const n = Events.active().filter((e) => e.bad).length + Events.upcoming().filter((e) => e.bad).length;
@@ -3773,7 +3874,7 @@ const SHEETS = {
     const act = Events.active(), up = Events.upcoming();
     return {
       title: 'Infos trafic',
-      html: `<div class="wxbig">${icon(EV_INFO[w].icon)}<div><b>${EV_INFO[w].title}</b><small>${{ sun: 'Aucun effet sur le réseau.', rain: 'Plus de monde dans le métro et les bus, circulation un peu plus lente.', snow: 'Bus très ralentis, le métro fait le plein.', heat: 'Les navettes fluviales ont la cote.', storm: 'Navettes fluviales à quai, circulation perturbée.' }[w]}</small></div></div>
+      html: `<div class="wxbig">${icon(EV_INFO[w].icon)}<div><b>${RealWeather.active() ? esc(s.wxReal.label) + ' · ' + Math.round(s.wxReal.temp) + ' °C' : EV_INFO[w].title}</b>${RealWeather.active() ? `<small>Météo réelle à ${esc(s.city.nom)} · vent ${Math.round(s.wxReal.wind || 0)} km/h · ${esc(s.wxReal.src)}</small>` : ''}<small>${{ sun: 'Aucun effet sur le réseau.', rain: 'Plus de monde dans le métro et les bus, circulation un peu plus lente.', snow: 'Bus très ralentis, le métro fait le plein.', heat: 'Les navettes fluviales ont la cote.', storm: 'Navettes fluviales à quai, circulation perturbée.' }[w]}</small></div></div>
       ${section('En cours')}${act.map((e) => evRow(e)).join('') || '<p class="note">Rien à signaler.</p>'}
       ${section('À venir')}${up.map((e) => evRow(e, true)).join('') || '<p class="note">Aucun événement annoncé.</p>'}
       ${section('Journal')}${s.journal.slice(0, 30).map((j) => `<div class="jrow"><small>${Time.label(j.t).day} ${Time.label(j.t).time}</small><span>${esc(j.text)}</span></div>`).join('') || '<p class="note">Le journal est vide.</p>'}`,
@@ -3791,6 +3892,8 @@ const SHEETS = {
       <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
+      ${tg('realWeather', 'Météo réelle (modèles Météo-France via Open-Meteo)')}
+      <p class="sub">${s.realtime ? 'Mode temps réel actif : l’horloge suit l’heure de Paris.' : 'Le mode temps réel s’active avec le bouton de vitesse (après ×60).'}${s.wxReal && s.settings.realWeather ? ' Dernière météo : ' + esc(s.wxReal.label.toLowerCase()) + ', ' + Math.round(s.wxReal.temp) + ' °C.' : ''}</p>
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
       ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
     };
@@ -4008,7 +4111,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.6';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -4020,8 +4123,24 @@ const ACT = {
   closeSheet() { UI.close(); },
   closeCard() { UI.closeCard(); },
   closeModal() { UI.closeModal(); },
-  play() { G.paused = !G.paused; UI.refreshTop(); },
-  speed() { const v = [1, 5, 20, 60]; G.speed = v[(v.indexOf(G.speed) + 1) % v.length]; G.paused = false; UI.refreshTop(); },
+  play() { G.paused = !G.paused; if (!G.paused && G.speed === 'rt') RealTime.sync(); UI.refreshTop(); },
+  speed() {
+    const v = [1, 5, 20, 60, 'rt'];
+    const next = v[(v.indexOf(G.speed) + 1) % v.length];
+    if (next === 'rt') {
+      const t = Time.label((RealTime.parisMs() - G.s.startMs) / 60000);
+      UI.modal(`<div class="plate big">${icon('target')} Temps réel</div>
+        <p>Le jeu avancera au rythme de la vraie vie : 1 minute de jeu = 1 minute réelle. L’horloge se cale sur l’heure de Paris : <b>${t.day}, ${t.time}</b>.</p>
+        <p class="sub">${G.s.min / 1440 > (RealTime.parisMs() - G.s.startMs) / 864e5 ? 'Votre partie est en avance sur le temps réel : l’horloge reviendra à la date du jour.' : 'Si le saut est long, vos véhicules repartent de leurs terminus.'} Appli fermée, le jeu continue au même rythme.</p>
+        <label class="tgl"><input type="checkbox" data-change="setting" data-arg="realWeather" ${G.s.settings.realWeather ? 'checked' : ''}><span>Météo réelle de ${esc(G.s.city.nom)} (Météo-France)</span></label>
+        <div class="row2"><button class="btn" data-act="rtCancel">Annuler</button><button class="btn primary" data-act="rtOn">Passer en temps réel</button></div>`);
+      return;
+    }
+    if (G.speed === 'rt') RealTime.disable();
+    G.speed = next; G.paused = false; UI.refreshTop();
+  },
+  rtOn() { UI.closeModal(); RealTime.enable(); },
+  rtCancel() { UI.closeModal(); G.speed = 1; G.paused = false; UI.refreshTop(); },
   openLine(id) { UI.open('line', id); Render.dirty = true; },
   follow() { G.ui.follow = G.ui.follow === G.ui.selVeh ? null : G.ui.selVeh; UI.renderVehCard(); },
   buildMode(m) { if (RailBuild.b) RailBuild.cancel(); Build.start(m); },
@@ -4168,7 +4287,10 @@ const CHG = {
   hStart(v, el) { const l = findLine(el.dataset.arg); if (l) { l.hours.start = +v; } },
   hEnd(v, el) { const l = findLine(el.dataset.arg); if (l) { l.hours.end = +v; } },
   night(_, el) { const l = findLine(el.dataset.arg); if (l) { l.night = el.checked; UI.refreshSheet(); } },
-  setting(_, el) { G.s.settings[el.dataset.arg] = el.checked; Render.dirty = true; },
+  setting(_, el) {
+    G.s.settings[el.dataset.arg] = el.checked; Render.dirty = true;
+    if (el.dataset.arg === 'realWeather') { if (el.checked) RealWeather.refresh(true); else { G.s.wxReal = null; UI.refreshTop(); } }
+  },
   statsAdv(_, el) { G.ui.statsAdv = el.checked; UI.refreshSheet(); },
   unlimited(_, el) { Eco.setUnlimited(el.checked); UI.refreshSheet(); },
 };
@@ -4336,8 +4458,21 @@ const Game = {
     const own = new Set(G.s.owned);
     for (const z of G.w.zones.values()) if (own.has(z.code)) z.owned = true;
     await this.enter(false);
+    if (G.s.settings.realWeather) RealWeather.refresh(true);
     // progression hors-ligne
-    if (G.s.settings.idle && G.s.lastReal) {
+    if (G.s.realtime) {
+      G.speed = 'rt';
+      const el = (Date.now() - (G.s.lastReal || Date.now())) / 1000;
+      const r = el > 60 ? Sim.offline(el, el / 60) : null;
+      RealTime.jump(RealTime.targetSec());
+      if (r && r.gameMin >= 30) {
+        UI.modal(`<div class="plate big">${icon('sun')} Pendant votre absence</div>
+          <p>Le réseau a tourné en temps réel pendant <b>${Math.floor(r.gameMin / 1440)} j ${Math.floor((r.gameMin % 1440) / 60)} h ${Math.round(r.gameMin % 60)} min</b>.</p>
+          <p class="big-num ${r.gain < 0 ? 'neg' : 'pos'}">${r.gain >= 0 ? '+' : ''}${fmtEur(r.gain)}</p>
+          <button class="btn primary wide" data-act="offlineOk">Reprendre</button>`, { pause: true });
+      }
+      UI.refreshTop();
+    } else if (G.s.settings.idle && G.s.lastReal) {
       const r = Sim.offline((Date.now() - G.s.lastReal) / 1000);
       if (r) {
         UI.modal(`<div class="plate big">${icon('sun')} Pendant votre absence</div>
@@ -4388,12 +4523,14 @@ Save.serialize = function () {
 /* =====================================================================
    BOUCLE PRINCIPALE
    ===================================================================== */
-let lastFrame = performance.now(), lastCard = 0, lastAuto = Date.now(), lastTop = 0;
+let lastFrame = performance.now(), lastCard = 0, lastAuto = Date.now(), lastTop = 0, lastSync = 0, lastWx = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - lastFrame) / 1000);
   lastFrame = now;
   if (G.ready && G.s) {
-    if (!G.paused) Sim.advance(dt * 60 * G.speed);
+    if (!G.paused) Sim.advance(G.speed === 'rt' ? dt : dt * 60 * G.speed);
+    if (G.speed === 'rt' && !G.paused && now - lastSync > 30000) { lastSync = now; RealTime.sync(); }
+    if (now - lastWx > 60000) { lastWx = now; RealWeather.refresh(); }
     Render.tick(now);
     if (now - lastTop > 500) { lastTop = now; UI.refreshTop(); }
     if (now - lastCard > 400) {
@@ -4417,7 +4554,10 @@ function frame(now) {
 function boot() {
   UI.init();
   UI.showStart();
-  document.addEventListener('visibilitychange', () => { if (document.hidden && G.ready) Save.auto(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && G.ready) Save.auto();
+    if (!document.hidden && G.ready && G.speed === 'rt' && !G.paused) RealTime.sync(); // rattrapage au retour dans l'appli
+  });
   window.addEventListener('pagehide', () => { if (G.ready) Save.auto(); });
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     // mise à jour automatique : on vérifie à chaque ouverture et on recharge quand une nouvelle version prend la main

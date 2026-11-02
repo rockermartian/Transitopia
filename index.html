@@ -2087,13 +2087,9 @@ const Lines = {
 
 /* ---------- correspondances entre lignes ---------- */
 const XFER = { walk: 150, pen: 0.45, maxHubs: 3 };
-/** distance de marche maximale pour une correspondance (m) : courte entre deux bus, plus longue vers une station ou une gare */
+/** distance de marche maximale pour une correspondance (m) : 30 m, 50 m dès qu'une navette fluviale est concernée */
 function xferWalk(a, b) {
-  const rail = (m) => m === 'metro' || m === 'ter';
-  if (a === 'bus' && b === 'bus') return 70;
-  if (rail(a) && rail(b)) return 150;
-  if (rail(a) || rail(b)) return 120;
-  return 100; // navette fluviale
+  return a === 'boat' || b === 'boat' ? 50 : 30;
 }
 const Transfers = {
   hubs: [],
@@ -5032,7 +5028,7 @@ const Plan = {
     const idx = new Map(); stops.forEach((s, i) => idx.set(s.l.id + ':' + s.k, i));
     for (let i = 0; i < stops.length; i++) for (let j = i + 1; j < stops.length; j++) {
       if (stops[i].l === stops[j].l) continue;
-      if (dist(stops[i].st.mx, stops[i].st.my, stops[j].st.mx, stops[j].st.my) < 120) uni(i, j);
+      if (dist(stops[i].st.mx, stops[i].st.my, stops[j].st.mx, stops[j].st.my) <= xferWalk(stops[i].l.mode, stops[j].l.mode)) uni(i, j);
     }
     for (const h of Transfers.hubs) {
       const a = idx.get(h.A.id + ':' + h.ka), b = idx.get(h.B.id + ':' + h.kb);
@@ -5642,7 +5638,7 @@ const UI = {
     G.ui.cardType = 'stop'; G.ui.selVeh = null;
     const st = l.stops[k];
     const near = [];
-    for (const ln of G.s.lines) ln.stops.forEach((s2, k2) => { if (dist(s2.mx, s2.my, st.mx, st.my) < 60) near.push([ln, k2]); });
+    for (const ln of G.s.lines) ln.stops.forEach((s2, k2) => { if (ln === l ? k2 === k : dist(s2.mx, s2.my, st.mx, st.my) <= xferWalk(l.mode, ln.mode)) near.push([ln, k2]); });
     const rows = near.map(([ln, k2]) => {
       const n = ln.stops.length;
       let w = 0; for (let j = 0; j < n; j++) w += ln.Wf[k2 * n + j] + ln.Wb[k2 * n + j] + ln.Xf[k2 * n + j] + ln.Xb[k2 * n + j] + ln.Rf[k2 * n + j] + ln.Rb[k2 * n + j];
@@ -6502,7 +6498,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.13';
+const APP_VERSION = '1.13.1';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();

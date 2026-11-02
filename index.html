@@ -97,7 +97,7 @@ small{font-size:12.5px;color:var(--muted)}
 .leaflet-control-attribution{background:rgba(251,250,246,.8)!important;color:var(--muted)!important;font-size:10px!important;margin-bottom:calc(var(--nav-h) + var(--sab) + 2px)!important}
 .leaflet-control-attribution a{color:var(--ink-2)!important}
 .ov{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}
-.ov-s{z-index:410}.ov-d{z-index:420}
+.ov-n{z-index:405}.ov-s{z-index:410}.ov-d{z-index:420}
 
 #top{position:absolute;left:0;right:0;top:0;z-index:900;display:flex;align-items:stretch;gap:6px;padding:calc(8px + var(--sat)) max(10px,var(--sar)) 0 max(10px,var(--sal));pointer-events:none}
 #top>*{pointer-events:auto}
@@ -2743,7 +2743,7 @@ const Night = {
     this.init();
     const z = o.z, s = G.s, w = G.w, X = (mx) => mx * o.k - o.x, Y = (my) => my * o.k - o.y;
     ctx.save();
-    ctx.fillStyle = `rgba(6,10,30,${(0.74 * nf).toFixed(3)})`;
+    ctx.fillStyle = `rgba(5,9,28,${(0.88 * nf).toFixed(3)})`;
     ctx.fillRect(0, 0, W, H);
     const ln = clamp((nf - 0.15) / 0.45, 0, 1);
     if (ln > 0 && this.lightsOn()) {
@@ -2771,7 +2771,7 @@ const Night = {
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         // couloirs éclairés : on « perce » l'obscurité le long des rues
         ctx.globalCompositeOperation = 'destination-out';
-        for (const [wMul, al] of [[2.6, 0.22], [1.3, 0.3]]) {
+        for (const [wMul, al] of [[2.8, 0.35], [1.5, 0.55], [0.7, 0.6]]) {
           ctx.globalAlpha = al * ln;
           ctx.lineWidth = Math.max(1.2, Rm * wMul);
           ctx.stroke(paths[0]); ctx.stroke(paths[1]);
@@ -2779,8 +2779,8 @@ const Night = {
         // teinte des éclairages : sodium orangé sur les grands axes, LED blanche ailleurs
         ctx.globalCompositeOperation = 'lighter';
         ctx.lineWidth = Math.max(0.8, Rm * 1.1);
-        ctx.globalAlpha = 0.22 * ln; ctx.strokeStyle = '#FF9A3C'; ctx.stroke(paths[0]);
-        ctx.globalAlpha = 0.14 * ln; ctx.strokeStyle = '#FFE8C8'; ctx.stroke(paths[1]);
+        ctx.globalAlpha = 0.12 * ln; ctx.strokeStyle = '#FF9A3C'; ctx.stroke(paths[0]);
+        ctx.globalAlpha = 0.06 * ln; ctx.strokeStyle = '#FFE8C8'; ctx.stroke(paths[1]);
         if (z < 15) { // vue d'avion : fil lumineux fin
           ctx.lineWidth = 0.9; ctx.globalAlpha = 0.5 * ln;
           ctx.strokeStyle = '#FFB866'; ctx.stroke(paths[0]);
@@ -2789,9 +2789,9 @@ const Night = {
         // lampadaires individuels, de près
         if (lamps.length) {
           const r = Rm * 0.9;
-          ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.45 * ln;
+          ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.85 * ln;
           for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(this.sp.hole, lamps[i] - r, lamps[i + 1] - r, 2 * r, 2 * r);
-          ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.35 * ln;
+          ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.18 * ln;
           for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(lamps[i + 2] ? this.sp.warm : this.sp.led, lamps[i] - r * 0.6, lamps[i + 1] - r * 0.6, 1.2 * r, 1.2 * r);
           ctx.globalAlpha = 0.95 * ln; ctx.fillStyle = '#FFE9C0';
           for (let i = 0; i < lamps.length; i += 3) ctx.fillRect(lamps[i] - 0.9, lamps[i + 1] - 0.9, 1.8, 1.8);
@@ -2799,12 +2799,12 @@ const Night = {
       }
       // stations et arrêts éclairés
       const SR = clamp(45 / mpp, 5, 26);
-      ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.7 * ln;
+      ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.95 * ln;
       for (const l of s.lines) for (const st of l.stops) {
         const x = X(st.mx), y = Y(st.my);
         if (x > -SR && y > -SR && x < W + SR && y < H + SR) ctx.drawImage(this.sp.hole, x - SR, y - SR, 2 * SR, 2 * SR);
       }
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.4 * ln;
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.15 * ln;
       for (const l of s.lines) for (const st of l.stops) {
         const x = X(st.mx), y = Y(st.my);
         if (x > -SR && y > -SR && x < W + SR && y < H + SR) ctx.drawImage(this.sp.led, x - SR * 0.7, y - SR * 0.7, 1.4 * SR, 1.4 * SR);
@@ -2855,9 +2855,12 @@ const Render = {
 
   init() {
     const map = G.map, c = map.getContainer();
+    // calque de nuit : plus grand que l'écran (marges) pour couvrir les bords pendant un glissement
+    this.cvN = document.createElement('canvas'); this.cvN.className = 'ov ov-n';
     this.cvS = document.createElement('canvas'); this.cvS.className = 'ov ov-s';
     this.cvD = document.createElement('canvas'); this.cvD.className = 'ov ov-d';
-    c.appendChild(this.cvS); c.appendChild(this.cvD);
+    c.appendChild(this.cvN); c.appendChild(this.cvS); c.appendChild(this.cvD);
+    this.ctxN = this.cvN.getContext('2d');
     this.ctxS = this.cvS.getContext('2d'); this.ctxD = this.cvD.getContext('2d');
     this.resize();
     window.addEventListener('resize', () => { this.resize(); });
@@ -2867,11 +2870,18 @@ const Render = {
       if (!this.o0 || this.zooming) return;
       const o = this.origin();
       if (Math.abs(o.k - this.o0.k) > 1e-6) { this.cvS.style.opacity = '0'; return; }
-      this.cvS.style.transform = `translate(${this.o0.x - o.x}px,${this.o0.y - o.y}px)`;
+      const dx = this.o0.x - o.x, dy = this.o0.y - o.y;
+      this.cvS.style.transform = `translate(${dx}px,${dy}px)`;
+      this.cvN.style.transform = `translate(${dx}px,${dy}px)`;
+      // glissement plus grand que la marge du calque de nuit : on redessine tout de suite
+      if (this.nf > 0.02 && (Math.abs(dx) > this.W * 0.42 || Math.abs(dy) > this.H * 0.42)) this.drawStatic();
     });
     map.on('moveend', () => { this.moving = false; this.dirty = true; this.drawStatic(); });
-    map.on('zoomstart', () => { this.zooming = true; this.cvS.style.opacity = '0'; this.cvD.style.opacity = '0'; });
-    map.on('zoomend', () => { this.zooming = false; this.cvD.style.opacity = '1'; this.dirty = true; this.drawStatic(); });
+    map.on('zoomstart', () => {
+      this.zooming = true; this.cvS.style.opacity = '0'; this.cvD.style.opacity = '0';
+      if (this.nf > 0.02) { this.cvN.style.opacity = '0'; UI.updateTint(true); } // pendant l'animation : carte simplement assombrie
+    });
+    map.on('zoomend', () => { this.zooming = false; this.cvD.style.opacity = '1'; this.dirty = true; this.drawStatic(); UI.updateTint(); });
   },
 
   resize() {
@@ -2882,6 +2892,10 @@ const Render = {
       cv.width = Math.round(this.W * this.dpr); cv.height = Math.round(this.H * this.dpr);
       cv.style.width = this.W + 'px'; cv.style.height = this.H + 'px';
     }
+    // nuit : lumière douce, résolution 1 suffit ; marge d'un demi-écran de chaque côté
+    this.cvN.width = this.W * 2; this.cvN.height = this.H * 2;
+    this.cvN.style.width = this.W * 2 + 'px'; this.cvN.style.height = this.H * 2 + 'px';
+    this.cvN.style.left = -this.W / 2 + 'px'; this.cvN.style.top = -this.H / 2 + 'px';
     this.dirty = true;
   },
 
@@ -2911,7 +2925,12 @@ const Render = {
     const inView = (b) => !(b.maxx < vb.minx || b.minx > vb.maxx || b.maxy < vb.miny || b.miny > vb.maxy);
     const nf = Night.factor();
     this.nf = nf;
-    if (nf > 0.02) Night.draw(ctx, o, nf, W, H);
+    // calque de nuit séparé : voile bleu nuit percé de trous de lumière (la photo reste en version jour)
+    const cn = this.ctxN;
+    cn.setTransform(1, 0, 0, 1, 0, 0);
+    cn.clearRect(0, 0, this.cvN.width, this.cvN.height);
+    this.cvN.style.transform = 'translate(0px,0px)'; this.cvN.style.opacity = '1';
+    if (nf > 0.02) Night.draw(cn, { x: o.x - W / 2, y: o.y - H / 2, k: o.k, z: o.z }, nf, W * 2, H * 2);
     const za = 1 - 0.7 * nf;
 
     /* zones */
@@ -3386,13 +3405,16 @@ const UI = {
     const n = Events.active().filter((e) => e.bad).length + Events.upcoming().filter((e) => e.bad).length;
     const d = $('#infoDot'); if (d) d.hidden = n === 0;
   },
-  updateTint() {
+  /** la photo reste en version jour : la nuit est un calque percé de lumières.
+   *  Pendant une animation de zoom seulement, on assombrit directement la photo. */
+  updateTint(zoomDark) {
     if (!G.map || !G.s) return;
     const nf = Night.factor();
     const p = G.map.getPane('tilePane');
     if (!p) return;
-    if (G.s.settings.base === 'pale') p.style.filter = `grayscale(1) sepia(.18) contrast(.62) brightness(${(1.28 * (1 - 0.45 * nf)).toFixed(2)})`;
-    else p.style.filter = `brightness(${(1 - 0.4 * nf).toFixed(2)}) saturate(${(1 - 0.35 * nf).toFixed(2)})`;
+    const k = zoomDark ? 1 - 0.8 * nf : 1;
+    if (G.s.settings.base === 'pale') p.style.filter = `grayscale(1) sepia(.18) contrast(.62) brightness(${(1.28 * k).toFixed(2)})`;
+    else p.style.filter = k < 1 ? `brightness(${k.toFixed(2)}) saturate(${(1 - 0.4 * nf).toFixed(2)})` : 'none';
     if (Math.abs(nf - (this.lastNf ?? -1)) > 0.01) { this.lastNf = nf; Render.dirty = true; }
   },
 
@@ -3986,7 +4008,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.5';
+const APP_VERSION = '1.5.1';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();

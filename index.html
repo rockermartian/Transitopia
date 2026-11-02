@@ -1157,14 +1157,30 @@ const POI_LABEL = {
 const PopData = {
   mem: new Map(), pending: new Map(), failed: new Set(),
   dep(insee) { return !insee ? null : insee.startsWith('97') ? insee.slice(0, 3) : insee.slice(0, 2); },
+  /** fichier unique pop.json (tous les départements), chargé une seule fois puis gardé sur le téléphone */
+  async all() {
+    if (this.allData !== undefined) return this.allData;
+    if (!this.allP) this.allP = (async () => {
+      let d = await Cache.get('ipop:all');
+      if (!d) {
+        try { d = await fetchJSON('pop.json', {}, 60000); if (d && typeof d === 'object') await Cache.set('ipop:all', d); else d = null; }
+        catch (e) { d = null; }
+      }
+      this.allData = d;
+      return d;
+    })();
+    return this.allP;
+  },
   async get(dep) {
     if (this.mem.has(dep)) return this.mem.get(dep);
     if (this.failed.has(dep)) return null;
+    const all = await this.all();
+    if (all && all[dep]) { this.mem.set(dep, all[dep]); return all[dep]; }
     if (this.pending.has(dep)) return this.pending.get(dep);
     const pr = (async () => {
       let d = await Cache.get('ipop:' + dep);
       if (!d) {
-        // dossier pop/ ou, à défaut, fichiers déposés à la racine du site
+        // anciens fichiers par département : dossier pop/ ou racine du site
         for (const u of ['pop/' + dep + '.json', dep + '.json']) {
           try { d = await fetchJSON(u, {}, 30000); if (d && typeof d === 'object') break; d = null; } catch (e) { d = null; }
         }
@@ -5337,7 +5353,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.8.2';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();

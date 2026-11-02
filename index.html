@@ -138,6 +138,30 @@ small{font-size:12.5px;color:var(--muted)}
 
 #toasts{position:absolute;z-index:1300;top:calc(62px + var(--sat));left:max(10px,var(--sal));right:max(10px,var(--sar));display:flex;flex-direction:column;gap:6px;pointer-events:none;align-items:center}
 .toast{position:relative;max-width:460px;width:100%;background:var(--panel);padding:8px 12px 8px 30px;border-radius:14px;box-shadow:var(--shadow);font-size:13.5px;line-height:1.3;animation:tin .25s ease-out}
+#game{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#game input,#game select,#game textarea{-webkit-user-select:text;user-select:text}
+#snacks{position:absolute;z-index:1300;bottom:calc(var(--nav-h) + var(--sab) + 12px);left:max(12px,var(--sal));right:max(12px,var(--sar));display:flex;flex-direction:column;gap:6px;pointer-events:none;align-items:center;transition:bottom .2s}
+#snacks.raised{bottom:calc(var(--nav-h) + var(--sab) + 84px)}
+#snacks .toast{display:flex;align-items:center;gap:10px;background:#2A2A2A;color:#F4F2EC;padding:10px 12px 10px 30px;border-radius:14px;box-shadow:0 8px 22px rgba(0,0,0,.25);pointer-events:auto;animation:sin .22s ease-out}
+#snacks .toast span{flex:1}
+#snacks .toast.out{opacity:0;transform:translateY(6px);transition:.35s}
+.snack-a{flex:none;color:#F2B705;font:600 14px/1 var(--f-display);padding:6px 4px;text-transform:uppercase;letter-spacing:.04em}
+@keyframes sin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.mfloat{position:absolute;z-index:5;font:700 14px/1 var(--f-display);pointer-events:none;animation:mfl 1.6s ease-out forwards;white-space:nowrap;text-shadow:0 1px 0 #fff,0 0 6px #fff}
+.mfloat.neg{color:#C23A30}.mfloat.pos{color:#2D8A4E}
+@keyframes mfl{0%{opacity:0;transform:translateY(-4px)}15%{opacity:1}100%{opacity:0;transform:translateY(22px)}}
+#sheet.full{height:calc(100% - 70px - var(--sat));max-height:none}
+#sheet{transition:max-height .22s ease,transform .18s ease}
+.sheet-h{position:relative;touch-action:none;cursor:grab}
+.sheet-h::before{content:"";position:absolute;top:5px;left:50%;width:38px;height:4px;margin-left:-19px;border-radius:2px;background:rgba(35,35,35,.18)}
+.vrow.stack{flex-direction:column;align-items:stretch;gap:8px}
+.vrow.stack .seg{width:100%}
+.vrow.stack .seg button{flex:1}
+.quick{display:flex;gap:6px;margin:-2px 0 8px 44px;flex-wrap:wrap}
+.quick .btn{flex:1 1 auto;min-height:32px;font-size:13px;padding:4px 10px}
+#heatChip{position:absolute;z-index:900;top:calc(66px + var(--sat));left:max(10px,var(--sal));display:flex;align-items:center;gap:8px;background:var(--panel);border-radius:18px;padding:6px 8px 6px 12px;box-shadow:var(--shadow);font:600 13px/1 var(--f-display)}
+#heatChip i{width:44px;height:8px;border-radius:4px;display:block}
+#heatChip button{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--panel-2)}
 .toast::before{content:"";position:absolute;left:12px;top:50%;width:10px;height:10px;margin-top:-5px;border-radius:50%;background:var(--muted)}
 .t-ok::before{background:var(--ok)}.t-warn::before{background:var(--warn)}.t-bad::before{background:var(--bad)}.t-info::before{background:var(--accent)}
 .toast.out{opacity:0;transform:translateY(-6px);transition:.35s}
@@ -179,6 +203,14 @@ small{font-size:12.5px;color:var(--muted)}
 .staffc .btn{width:100%}
 .staffc small{display:block;margin-top:4px}
 .nb-pause{display:block;font-style:normal;font:600 10.5px/1.2 var(--f-display);color:var(--ink);letter-spacing:0;margin-bottom:2px}
+.nrow.todo{background:rgba(217,67,58,.08);border-radius:10px;border-bottom:none;margin:4px 0;padding:9px 8px}
+.nrow.live{box-shadow:inset 3px 0 0 #E08A12}
+.nrow .tag{font-size:10.5px;padding:1px 6px;margin-left:4px;vertical-align:1px}
+details.hist{margin-top:14px}
+details.hist summary{font:600 13px/1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 0;cursor:pointer}
+.ltabs{margin:2px 0 10px;overflow-x:auto;scrollbar-width:none}
+.ltabs::-webkit-scrollbar{display:none}
+.ltabs button{flex:1 0 auto;padding:4px 10px}
 .nb-tone.tn{color:#D9433A}.nb-tone.tp{color:#3BA55C}.nb-tone.t0{color:#8a8a8a}
 .tone{display:inline-flex;gap:6px;align-items:center;font:600 12.5px/1 var(--f-display);padding:5px 10px;border-radius:12px;margin:2px 0 6px}
 .tone span{letter-spacing:0}.tone-neg{background:rgba(217,67,58,.12);color:#B8322A}.tone-pos{background:rgba(59,165,92,.14);color:#2D7E46}.tone-neu{background:rgba(35,35,35,.07);color:var(--ink-2)}
@@ -214,8 +246,9 @@ ul.fx li{margin:2px 0}
 .bb-a{display:flex;align-items:center;gap:2px;flex:none}
 #buildbar.edit{flex-wrap:wrap;border-radius:24px;padding:8px 8px 8px 12px}
 .bb-tools{flex-basis:100%;margin-bottom:2px}
-#plan{position:absolute;inset:0;z-index:1100;background:var(--paper);display:flex;flex-direction:column;padding-top:var(--sat)}
+#plan{position:absolute;inset:0;z-index:1400;background:var(--paper);display:flex;flex-direction:column;padding-top:var(--sat)}
 #plan[hidden]{display:none}
+body.plan-open #snacks,body.plan-open #toasts{display:none}
 .plan-h{display:flex;align-items:center;gap:8px;padding:8px 12px 6px max(10px,var(--sal))}
 .plan-h b{flex:1;font:600 19px/1.1 var(--f-display)}
 .plan-f{margin:0 12px 6px}
@@ -333,6 +366,7 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
 </div>
 <div id="modal" hidden><div class="modal-box" id="modalBox"></div></div>
 <div id="toasts"></div>
+<div id="snacks"></div>
 <script>
 'use strict';
 /* =====================================================================
@@ -1738,6 +1772,7 @@ const Lines = {
     line.Xf = new Float64Array(n * n); line.Xb = new Float64Array(n * n);
     line.Rf = new Float64Array(n * n); line.Rb = new Float64Array(n * n);
     line.xgen = []; line.xcont = Array.from({ length: n }, () => []);
+    line.sb = new Float64Array(n); line.sm = new Float64Array(n); // montées et mécontents du jour, par arrêt (carte de chaleur)
     line.pv = ++this.pv;
     if (!line.svc) { line.svc = { ...SERVICE_PRESETS.uniforme.v }; line.svcPreset = 'uniforme'; }
     line.segE = null;
@@ -1878,6 +1913,14 @@ const Lines = {
     line.catchPop = P.reduce((a, b) => a + b, 0);
   },
 
+  /** estimation avant construction : voyageurs par jour de semaine (service correct, tarif de référence) */
+  estimate(mode, stops, path, loop) {
+    if (!path || !path.cum || stops.length < 2) return null;
+    const fake = { mode, stops, loop: !!loop, path, stopAt: path.stopPt.map((i) => path.cum[i]) };
+    this.computeOD(fake);
+    let sum = 0; for (const x of fake.od) sum += x;
+    return { pax: sum, pop: fake.catchPop };
+  },
   /** distance parcourue (km) entre deux arrêts d'une ligne */
   stopDist(line, i, j) {
     let d = Math.abs(line.stopAt[j] - line.stopAt[i]) / 1000;
@@ -2183,10 +2226,11 @@ const Eco = {
     if (amount > s.money) { UI.toast('Fonds insuffisants : il manque ' + fmtEur(amount - s.money) + '.', 'bad'); return false; }
     s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount;
     UI.refreshTop();
+    UX.money(-amount);
     return true;
   },
   charge(amount, cat) { const s = G.s; if (s.unlimited) return; s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount; },
-  earn(amount, cat) { const s = G.s; if (s.unlimited) return; s.money += amount; s.today[cat] = (s.today[cat] || 0) + amount; UI.refreshTop(); },
+  earn(amount, cat) { const s = G.s; if (s.unlimited) return; s.money += amount; s.today[cat] = (s.today[cat] || 0) + amount; UX.money(amount); UI.refreshTop(); },
   /** mode argent illimité : dépenses et recettes en pause */
   free() { return !!(G.s && G.s.unlimited); },
   canAfford(x) { return this.free() || G.s.money >= x; },
@@ -2512,7 +2556,7 @@ const Sim = {
     // abandons
     const rate = clamp(0.003 + Math.max(0, l.headway - 12) * 0.0015, 0.003, 0.05);
     let lost = 0;
-    for (const W of [l.Wf, l.Wb, l.Xf, l.Xb, l.Rf, l.Rb]) for (let k = 0; k < W.length; k++) if (W[k] > 0) { const x = W[k] * rate; W[k] -= x; lost += x; }
+    for (const W of [l.Wf, l.Wb, l.Xf, l.Xb, l.Rf, l.Rb]) for (let k = 0; k < W.length; k++) if (W[k] > 0) { const x = W[k] * rate; W[k] -= x; lost += x; l.sm[(k / n) | 0] += x; }
     l.today.mec += lost; s.today.mec += lost;
   },
 
@@ -2762,12 +2806,12 @@ const Sim = {
       const fare = paying * price * Events.fareMult(l);
       const adPax = paying * ADS.perPax[s.ads[l.mode] || 0];
       if (!s.unlimited) { s.money += fare + adPax; s.today.fares += fare; s.today.ads += adPax; }
-      s.today.pax += take;
+      s.today.pax += take; l.sb[k] += take;
       l.today.fares += fare; l.today.ads += adPax; l.today.pax += take;
     }
     if (want - take > 0.5) {
       const left = (want - take) * 0.3;
-      l.today.mec += left; s.today.mec += left;
+      l.today.mec += left; s.today.mec += left; l.sm[k] += left;
     }
     l.today.loadSum += v.load / md.cap; l.today.loadN++;
     if (v.load / md.cap > (l.today.loadMax || 0)) l.today.loadMax = v.load / md.cap;
@@ -2794,6 +2838,7 @@ const Sim = {
       l.rep = clamp(l.rep + 0.02 + (Staff.L('social') >= 3 ? 0.005 : 0) - ratio * 0.6, 0.6, 1.05);
       l.hist.unshift(d.lines[l.id]); if (l.hist.length > 30) l.hist.length = 30;
       l.today = Lines.blankStats();
+      if (l.sb) { l.sb.fill(0); l.sm.fill(0); }
     }
     s.days.unshift(d); if (s.days.length > 60) s.days.length = 60;
     s.today = Eco.blankDay();
@@ -3735,6 +3780,213 @@ const Staff = {
 
 'use strict';
 /* =====================================================================
+   CORRESPONDANCE — ombres dynamiques (fond « Plan IGN » uniquement)
+   Position réelle du soleil (heure, date, ville) ; bâtiments IGN BD TOPO
+   (emprise + hauteur) ; ombres des bus, TER et navettes. Pas d'ombre la
+   nuit, ni pour le métro (souterrain), atténuées par temps couvert.
+   ===================================================================== */
+
+/* ---------- position du soleil ---------- */
+const Sun = {
+  /** décalage de l'heure de Paris sur UTC (heure d'été : du dernier dimanche de mars au dernier dimanche d'octobre) */
+  parisOffset(d) {
+    const y = d.getUTCFullYear();
+    const lastSun = (m) => { const x = new Date(Date.UTC(y, m + 1, 0)); return x.getUTCDate() - x.getUTCDay(); };
+    const start = Date.UTC(y, 2, lastSun(2), 1), end = Date.UTC(y, 9, lastSun(9), 1);
+    const t = d.getTime() - 3600e3; // heure murale -> UTC approximatif
+    return t >= start && t < end ? 2 : 1;
+  },
+  /** azimut (radians, depuis le nord, sens horaire) et hauteur (radians) ; formules simplifiées NOAA */
+  pos(min, lat, lon) {
+    const wall = Time.date(min);                         // heure de Paris codée en UTC
+    const utc = new Date(wall.getTime() - this.parisOffset(wall) * 3600e3);
+    const jd = utc.getTime() / 864e5 + 2440587.5, n = jd - 2451545.0;
+    const L = (280.46 + 0.9856474 * n) % 360, g = ((357.528 + 0.9856003 * n) % 360) * Math.PI / 180;
+    const lam = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * Math.PI / 180;
+    const eps = (23.439 - 0.0000004 * n) * Math.PI / 180;
+    const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+    const ra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam));
+    const gmst = (18.697374558 + 24.06570982441908 * n) % 24;
+    const ha = ((gmst * 15 + lon) * Math.PI / 180) - ra;
+    const phi = lat * Math.PI / 180;
+    const el = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(ha));
+    const az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(phi) - Math.sin(phi) * Math.cos(ha));
+    return { az: (az + 2 * Math.PI) % (2 * Math.PI), el };
+  },
+};
+
+/** enveloppe convexe (chaîne monotone d'Andrew) d'une liste plate [x0,y0,x1,y1…], ajoutée au tracé */
+function hull(flat, path) {
+  const n = flat.length / 2, idx = new Array(n);
+  for (let i = 0; i < n; i++) idx[i] = i;
+  idx.sort((u, v) => flat[2 * u] - flat[2 * v] || flat[2 * u + 1] - flat[2 * v + 1]);
+  const cr = (o, a, b) => (flat[2 * a] - flat[2 * o]) * (flat[2 * b + 1] - flat[2 * o + 1]) - (flat[2 * a + 1] - flat[2 * o + 1]) * (flat[2 * b] - flat[2 * o]);
+  const lo = [], up = [];
+  for (const i of idx) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], i) <= 0) lo.pop(); lo.push(i); }
+  for (let t = n - 1; t >= 0; t--) { const i = idx[t]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], i) <= 0) up.pop(); up.push(i); }
+  lo.pop(); up.pop();
+  const h = lo.concat(up);
+  if (h.length < 3) return;
+  path.moveTo(flat[2 * h[0]], flat[2 * h[0] + 1]);
+  for (let t = 1; t < h.length; t++) path.lineTo(flat[2 * h[t]], flat[2 * h[t] + 1]);
+  path.closePath();
+}
+
+/* ---------- bâtiments (BD TOPO), par petites tuiles chargées à la demande ---------- */
+const BT_LAT = 0.0075, BT_LON = 0.01; // ≈ 830 m × 780 m
+const Shadows = {
+  tiles: new Map(), loading: new Set(), failed: new Set(),
+  enabled() { const s = G.s; return !!(s && s.settings.shadows !== false && s.settings.base === 'plan'); },
+  key(i, j) { return i + ':' + j; },
+  /** soleil du moment : direction de l'ombre (mètres d'ombre par mètre de hauteur) et intensité */
+  sun() {
+    const s = G.s, p = Sun.pos(s.min, s.city.lat, s.city.lon);
+    const el = p.el * 180 / Math.PI;
+    if (el < 1) return null;
+    const f = clamp((el - 1) / 7, 0, 1);                    // apparition progressive au lever, disparition au coucher
+    const w = Events.weather();
+    const cloud = w === 'rain' || w === 'storm' ? 0.3 : w === 'snow' ? 0.45 : 1;
+    const len = Math.min(6, 1 / Math.tan(p.el));             // ombre plafonnée à 6 fois la hauteur (soleil rasant)
+    // l'ombre part à l'opposé du soleil ; à l'écran, le nord est vers le haut
+    return { dx: -Math.sin(p.az) * len, dy: Math.cos(p.az) * len, alpha: 0.24 * f * cloud, el, az: p.az };
+  },
+  /** charge les tuiles de bâtiments visibles (zoom de quartier) */
+  ensure(vb) {
+    if (!this.enabled()) return;
+    const i0 = Math.floor(myToLat(vb.maxy) / BT_LAT), i1 = Math.floor(myToLat(vb.miny) / BT_LAT);
+    const j0 = Math.floor(mxToLon(vb.minx) / BT_LON), j1 = Math.floor(mxToLon(vb.maxx) / BT_LON);
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 16) return; // vue trop large
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const k = this.key(i, j);
+      if (this.tiles.has(k) || this.loading.has(k) || this.failed.has(k)) continue;
+      this.load(i, j);
+    }
+  },
+  async load(i, j) {
+    const k = this.key(i, j);
+    this.loading.add(k);
+    Loader.busy++; Loader.status('Bâtiments IGN…');
+    try {
+      let d = await Cache.get('bat:' + k);
+      if (!d) {
+        const b = { s: i * BT_LAT, n: (i + 1) * BT_LAT, w: j * BT_LON, e: (j + 1) * BT_LON };
+        const gj = await API.wfsAll('BDTOPO_V3:batiment', b, 'geometrie,hauteur,nombre_d_etages');
+        d = this.compact(gj);
+        await Cache.set('bat:' + k, d);
+      }
+      this.tiles.set(k, this.prepare(d));
+      Render.dirty = true;
+    } catch (e) {
+      console.warn('bâtiments', k, e);
+      this.failed.add(k);
+      setTimeout(() => this.failed.delete(k), 120000);
+    } finally {
+      this.loading.delete(k); Loader.busy--; Loader.status(Loader.busy > 0 ? 'Chargement…' : null);
+    }
+  },
+  /** format compact : hauteur + contour simplifié en mercator (pour le cache) */
+  compact(gj) {
+    const h = [], o = [0], p = [];
+    const minStep = meters(0.8);
+    for (const f of gj.features || []) {
+      const g = f.geometry, pr = f.properties || {}; if (!g) continue;
+      let ht = +pr.hauteur || (+pr.nombre_d_etages ? +pr.nombre_d_etages * 3 + 1 : 0) || 6;
+      if (ht < 2.5) continue;
+      ht = Math.min(ht, 200);
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      for (const poly of polys) {
+        const ring = poly[0]; if (!ring || ring.length < 4) continue;
+        const pts = [];
+        for (const c of ring) {
+          const x = lonToMx(c[0]), y = latToMy(c[1]);
+          const n = pts.length;
+          if (n && Math.abs(x - pts[n - 2]) + Math.abs(y - pts[n - 1]) < minStep) continue;
+          pts.push(x, y);
+        }
+        if (pts.length >= 2 && Math.abs(pts[0] - pts[pts.length - 2]) + Math.abs(pts[1] - pts[pts.length - 1]) < minStep) pts.length -= 2;
+        if (pts.length < 6) continue;
+        // contours très détaillés : on garde au plus 32 sommets
+        const nv = pts.length / 2, step = Math.ceil(nv / 32);
+        for (let v = 0; v < nv; v += step) p.push(Math.round(pts[2 * v] * 1e9) / 1e9, Math.round(pts[2 * v + 1] * 1e9) / 1e9);
+        h.push(Math.round(ht * 10) / 10); o.push(p.length);
+      }
+    }
+    return { h, o, p };
+  },
+  /** emprises orientées dans le même sens + boîtes englobantes (pour l'élagage) */
+  prepare(d) {
+    const n = d.h.length, bb = new Float64Array(4 * n), P = Float64Array.from(d.p);
+    for (let b = 0; b < n; b++) {
+      const a = d.o[b], z = d.o[b + 1];
+      let ar = 0, minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+      for (let i = a, j = z - 2; i < z; j = i, i += 2) {
+        ar += (P[j] - P[i]) * (P[j + 1] + P[i + 1]);
+        if (P[i] < minx) minx = P[i]; if (P[i] > maxx) maxx = P[i]; if (P[i + 1] < miny) miny = P[i + 1]; if (P[i + 1] > maxy) maxy = P[i + 1];
+      }
+      if (ar < 0) { // sens unique pour tous les contours (règle de remplissage « non nulle »)
+        for (let i = a, j = z - 2; i < j; i += 2, j -= 2) { const tx = P[i], ty = P[i + 1]; P[i] = P[j]; P[i + 1] = P[j + 1]; P[j] = tx; P[j + 1] = ty; }
+      }
+      bb[4 * b] = minx; bb[4 * b + 1] = miny; bb[4 * b + 2] = maxx; bb[4 * b + 3] = maxy;
+    }
+    return { h: Float32Array.from(d.h), o: Int32Array.from(d.o), p: P, bb, n };
+  },
+
+  /** ombres portées des bâtiments, sur le calque statique (avant tout le reste) */
+  draw(ctx, o, vb, z) {
+    if (!this.enabled() || z < 15.5) return;
+    this.ensure(vb);
+    const sun = this.sun(); if (!sun || sun.alpha < 0.01) return;
+    const k = o.k, ox = o.x, oy = o.y, ppm = k / G.mpu; // pixels par mètre
+    const sx = sun.dx * ppm, sy = sun.dy * ppm;          // décalage d'ombre en pixels par mètre de hauteur
+    const shadow = new Path2D(), roofs = new Path2D(), pts = [];
+    const mx0 = vb.minx - meters(250), mx1 = vb.maxx + meters(250), my0 = vb.miny - meters(250), my1 = vb.maxy + meters(250);
+    let count = 0;
+    for (const t of this.tiles.values()) {
+      const { h, o: off, p, bb, n } = t;
+      for (let b = 0; b < n; b++) {
+        if (bb[4 * b + 2] < mx0 || bb[4 * b] > mx1 || bb[4 * b + 3] < my0 || bb[4 * b + 1] > my1) continue;
+        const a = off[b], e = off[b + 1], H = h[b], dx = sx * H, dy = sy * H;
+        // ombre = enveloppe convexe de l'emprise et de sa projection au sol (une seule forme par bâtiment)
+        pts.length = 0;
+        for (let i = a; i < e; i += 2) {
+          const x = p[i] * k - ox, y = p[i + 1] * k - oy;
+          pts.push(x, y, x + dx, y + dy);
+          if (i === a) roofs.moveTo(x, y); else roofs.lineTo(x, y);
+        }
+        roofs.closePath();
+        hull(pts, shadow);
+        if (++count > 25000) break;
+      }
+    }
+    if (!count) return;
+    ctx.save();
+    ctx.fillStyle = `rgba(28,32,52,${sun.alpha.toFixed(3)})`;
+    ctx.fill(shadow, 'nonzero');
+    ctx.globalCompositeOperation = 'destination-out'; // les toits restent éclairés
+    ctx.fillStyle = '#000'; ctx.fill(roofs, 'nonzero');
+    ctx.restore();
+    this.lastCount = count;
+  },
+
+  /** ombre d'un véhicule (calque dynamique), sous sa carrosserie ; à l'échelle du symbole dessiné */
+  vehicle(ctx, l, x, y, ang, L2, W2, lenM) {
+    if (l.mode === 'metro' || !this.enabled()) return;
+    if (this._sunMin !== G.s.min) { this._sunMin = G.s.min; this._sun = this.sun(); }
+    const sun = this._sun; if (!sun || sun.alpha < 0.01) return;
+    const hgt = { bus: 3.2, ter: 4.2, boat: 2.2 }[l.mode] || 3;
+    const pxm = (2 * L2) / (lenM || 12);                     // pixels par mètre du symbole
+    const lim = 2.2 * W2;
+    const dx = clamp(sun.dx * hgt * pxm, -lim, lim), dy = clamp(sun.dy * hgt * pxm, -lim, lim);
+    ctx.save();
+    ctx.translate(x + dx, y + dy); ctx.rotate(ang || 0);
+    Render.rr(ctx, -L2, -W2, 2 * L2, 2 * W2, l.mode === 'boat' ? W2 : Math.min(3, W2));
+    ctx.fillStyle = `rgba(20,24,40,${Math.min(0.4, sun.alpha * 1.3).toFixed(3)})`; ctx.fill();
+    ctx.restore();
+  },
+};
+
+'use strict';
+/* =====================================================================
    CORRESPONDANCE — lieux d'intérêt + construction ferroviaire
    (gares orientables, voies ferrées en longues courbes)
    ===================================================================== */
@@ -4411,6 +4663,8 @@ const Render = {
       this.oN = o;
     }
     const za = 1 - 0.7 * nf;
+    /* ombres portées des bâtiments (fond Plan IGN, de jour) */
+    Shadows.draw(ctx, o, vb, z);
 
     /* zones */
     if (s.settings.zones) {
@@ -4509,6 +4763,7 @@ const Render = {
     /* lignes (côte à côte quand elles partagent une rue ou un tunnel) */
     const zf = this.lineZf(z);
     this.ensureOffsets();
+    this.drawHeat(ctx, o, zf, inView);
     const order = [...s.lines].sort((a, b) => MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode));
     for (const l of order) {
       if (!l.bbox) this.lineBox(l);
@@ -4632,11 +4887,35 @@ const Render = {
     /* marqueurs d'événements (touchables) */
     this.evpos = [];
     const showEv = Events.active().concat(Events.upcoming().filter((e) => (e.announce || e.kind === 'big') && e.tone > 0 && e.start - s.min < 720));
+    const marks = [];
     for (const e of showEv) {
       if (e.veh && e.start <= s.min) continue; // dessiné sur le véhicule (calque dynamique)
       const pos = Events.where(e); if (!pos) continue;
       const x = X(pos[0]), y = Y(pos[1]);
       if (out(x, y, 10)) continue;
+      marks.push({ x, y, e });
+    }
+    // vue large : les repères proches sont regroupés en une pastille numérotée
+    const groups = [];
+    const RC = z < 14.5 ? 46 : 0;
+    for (const mk of marks) {
+      const g = RC ? groups.find((q) => (q.x - mk.x) ** 2 + (q.y - mk.y) ** 2 < RC * RC) : null;
+      if (g) { g.items.push(mk); g.x = (g.x * (g.items.length - 1) + mk.x) / g.items.length; g.y = (g.y * (g.items.length - 1) + mk.y) / g.items.length; }
+      else groups.push({ x: mk.x, y: mk.y, items: [mk] });
+    }
+    for (const g of groups) {
+      if (g.items.length < 2) continue;
+      const worst = g.items.reduce((a, it) => (Events.tone(it.e) < Events.tone(a.e) ? it : a), g.items[0]).e;
+      const col = Events.tone(worst) < 0 ? Events.color(worst) : '#F2B705';
+      ctx.beginPath(); ctx.arc(g.x, g.y, 15, 0, 7); ctx.fillStyle = INK; ctx.fill();
+      ctx.lineWidth = 3.5; ctx.strokeStyle = col; ctx.stroke();
+      ctx.fillStyle = '#FFFFFF'; ctx.font = '700 14px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(g.items.length), g.x, g.y + 1);
+      this.evpos.push({ x: g.x, y: g.y, cluster: g.items.map((it) => it.e), cx: g.items.reduce((a, it) => a + it.x, 0) / g.items.length, cy: g.items.reduce((a, it) => a + it.y, 0) / g.items.length });
+    }
+    for (const g of groups) {
+      if (g.items.length > 1) continue;
+      const { x, y, e } = g.items[0];
       this.evpos.push({ x, y, e });
       const col = Events.color(e), up = e.start > s.min;
       ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
@@ -4644,6 +4923,42 @@ const Render = {
       ctx.fillStyle = INK; ctx.font = '700 15px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(Events.glyph(e), x, y + 1);
     }
+  },
+
+  /** carte de chaleur : affluence ou mécontents par arrêt, rentabilité par ligne (sous les lignes) */
+  drawHeat(ctx, o, zf, inView) {
+    const mode = G.s.settings.heat; if (!mode) return;
+    const ls = G.s.lines;
+    ctx.save();
+    if (mode === 'profit') {
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const l of ls) {
+        if (!l.bbox) this.lineBox(l);
+        if (!inView(l.bbox)) continue;
+        const res = l.today.fares + l.today.ads - l.today.ops, km = Math.max(0.5, l.path.L / 1000);
+        const f = clamp(0.5 + res / km / 4000, 0, 1); // ±2 000 € par km et par jour : rouge -> vert
+        const col = f < 0.5 ? `rgba(217,67,58,${(0.35 + (0.5 - f) * 0.9).toFixed(2)})` : `rgba(46,158,91,${(0.35 + (f - 0.5) * 0.9).toFixed(2)})`;
+        ctx.beginPath();
+        for (const PP of [l.path, l.pathB]) if (PP) PP.pts.forEach((p, i) => { const x = p[0] * o.k - o.x, y = p[1] * o.k - o.y; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+        ctx.strokeStyle = col; ctx.lineWidth = (LINE_W[l.mode] + 14) * zf; ctx.stroke();
+      }
+    } else {
+      let max = 1;
+      for (const l of ls) { const a = mode === 'pax' ? l.sb : l.sm; if (a) for (const v of a) if (v > max) max = v; }
+      const rgb = mode === 'pax' ? '242,183,5' : '226,86,63';
+      for (const l of ls) {
+        const a = mode === 'pax' ? l.sb : l.sm; if (!a) continue;
+        l.stops.forEach((st, k) => {
+          const v = a[k]; if (v < 0.5) return;
+          const x = st.mx * o.k - o.x, y = st.my * o.k - o.y, f = Math.sqrt(v / max);
+          const r = (10 + 44 * f) * zf;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, `rgba(${rgb},${(0.35 + 0.5 * f).toFixed(2)})`); g.addColorStop(1, `rgba(${rgb},0)`);
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+        });
+      }
+    }
+    ctx.restore();
   },
 
   lineBox(l) {
@@ -4716,6 +5031,7 @@ const Render = {
         const L2 = dims[0] * zf / 2, W2 = dims[1] * zf / 2;
         const nl = this.nf > 0.15 && Night.lightsOn() ? clamp((this.nf - 0.15) / 0.45, 0, 1) : 0;
         if (nl > 0) Night.vehicle(ctx, l, x, y, p.ang, L2, W2, zf, nl);
+        else Shadows.vehicle(ctx, l, x, y, p.ang, L2, W2, md.len);
         ctx.save(); ctx.translate(x, y); ctx.rotate(p.ang || 0);
         this.rr(ctx, -L2, -W2, 2 * L2, 2 * W2, l.mode === 'boat' ? W2 : Math.min(3, W2));
         ctx.fillStyle = l.color; ctx.fill();
@@ -4778,6 +5094,15 @@ const Render = {
     const b = Build.b;
     if (b) {
       const col = Build.color();
+      // zone desservie autour de chaque arrêt (rayon d'attraction du mode)
+      const rc = (MODES[b.mode].catch / G.mpu) * o.k;
+      if (rc > 6) {
+        ctx.save();
+        for (const st of b.stops) { ctx.beginPath(); ctx.arc(X(st.mx), Y(st.my), rc, 0, 7); ctx.fillStyle = 'rgba(242,183,5,.10)'; ctx.fill(); }
+        ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(35,35,35,.35)';
+        for (const st of b.stops) { ctx.beginPath(); ctx.arc(X(st.mx), Y(st.my), rc, 0, 7); ctx.stroke(); }
+        ctx.restore();
+      }
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       for (const sg of b.segs) {
         ctx.beginPath();
@@ -4817,7 +5142,7 @@ const Render = {
 
   /** élément touché sur la carte */
   hit(px, py) {
-    for (const it of (this.evposD || []).concat(this.evpos || [])) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 22 * 22) return { type: 'event', e: it.e };
+    for (const it of (this.evposD || []).concat(this.evpos || [])) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 22 * 22) return it.cluster ? { type: 'cluster', x: it.x, y: it.y, items: it.cluster } : { type: 'event', e: it.e };
     let best = null, bd = 24 * 24;
     for (const it of this.vpos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bd) { bd = d; best = { type: 'veh', ...it }; } }
     if (best) return best;
@@ -4859,10 +5184,11 @@ const Plan = {
       window.addEventListener('resize', () => { if (!el.hidden) this.draw(); });
     }
     el.hidden = false;
+    document.body.classList.add('plan-open');
     this.layout = null;
     this.refresh();
   },
-  close() { const el = document.getElementById('plan'); if (el) el.hidden = true; },
+  close() { const el = document.getElementById('plan'); if (el) el.hidden = true; document.body.classList.remove('plan-open'); },
   setFilter(f) { this.filter = f; this.layout = null; this.refresh(); },
   modesFor(f) { return f === 'rail' ? ['metro', 'ter'] : f === 'bus' ? ['bus'] : MODE_ORDER; },
   refresh() {
@@ -4979,7 +5305,7 @@ const Plan = {
       for (const n of N) { n.x += (n.gx - n.x) * ga; n.y += (n.gy - n.y) * ga; }
     }
     this.Lt = Lt;
-    this.snap(g, Lt / 4);
+    this.snap(g, Lt / 5);
   },
 
   /** accrochage sur une grille puis petites retouches : tronçons exactement à 0, 45 ou 90° */
@@ -4998,30 +5324,71 @@ const Plan = {
       }
     }
     const octo = (a, b) => { const dx = Math.abs(N[a].cx - N[b].cx), dy = Math.abs(N[a].cy - N[b].cy); return dx === 0 || dy === 0 || dx === dy; };
-    const bad = (i, x, y) => {
-      let c = 0;
-      for (const j of adj[i]) {
-        const dx = Math.abs(x - N[j].cx), dy = Math.abs(y - N[j].cy);
-        if (dx === 0 && dy === 0) return 99;
-        if (!(dx === 0 || dy === 0 || dx === dy)) c++;
-        if (Math.max(dx, dy) < 2) c += 0.5; // tronçon trop court pour être lisible
+    /** le point p est-il sur le segment droit [a,b] (hors extrémités) ? */
+    const onSeg = (p, a, b) => {
+      const ax = N[a].cx, ay = N[a].cy, bx = N[b].cx, by = N[b].cy, px = N[p].cx, py = N[p].cy;
+      if ((bx - ax) * (py - ay) - (by - ay) * (px - ax) !== 0) return false;
+      return px >= Math.min(ax, bx) && px <= Math.max(ax, bx) && py >= Math.min(ay, by) && py <= Math.max(ay, by) && !(px === ax && py === ay) && !(px === bx && py === by);
+    };
+    // coût d'un ensemble de stations : tronçons hors 0/45/90° (dessinés avec un coude), trop courts,
+    // ou qui traversent une station qu'ils ne desservent pas (le plus trompeur, donc le plus pénalisé)
+    const costOf = (ids) => {
+      const seen = new Set(); let c = 0;
+      for (const i of ids) {
+        for (const j of adj[i]) {
+          const k = i < j ? i + ':' + j : j + ':' + i; if (seen.has(k)) continue; seen.add(k);
+          const dx = Math.abs(N[i].cx - N[j].cx), dy = Math.abs(N[i].cy - N[j].cy);
+          if (dx === 0 && dy === 0) return 1e9;
+          const straight = dx === 0 || dy === 0 || dx === dy;
+          if (!straight) c += 1;
+          if (Math.max(dx, dy) < 2) c += 0.5;
+          if (straight) for (let p = 0; p < N.length; p++) if (p !== i && p !== j && onSeg(p, i, j)) c += 3;
+        }
+        for (const [ea, eb] of E) if (ea !== i && eb !== i && octo(ea, eb) && onSeg(i, ea, eb)) c += 3;
       }
       return c;
     };
-    for (let pass = 0; pass < 4; pass++) {
+    const bad = (i, x, y) => {
+      const ox = N[i].cx, oy = N[i].cy; N[i].cx = x; N[i].cy = y;
+      const c = costOf([i]); N[i].cx = ox; N[i].cy = oy;
+      return c;
+    };
+    const place = (i, x, y) => { occ.delete(key(N[i].cx, N[i].cy)); N[i].cx = x; N[i].cy = y; occ.set(key(x, y), i); };
+    for (let pass = 0; pass < 10; pass++) {
       let moved = 0;
+      // 1) déplacement d'une station seule
       for (const i of [...order].reverse()) {
         const n = N[i];
-        if (adj[i].every((j) => octo(i, j))) continue;
+        if (costOf([i]) === 0) continue;
         let best = bad(i, n.cx, n.cy), bx = n.cx, by = n.cy;
-        for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) {
           if (!dx && !dy) continue;
           const x = n.cx + dx, y = n.cy + dy;
           if (occ.has(key(x, y))) continue;
-          const c = bad(i, x, y) + (Math.abs(dx) + Math.abs(dy)) * 0.05;
+          const c = bad(i, x, y) + (Math.abs(dx) + Math.abs(dy)) * 0.04;
           if (c < best - 1e-9) { best = c; bx = x; by = y; }
         }
-        if (bx !== n.cx || by !== n.cy) { occ.delete(key(n.cx, n.cy)); n.cx = bx; n.cy = by; occ.set(key(bx, by), i); moved++; }
+        if (bx !== n.cx || by !== n.cy) { place(i, bx, by); moved++; }
+      }
+      // 2) tronçon encore de travers : on déplace ses deux extrémités ensemble
+      for (const [a, b] of E) {
+        if (costOf([a, b]) === 0) continue;
+        const A = N[a], B = N[b], ax0 = A.cx, ay0 = A.cy, bx0 = B.cx, by0 = B.cy;
+        let best = costOf([a, b]), pick = null;
+        occ.delete(key(ax0, ay0)); occ.delete(key(bx0, by0));
+        for (let dax = -2; dax <= 2; dax++) for (let day = -2; day <= 2; day++) {
+          const axn = ax0 + dax, ayn = ay0 + day; if (occ.has(key(axn, ayn))) continue;
+          for (let dbx = -2; dbx <= 2; dbx++) for (let dby = -2; dby <= 2; dby++) {
+            const bxn = bx0 + dbx, byn = by0 + dby;
+            if (occ.has(key(bxn, byn)) || (bxn === axn && byn === ayn)) continue;
+            A.cx = axn; A.cy = ayn; B.cx = bxn; B.cy = byn;
+            const c = costOf([a, b]) + (Math.abs(dax) + Math.abs(day) + Math.abs(dbx) + Math.abs(dby)) * 0.03;
+            if (c < best - 1e-9) { best = c; pick = [axn, ayn, bxn, byn]; }
+          }
+        }
+        if (pick) { A.cx = pick[0]; A.cy = pick[1]; B.cx = pick[2]; B.cy = pick[3]; moved++; }
+        else { A.cx = ax0; A.cy = ay0; B.cx = bx0; B.cy = by0; }
+        occ.set(key(A.cx, A.cy), a); occ.set(key(B.cx, B.cy), b);
       }
       if (!moved) break;
     }
@@ -5337,7 +5704,7 @@ const UI = {
       : `<b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b><small>${prof === null ? 'trésorerie' : (prof >= 0 ? '+' : '') + fmtEur(prof) + ' hier'}</small>`;
     const mod = Time.mod(s.min), ah = ((mod / 60) % 12) * 30, am = (mod % 60) * 6;
     const night = Time.night(s.min);
-    $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${RealWeather.active() ? Math.round(s.wxReal.temp) + '° ' : ''}${t.day}</small></span>`;
+    $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${RealWeather.active() ? Math.round(s.wxReal.temp) + '° ' : ''}${t.day.split(' ').slice(0, 2).join(' ')}</small></span>`;
     $('#wx').innerHTML = icon(EV_INFO[Events.weather()].icon);
     $('#wx').title = EV_INFO[Events.weather()].title;
     $('#btnPlay').innerHTML = G.paused ? icon('play') : icon('pause');
@@ -5374,15 +5741,25 @@ const UI = {
     m.hidden = false;
   },
 
+  refreshHeatChip() {
+    let el = document.getElementById('heatChip');
+    const v = G.s && G.s.settings.heat;
+    if (!v) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'heatChip'; document.getElementById('game').appendChild(el); }
+    const lab = { pax: 'Affluence du jour', mec: 'Mécontents du jour', profit: 'Rentabilité du jour' }[v];
+    const grad = { pax: 'linear-gradient(90deg,rgba(242,183,5,.25),#F2B705,#E08A12)', mec: 'linear-gradient(90deg,rgba(226,86,63,.25),#E2563F,#9C2B25)', profit: 'linear-gradient(90deg,#D9433A,#E9D8A6,#2E9E5B)' }[v];
+    el.innerHTML = `<span>${lab}</span><i style="background:${grad}"></i><button data-act="heat" data-arg="" aria-label="Masquer">${icon('close')}</button>`;
+  },
   /* ---- notifications ---- */
-  toast(text, kind = 'info') {
-    const box = $('#toasts'); if (!box) return;
+  toast(text, kind = 'info', action) {
+    const box = $('#snacks'); if (!box) return;
+    box.classList.toggle('raised', !$('#buildbar').hidden);
     const el = document.createElement('div');
     el.className = 'toast t-' + kind;
-    el.textContent = text;
+    el.innerHTML = `<span>${esc(text)}</span>${action ? `<button class="snack-a" data-act="${action.act}" data-arg="${esc(action.arg)}">${esc(action.label)}</button>` : ''}`;
     box.appendChild(el);
-    while (box.children.length > 3) box.firstChild.remove();
-    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, kind === 'bad' ? 5200 : 4000);
+    while (box.children.length > 2) box.firstChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, action ? 6500 : kind === 'bad' ? 5200 : 3800);
   },
 
   /* ---- panneau du bas ---- */
@@ -5452,7 +5829,10 @@ const UI = {
       const n = ln.stops.length;
       let w = 0; for (let j = 0; j < n; j++) w += ln.Wf[k2 * n + j] + ln.Wb[k2 * n + j] + ln.Xf[k2 * n + j] + ln.Xb[k2 * n + j] + ln.Rf[k2 * n + j] + ln.Rb[k2 * n + j];
       const hw = ln.active ? '~' + Math.max(1, Math.round(ln.headway)) + ' min' : ln.status === 'construction' ? 'en travaux' : 'hors service';
-      return `<button class="lrow" data-act="openLine" data-arg="${ln.id}">${badgeFull(ln)}<span class="lrow-t">${esc(ln.name)}</span><span class="lrow-v"><b>${fmtInt(w)}</b> en attente<br><small>passage ${hw}</small></span></button>`;
+      const groups = {}; for (const v of ln.veh) groups[v.model] = (groups[v.model] || 0) + 1;
+      const m = Object.entries(groups).sort((a, b) => b[1] - a[1])[0]?.[0] || CATALOG[ln.mode][ln.mode === 'bus' ? 1 : 0].id;
+      return `<button class="lrow" data-act="openLine" data-arg="${ln.id}">${badgeFull(ln)}<span class="lrow-t">${esc(ln.name)}</span><span class="lrow-v"><b>${fmtInt(w)}</b> en attente<br><small>passage ${hw}</small></span></button>
+        <div class="quick"><button class="btn sm" data-act="buyVeh" data-arg="${ln.id}|${m}">${icon('plus')} ${esc(MODEL[m].name)} · ${Eco.free() ? 'gratuit' : fmtEur(MODEL[m].price * G.s.costMul)}</button><button class="btn sm" data-act="editLine" data-arg="${ln.id}">Modifier la ligne</button></div>`;
     }).join('');
     const z = G.w.zoneAt(st.mx, st.my);
     const seen = new Set(near.map(([ln]) => ln.id));
@@ -5523,10 +5903,11 @@ const UI = {
     const m = $('#modal');
     $('#modalBox').innerHTML = html;
     m.hidden = false;
+    G.ui.modalLocked = !!opts.lock; // décision obligatoire : le bouton retour ne ferme pas la fenêtre
     if (opts.pause) { G.ui.prevPaused = G.paused; G.paused = true; this.refreshTop(); G.ui.modalPaused = true; }
   },
   closeModal() {
-    $('#modal').hidden = true;
+    $('#modal').hidden = true; G.ui.modalLocked = false;
     if (G.ui.modalPaused) { G.paused = G.ui.prevPaused; G.ui.modalPaused = false; this.refreshTop(); }
   },
   choiceDialog(e) {
@@ -5536,13 +5917,13 @@ const UI = {
     const c = Events.cat(e);
     this.modal(`<div class="plate big"><span class="evcard-ic" style="--c:${c.col}">${esc(Events.glyph(e))}</span> ${esc(e.title)}</div>
       <p>${esc(e.q)}</p>
-      <div class="row2">${e.opts.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>`, { pause: true });
+      <div class="row2">${e.opts.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>`, { pause: true, lock: true });
   },
   strikeDialog(e) {
     this.modal(`<div class="plate big">${icon('strike')} Préavis de grève</div>
       <p>Les agents ${e.mode === 'bus' ? 'des bus' : 'du métro'} menacent d’arrêter le travail demain toute la journée. Toutes les lignes ${e.mode === 'bus' ? 'de bus' : 'de métro'} seront à l’arrêt.</p>
       <p>Une négociation immédiate (primes, embauches) peut éviter le mouvement.</p>
-      <div class="row2"><button class="btn" data-act="strikeNo" data-arg="${e.id}">Laisser faire</button><button class="btn primary" data-act="strikeYes" data-arg="${e.id}">Négocier · ${fmtEur(e.cost)}</button></div>`, { pause: true });
+      <div class="row2"><button class="btn" data-act="strikeNo" data-arg="${e.id}">Laisser faire</button><button class="btn primary" data-act="strikeYes" data-arg="${e.id}">Négocier · ${fmtEur(e.cost)}</button></div>`, { pause: true, lock: true });
   },
 
   /* ---- écrans ---- */
@@ -5615,7 +5996,11 @@ const SHEETS = {
     }).join('');
     const presets = Object.entries(SERVICE_PRESETS).map(([k, p]) => `<button class="${l.svcPreset === k ? 'on' : ''}" data-act="svcPreset" data-arg="${l.id}|${k}">${p.label}</button>`).join('');
     const swatches = LINE_COLORS.map((c) => `<button class="sw ${c === l.color ? 'on' : ''}" style="background:${c}" data-act="lineColor" data-arg="${l.id}|${c}" aria-label="Couleur ${c}"></button>`).join('');
-    const html = `${status}
+    // fiche en onglets : Résumé · Véhicules · Tarifs et horaires · Aménagements
+    const tab = ['sum', 'veh', 'tarif', 'amen'].includes(G.ui.lineTab) ? G.ui.lineTab : 'sum';
+    const tabs = `<div class="seg ltabs">${[['sum', 'Résumé'], ['veh', 'Véhicules'], ['tarif', 'Tarifs et horaires'], ['amen', 'Aménagements']].map(([k, t]) => `<button class="${tab === k ? 'on' : ''}" data-act="lineTab" data-arg="${k}">${t}</button>`).join('')}</div>`;
+    let body = '';
+    if (tab === 'sum') body = `
       <div class="stops">${l.stops.map((s2, i) => `<span>${i ? '<i></i>' : ''}${esc(s2.name)}</span>`).join('')}</div>
       <div class="kpis">
         <div><small>Voyageurs aujourd’hui</small><b>${fmtInt(t.pax)}</b></div>
@@ -5634,24 +6019,30 @@ const SHEETS = {
       ${xc.length ? statLine('Correspondances', xc.map((x) => Lines.label(x.line)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')) : ''}
       ${xc.length ? statLine('Voyageurs en correspondance', fmtInt(l.today.xin || 0) + ' arrivés · ' + fmtInt(l.today.xout || 0) + ' partis') : ''}
       ${y ? statLine('Hier', fmtInt(y.pax) + ' voy. · ' + fmtEur(y.fares + y.ads - y.ops)) : ''}
-      ${section('Véhicules')}${vrows}
-      <details class="cat"><summary>${icon('plus')} Acheter un véhicule</summary>${cat}</details>
-      ${section('Tarifs par période')}${price('week', 'Semaine')}${price('weekend', 'Week-end')}${price('night', 'Nuit (22 h – 5 h)')}
+      ${section('Actions')}
+      <button class="btn wide" data-act="editLine" data-arg="${l.id}">${icon('plus')} Modifier les arrêts (ajouter, déplacer, retirer)</button>
+      ${l.mode !== 'metro' ? `<button class="btn wide" data-act="reroute" data-arg="${l.id}">${icon('undo')} Recalculer l’itinéraire (sens de circulation)</button>` : ''}
+      <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
+    else if (tab === 'veh') body = `
+      ${statLine('Capacité totale', fmtInt(cap) + ' places')}
+      ${statLine('En service', l.active ? Lines.running(l) + ' / ' + l.veh.length + ' véhicules' : 'au dépôt')}
+      ${section('Flotte')}${vrows}
+      ${section('Acheter un véhicule')}${cat}`;
+    else if (tab === 'tarif') body = `
+      ${section('Tarifs par période')}${price('week', 'Semaine')}${price('weekend', 'Week-end et fériés')}${price('night', 'Nuit (22 h – 5 h)')}
       ${section('Horaires')}
       <div class="vrow"><div><b>Premier départ</b></div><select data-change="hStart" data-arg="${l.id}" ${l.night ? 'disabled' : ''}>${hourOpts([240, 270, 300, 330, 360, 390, 420], l.hours.start)}</select></div>
       <div class="vrow"><div><b>Fin de service</b></div><select data-change="hEnd" data-arg="${l.id}" ${l.night ? 'disabled' : ''}>${hourOpts([1260, 1320, 1380, 0, 30, 60, 120], l.hours.end)}</select></div>
       <label class="tgl"><input type="checkbox" data-change="night" data-arg="${l.id}" ${l.night ? 'checked' : ''}><span>Service de nuit (24 h/24)</span></label>
       ${section('Grille horaire')}
       <p class="sub">Part de la flotte en service selon la période. Les véhicules en trop rentrent au dépôt depuis le terminus (sans coût d’exploitation) et ressortent pour les renforts.</p>
-      <div class="seg wrap">${presets}${l.svcPreset === 'perso' ? '<button class="on">Personnalisée</button>' : ''}</div>${svcRows}
-      ${l.mode === 'bus' ? `${section('Aménagements')}
+      <div class="seg wrap">${presets}${l.svcPreset === 'perso' ? '<button class="on">Personnalisée</button>' : ''}</div>${svcRows}`;
+    else body = `
+      ${l.mode === 'bus' ? `${section('Voirie')}
         <div class="vrow"><div><b>Couloirs de bus</b><small>${laneKm.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km sur axes principaux · les bus évitent 75 % des bouchons</small></div>${l.busLane ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="busLane" data-arg="${l.id}">${fmtEur(laneCost)}</button>`}</div>
-        <div class="vrow"><div><b>Priorité aux feux</b><small>+10 % de vitesse</small></div>${l.signal ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="signal" data-arg="${l.id}">${fmtEur(sigCost)}</button>`}</div>` : ''}
-      ${section('Couleur')}<div class="swatches">${swatches}</div>
-      ${section('Actions')}
-      <button class="btn wide" data-act="editLine" data-arg="${l.id}">${icon('plus')} Modifier les arrêts (ajouter, déplacer, retirer)</button>
-      ${l.mode !== 'metro' ? `<button class="btn wide" data-act="reroute" data-arg="${l.id}">${icon('undo')} Recalculer l’itinéraire (sens de circulation)</button>` : ''}
-      <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
+        <div class="vrow"><div><b>Priorité aux feux</b><small>+10 % de vitesse</small></div>${l.signal ? '<em class="tag ok">Réalisé</em>' : `<button class="btn sm primary" data-act="signal" data-arg="${l.id}">${fmtEur(sigCost)}</button>`}</div>` : `<p class="note">Les aménagements de voirie concernent les lignes de bus.</p>`}
+      ${section('Couleur')}<div class="swatches">${swatches}</div>`;
+    const html = `${status}${tabs}${body}`;
     return { title: `${badgeFull(l)}<span>${esc(l.name)}</span>`, html };
   },
 
@@ -5777,18 +6168,31 @@ const SHEETS = {
 
   infos() {
     const s = G.s, w = Events.weather();
-    const evRow = (e, up) => `<div class="evrow ${e.bad ? 'bad' : ''}" data-act="seeEvent" data-arg="${e.id}" style="cursor:pointer">${icon(Events.icon(e))}<div><b>${esc(e.title)}</b><small>${esc(e.desc)}</small><small>${up ? 'à partir du ' + Time.label(e.start).day + ' ' + Time.label(e.start).time : 'jusqu’à ' + Time.label(e.end).time + (Time.mod(e.end) < Time.mod(s.min) || e.end - s.min > 1440 ? ' (' + Time.label(e.end).day + ')' : '')}${e.kind === 'strike' && e.resolved ? ' · désamorcée' : ''}</small></div></div>`;
-    const act = Events.active(), up = Events.upcoming();
-    const ns = (s.notifs || []).slice(0, 25);
-    const nrow = (n) => { const c = EV_CAT[n.cat] || EV_CAT.reseau; return `<button class="nrow ${n.read ? '' : 'unread'}" data-act="notifOpen" data-arg="${n.id}"><span class="nb-ic" style="background:${c.col}">${esc(n.glyph)}</span><span class="nb-t"><b>${esc(n.title)}</b><small>${esc(n.text)}</small><small class="nr-t">${Time.label(n.t).day} ${Time.label(n.t).time}${n.when ? ' · prévu ' + esc(n.when) : ''}</small></span><span class="nb-tone t${n.tone < 0 ? 'n' : n.tone > 0 ? 'p' : '0'}">${Notif.toneLabel(n.tone)}</span></button>`; };
+    const act = Events.active(), up = Events.upcoming(), activeIds = new Set(act.map((e) => e.id));
+    const when = (e, upc) => upc ? 'à partir du ' + Time.label(e.start).day + ' ' + Time.label(e.start).time : 'jusqu’à ' + Time.label(e.end).time + (Time.mod(e.end) < Time.mod(s.min) || e.end - s.min > 1440 ? ' (' + Time.label(e.end).day + ')' : '');
+    const evRow = (e, upc) => `<div class="evrow ${e.bad ? 'bad' : ''}" data-act="seeEvent" data-arg="${e.id}" style="cursor:pointer">${icon(Events.icon(e))}<div><b>${esc(e.title)}</b><small>${esc(e.desc)}</small><small>${when(e, upc)}${e.kind === 'strike' && e.resolved ? ' · désamorcée' : ''}</small></div></div>`;
+    const nrow = (n) => {
+      const c = EV_CAT[n.cat] || EV_CAT.reseau, live = n.evId && activeIds.has(n.evId);
+      return `<button class="nrow ${n.read ? '' : 'unread'} ${live ? 'live' : ''}" data-act="notifOpen" data-arg="${n.id}"><span class="nb-ic" style="background:${c.col}">${esc(n.glyph)}</span><span class="nb-t"><b>${esc(n.title)}${live ? ' <em class="tag warn">en cours</em>' : ''}</b><small>${esc(n.text)}</small><small class="nr-t">${Time.label(n.t).day} ${Time.label(n.t).time}${n.when ? ' · prévu ' + esc(n.when) : ''}</small></span><span class="nb-tone t${n.tone < 0 ? 'n' : n.tone > 0 ? 'p' : '0'}">${Notif.toneLabel(n.tone)}</span></button>`;
+    };
+    // à traiter : décisions en attente, lignes interrompues
+    const todo = [];
+    for (const e of s.events) if (e.q && !e.decided && e.start > s.min) todo.push(`<button class="nrow todo" data-act="evAsk" data-arg="${e.id}"><span class="nb-ic" style="background:${Events.color(e)}">?</span><span class="nb-t"><b>Décision à prendre : ${esc(e.title)}</b><small>${esc(e.q)}</small></span></button>`);
+    for (const e of s.events) if (e.kind === 'strike' && !e.resolved && e.start > s.min) todo.push(`<button class="nrow todo" data-act="strikeAsk" data-arg="${e.id}"><span class="nb-ic" style="background:#8E5BD6">!</span><span class="nb-t"><b>Grève annoncée : négocier ?</b><small>${esc(e.desc)}</small></span></button>`);
+    for (const l of s.lines) if (l.status === 'active' && Events.halted(l)) todo.push(`<button class="nrow todo" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="nb-t"><b>Ligne ${esc(Lines.label(l))} interrompue</b><small>${esc(l.name)}</small></span></button>`);
+    // notifications : les 5 plus récentes, plus toujours celles des événements en cours
+    const all = s.notifs || [];
+    const shown = all.filter((n, i) => i < 5 || (n.evId && activeIds.has(n.evId)));
+    const covered = new Set(all.map((n) => n.evId).filter(Boolean));
+    const orphan = act.filter((e) => !covered.has(e.id)); // anciennes sauvegardes : événement sans notification
     setTimeout(() => { if (G.ui.sheet === 'infos') Notif.readAll(); }, 1500);
     return {
       title: 'Infos trafic',
       html: `<div class="wxbig">${icon(EV_INFO[w].icon)}<div><b>${RealWeather.active() ? esc(s.wxReal.label) + ' · ' + Math.round(s.wxReal.temp) + ' °C' : EV_INFO[w].title}</b>${RealWeather.active() ? `<small>Météo réelle à ${esc(s.city.nom)} · vent ${Math.round(s.wxReal.wind || 0)} km/h · ${esc(s.wxReal.src)}</small>` : ''}<small>${{ sun: 'Aucun effet sur le réseau.', rain: 'Plus de monde dans le métro et les bus, circulation un peu plus lente.', snow: 'Bus très ralentis, le métro fait le plein.', heat: 'Les navettes fluviales ont la cote.', storm: 'Navettes fluviales à quai, circulation perturbée.' }[w]}</small></div></div>
-      ${section('Notifications')}${ns.map(nrow).join('') || '<p class="note">Aucune notification pour l’instant.</p>'}
-      ${section('En cours')}${act.map((e) => evRow(e)).join('') || '<p class="note">Rien à signaler.</p>'}
+      ${todo.length ? section('À traiter') + todo.join('') : ''}
+      ${section('Notifications')}${shown.map(nrow).join('')}${orphan.map((e) => evRow(e)).join('')}${!shown.length && !orphan.length ? '<p class="note">Aucune notification pour l’instant.</p>' : ''}
       ${section('À venir')}${up.map((e) => evRow(e, true)).join('') || '<p class="note">Aucun événement annoncé.</p>'}
-      ${section('Journal')}${s.journal.slice(0, 30).map((j) => `<div class="jrow"><small>${Time.label(j.t).day} ${Time.label(j.t).time}</small><span>${esc(j.text)}</span></div>`).join('') || '<p class="note">Le journal est vide.</p>'}`,
+      <details class="hist"><summary>Historique (${s.journal.length})</summary>${s.journal.slice(0, 40).map((j) => `<div class="jrow"><small>${Time.label(j.t).day} ${Time.label(j.t).time}</small><span>${esc(j.text)}</span></div>`).join('') || '<p class="note">Le journal est vide.</p>'}</details>`,
     };
   },
 
@@ -5801,10 +6205,12 @@ const SHEETS = {
       title: `Menu <small class="ver">version ${APP_VERSION}</small>`,
       html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
       ${section('Affichage')}
-      <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      <div class="vrow stack"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      ${tg('shadows', 'Ombres du soleil (bâtiments et véhicules) · fond Plan IGN')}
       ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
-      <div class="vrow"><div><b>Pause automatique</b><small>Le jeu s’arrête à l’arrivée d’une notification de ce niveau</small></div><div class="seg">${[['choices', 'Choix'], ['major', 'Importantes'], ['all', 'Toutes']].map(([v, l]) => `<button class="${(s.settings.notifPause || 'choices') === v ? 'on' : ''}" data-act="notifPause" data-arg="${v}">${l}</button>`).join('')}</div></div>
-      <div class="vrow"><div><b>Bannières d’événements</b><small>Toujours consultables dans l’onglet Infos</small></div><div class="seg">${[['all', 'Toutes'], ['major', 'Importantes'], ['none', 'Aucune']].map(([v, l]) => `<button class="${nset === v ? 'on' : ''}" data-act="notifSet" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      <div class="vrow stack"><div><b>Carte de chaleur</b><small>Colore les arrêts ou les lignes selon un indicateur du jour</small></div><div class="seg">${[['', 'Aucune'], ['pax', 'Affluence'], ['mec', 'Mécontents'], ['profit', 'Rentabilité']].map(([v, l]) => `<button class="${(s.settings.heat || '') === v ? 'on' : ''}" data-act="heat" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      <div class="vrow stack"><div><b>Pause automatique</b><small>Le jeu s’arrête à l’arrivée d’une notification de ce niveau</small></div><div class="seg">${[['choices', 'Choix'], ['major', 'Importantes'], ['all', 'Toutes']].map(([v, l]) => `<button class="${(s.settings.notifPause || 'choices') === v ? 'on' : ''}" data-act="notifPause" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      <div class="vrow stack"><div><b>Bannières d’événements</b><small>Toujours consultables dans l’onglet Infos</small></div><div class="seg">${[['all', 'Toutes'], ['major', 'Importantes'], ['none', 'Aucune']].map(([v, l]) => `<button class="${nset === v ? 'on' : ''}" data-act="notifSet" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       ${tg('realWeather', 'Météo réelle (modèles Météo-France via Open-Meteo)')}
       <p class="sub">${s.realtime ? 'Mode temps réel actif : l’horloge suit l’heure de Paris.' : 'Le mode temps réel s’active avec le bouton de vitesse (après ×60).'}${s.wxReal && s.settings.realWeather ? ' Dernière météo : ' + esc(s.wxReal.label.toLowerCase()) + ', ' + Math.round(s.wxReal.temp) + ' °C.' : ''}</p>
@@ -5877,7 +6283,8 @@ const Build = {
     if (b.edit) return this.editBar();
     const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
     const cost = Lines.costOf(b.mode, b.stops, path);
-    $('#buildbar').innerHTML = `<div class="bb-t">${pict(b.mode)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}${b.loop ? ' · circulaire' : ''}</b><small>Infrastructure : ${fmtEur(cost)}</small></div></div>
+    const est = path ? Lines.estimate(b.mode, b.stops, path, b.loop) : null;
+    $('#buildbar').innerHTML = `<div class="bb-t">${pict(b.mode)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}${b.loop ? ' · circulaire' : ''}</b><small>${fmtEur(cost)}${est ? ' · ≈ ' + fmtInt(Math.round(est.pax / 10) * 10) + ' voy./jour' : ' · placez au moins 2 arrêts'}</small></div></div>
       <div class="bb-a"><button class="icon-b" data-act="bUndo" aria-label="Retirer le dernier arrêt" ${b.stops.length ? '' : 'disabled'}>${icon('undo')}</button><button class="icon-b" data-act="bCancel" aria-label="Annuler">${icon('close')}</button><button class="btn primary sm" data-act="bOk" ${b.stops.length >= 2 ? '' : 'disabled'}>${icon('check')} Valider</button></div>`;
   },
   allStops(mode) {
@@ -6105,9 +6512,11 @@ const Build = {
     const b = this.b;
     const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
     const cost = this.editCost(path);
+    const est = path ? Lines.estimate(b.mode, b.stops, path, b.loop) : null, est0 = b.est0 ?? (b.est0 = (() => { const e0 = Lines.estimate(b.edit.mode, b.edit.stops, b.edit.path, b.edit.loop); return e0 ? e0.pax : 0; })());
+    const dEst = est ? est.pax - est0 : 0;
     const tools = [['add', 'Ajouter'], ['move', 'Déplacer'], ['remove', 'Retirer']].map(([k, t]) => `<button class="${b.tool === k ? 'on' : ''}" data-act="bTool" data-arg="${k}">${t}</button>`).join('');
     $('#buildbar').innerHTML = `<div class="seg bb-tools">${tools}</div>
-      <div class="bb-t">${badge(b.edit)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}</b><small>${b.tool === 'move' && b.sel >= 0 ? 'Nouvel emplacement de ' + esc(b.stops[b.sel].name) : 'Travaux : ' + fmtEur(cost)}</small></div></div>
+      <div class="bb-t">${badge(b.edit)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}</b><small>${b.tool === 'move' && b.sel >= 0 ? 'Nouvel emplacement de ' + esc(b.stops[b.sel].name) : 'Travaux : ' + fmtEur(cost) + (est && Math.abs(dEst) >= 5 ? ' · ' + (dEst > 0 ? '+' : '−') + fmtInt(Math.abs(Math.round(dEst / 10) * 10)) + ' voy./jour' : '')}</small></div></div>
       <div class="bb-a"><button class="icon-b" data-act="bUndo" aria-label="Annuler la dernière modification" ${b.hist.length ? '' : 'disabled'}>${icon('undo')}</button><button class="icon-b" data-act="bCancel" aria-label="Abandonner">${icon('close')}</button><button class="btn primary sm" data-act="bOk">${icon('check')} Valider</button></div>`;
   },
   confirmEdit() {
@@ -6202,6 +6611,7 @@ const Build = {
       <h3 class="sec">Couleur</h3><div class="swatches">${sw}</div>
       <h3 class="sec">Véhicules</h3>${cat}
       <div class="vrow"><div><b>Nombre</b><small>passage toutes les ~${Math.max(1, Math.round(hw))} min</small></div><div class="stepper"><button data-act="bCount" data-arg="-1">−</button><b>${q.count}</b><button data-act="bCount" data-arg="1">+</button></div></div>
+      ${(() => { const est = Lines.estimate(b.mode, b.stops, q.path, b.loop); return est ? `<div class="kpis"><div><small>Voyageurs estimés</small><b>≈ ${fmtInt(Math.round(est.pax / 10) * 10)} / jour</b></div><div><small>Habitants et emplois desservis</small><b>${fmtInt(Math.round(est.pop / 100) * 100)}</b></div></div><p class="sub">Estimation un jour de semaine, avec un passage fréquent et le tarif de référence, hors correspondances.</p>` : ''; })()}
       <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${fmtEur(total)}</td></tr>${Eco.free() ? '<tr><th>Argent illimité</th><td>gratuit</td></tr>' : `<tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr>`}</tbody></table>
       <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bBuild" ${Eco.canAfford(total) ? '' : 'disabled'}>Construire</button></div>`);
   },
@@ -6227,7 +6637,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.10';
+const APP_VERSION = '1.12';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -6257,7 +6667,7 @@ const ACT = {
   },
   rtOn() { UI.closeModal(); RealTime.enable(); },
   rtCancel() { UI.closeModal(); G.speed = 1; G.paused = false; UI.refreshTop(); },
-  openLine(id) { UI.open('line', id); Render.dirty = true; },
+  openLine(id) { if (String(G.ui.sheetArg) !== String(id) || G.ui.sheet !== 'line') G.ui.lineTab = 'sum'; UI.open('line', id); Render.dirty = true; },
   follow() { G.ui.follow = G.ui.follow === G.ui.selVeh ? null : G.ui.selVeh; UI.renderVehCard(); },
   buildMode(m) { if (RailBuild.b) RailBuild.cancel(); Build.start(m); },
   railMode(k) { RailBuild.start(k); },
@@ -6296,8 +6706,17 @@ const ACT = {
   bEditApply() { Build.applyEdit(); },
   buyVeh(arg) {
     const [id, m] = arg.split('|'); const l = findLine(id); if (!l) return;
-    if (Lines.addVehicle(l, m)) { UI.toast(MODEL[m].name + ' ajouté à la ligne ' + Lines.label(l) + '.', 'ok'); Sim.lineQuality(l); }
-    UI.refreshSheet();
+    const price = Math.round(MODEL[m].price * G.s.costMul);
+    UX.confirmSpend(price, `${MODEL[m].name} pour la ligne ${Lines.label(l)}`, () => {
+      if (!Lines.addVehicle(l, m)) { UI.refreshSheet(); return; }
+      const v = l.veh[l.veh.length - 1];
+      UX.undo(MODEL[m].name + ' ajouté à la ligne ' + Lines.label(l) + '.', () => {
+        const i = l.veh.indexOf(v); if (i < 0) return;
+        l.veh.splice(i, 1); if (G.ui.follow === v) G.ui.follow = null;
+        UX.refund(price, 'capex'); Sim.lineQuality(l); UI.refreshSheet(); UI.toast('Achat annulé, remboursé.', 'info');
+      });
+      Sim.lineQuality(l); UI.refreshSheet();
+    });
   },
   sellVeh(arg) {
     const [id, m] = arg.split('|'); const l = findLine(id); if (!l) return;
@@ -6311,14 +6730,24 @@ const ACT = {
     const l = findLine(id); if (!l || l.busLane) return;
     const km = laneLength(l) / 1000;
     const cost = Math.round(km * 90000 * G.s.costMul / 1000) * 1000;
-    if (Eco.spend(cost, 'capex')) { l.busLane = true; l.laneKm = km; Sim.lineQuality(l); UI.toast('Couloirs de bus aménagés sur la ligne ' + Lines.label(l) + '.', 'ok'); }
-    UI.refreshSheet();
+    UX.confirmSpend(cost, `Couloirs de bus sur la ligne ${Lines.label(l)}`, () => {
+      if (Eco.spend(cost, 'capex')) {
+        l.busLane = true; l.laneKm = km; Sim.lineQuality(l);
+        UX.undo('Couloirs de bus aménagés sur la ligne ' + Lines.label(l) + '.', () => { l.busLane = false; UX.refund(cost, 'capex'); Sim.lineQuality(l); UI.refreshSheet(); });
+      }
+      UI.refreshSheet();
+    });
   },
   signal(id) {
     const l = findLine(id); if (!l || l.signal) return;
     const cost = Math.round(l.stops.length * 25000 * G.s.costMul / 1000) * 1000;
-    if (Eco.spend(cost, 'capex')) { l.signal = true; Sim.lineQuality(l); UI.toast('Priorité aux feux activée.', 'ok'); }
-    UI.refreshSheet();
+    UX.confirmSpend(cost, `Priorité aux feux sur la ligne ${Lines.label(l)}`, () => {
+      if (Eco.spend(cost, 'capex')) {
+        l.signal = true; Sim.lineQuality(l);
+        UX.undo('Priorité aux feux activée.', () => { l.signal = false; UX.refund(cost, 'capex'); Sim.lineQuality(l); UI.refreshSheet(); });
+      }
+      UI.refreshSheet();
+    });
   },
   reroute(id) {
     const l = findLine(id); if (!l) return;
@@ -6334,6 +6763,7 @@ const ACT = {
     G.map.fitBounds([[myToLat(b.maxy), mxToLon(b.minx)], [myToLat(b.miny), mxToLon(b.maxx)]], { padding: [40, 40], paddingBottomRight: [20, Math.round(window.innerHeight * 0.45)] });
   },
   editLine(id) { const l = findLine(id); if (l) Build.startEdit(l); },
+  lineTab(k) { G.ui.lineTab = k; UI.refreshSheet(true); },
   bTool(t) { if (Build.b) { Build.b.tool = t; Build.b.sel = -1; Build.bar(); Render.dirty = true; } },
   svcPreset(arg) {
     const [id, k] = arg.split('|'); const l = findLine(id); if (!l || !SERVICE_PRESETS[k]) return;
@@ -6342,11 +6772,23 @@ const ACT = {
     Sim.lineQuality(l); UI.refreshSheet();
   },
   openPlan() { Plan.open(); },
+  spendOk() { const f = UX.pending; UX.pending = null; UI.closeModal(); if (f) f(); },
+  spendNo() { UX.pending = null; UI.closeModal(); },
+  undoAct(id, el) { const f = UX.undos && UX.undos[id]; if (f) { delete UX.undos[id]; f(); } const t = el && el.closest('.toast'); if (t) t.remove(); },
+  heat(v) { G.s.settings.heat = v; Render.dirty = true; UI.refreshHeatChip(); if (UI.sheetOpen()) UI.refreshSheet(); },
   staffTrain(id) {
-    if (Staff.start(id)) { const d = STAFF.find((x) => x.id === id); UI.toast(`Formation lancée : ${d.name}.`, 'ok'); UI.refreshTop(); }
-    UI.refreshSheet();
+    const d = STAFF.find((x) => x.id === id), cost = Staff.cost(id);
+    UX.confirmSpend(cost, `Formation « ${d.name} », niveau ${Staff.L(id) + 1}`, () => {
+      if (Staff.start(id)) {
+        UX.undo(`Formation lancée : ${d.name}.`, () => { const s = Staff.st(); s.training = s.training.filter((t) => t.id !== id); UX.refund(cost, 'capex'); UI.refreshSheet(); });
+        UI.refreshTop();
+      }
+      UI.refreshSheet();
+    });
   },
   notifSet(v) { G.s.settings.notif = v; UI.refreshSheet(); },
+  evAsk(id) { const e = G.s.events.find((x) => x.id === +id); if (e) { e.dialogOpen = false; UI.close(); UI.choiceDialog(e); } },
+  strikeAsk(id) { const e = G.s.events.find((x) => x.id === +id); if (e) { UI.close(); UI.strikeDialog(e); } },
   notifPause(v) { G.s.settings.notifPause = v; UI.refreshSheet(); },
   notifOpen(id) {
     const n = (G.s.notifs || []).find((x) => x.id === +id); if (!n) return;
@@ -6378,10 +6820,19 @@ const ACT = {
   buyZone(code) {
     const z = G.w.zones.get(code); if (!z || z.owned) return;
     if (!G.w.purchasable(z)) { UI.toast('Cette zone n’est pas contiguë à votre territoire.', 'warn'); return; }
-    if (!Eco.spend(z.price, 'zones')) return;
+    UX.confirmSpend(z.price, `Achat de la zone ${z.name}`, () => ACT.buyZoneNow(code));
+  },
+  buyZoneNow(code) {
+    const z = G.w.zones.get(code); if (!z || z.owned) return;
+    const price = z.price;
+    if (!Eco.spend(price, 'zones')) return;
     z.owned = true;
+    UX.undo('Zone acquise : ' + z.name + '.', () => {
+      const used = G.s.lines.some((l) => l.stops.some((st) => G.w.zoneAt(st.mx, st.my) === z));
+      if (used) { UI.toast('Impossible d’annuler : une ligne dessert déjà cette zone.', 'warn'); return; }
+      z.owned = false; UX.refund(price, 'zones'); Render.dirty = true; if (G.ui.cardType === 'zone') UI.showZone(z);
+    });
     Events.log('Zone achetée : ' + z.name + ' (' + z.commune + ').', 'ok');
-    UI.toast('Zone acquise : ' + z.name + '.', 'ok');
     Render.dirty = true;
     if (G.ui.cardType === 'zone') UI.showZone(z);
     if (UI.sheetOpen()) UI.refreshSheet();
@@ -6554,6 +7005,7 @@ const Game = {
     if (Build.b) { Build.tap(mx, my); return; }
     const h = Render.hit(e.containerPoint.x, e.containerPoint.y);
     if (h && h.type === 'event') { UI.showEvent(h.e); return; }
+    if (h && h.type === 'cluster') { G.map.setView(G.map.containerPointToLatLng([h.x, h.y]), Math.min(18, G.map.getZoom() + 2)); return; }
     if (h && h.type === 'station') { UI.showStation(h.g); return; }
     if (h && h.type === 'poi') { UI.showPoi(h.p); return; }
     if (h && h.type === 'veh') { UI.showVehicle(h.l, h.v); return; }
@@ -6660,6 +7112,7 @@ const Game = {
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     if (!G.s.settings.notif) G.s.settings.notif = 'all';
+    if (G.s.settings.shadows === undefined) G.s.settings.shadows = true;
     if (!G.s.settings.notifPause) G.s.settings.notifPause = 'choices';
     if (!G.s.notifs) G.s.notifs = [];
     for (const e of G.s.events) Events.normalize(e);
@@ -6667,6 +7120,7 @@ const Game = {
     for (const l of G.s.lines) { Lines.prepare(l); Render.lineBox(l); }
     Transfers.rebuild();
     G.ready = true;
+    UX.guard(); UI.refreshHeatChip();
     Render.resize(); Render.dirty = true;
     UI.refreshTop(); UI.updateTint(); UI.refreshInfoBadge();
     Traffic.update();
@@ -6723,6 +7177,7 @@ function frame(now) {
 
 function boot() {
   UI.init();
+  UX.init();
   UI.showStart();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && G.ready) Save.auto();
@@ -6747,6 +7202,121 @@ function boot() {
   requestAnimationFrame(frame);
 }
 document.addEventListener('DOMContentLoaded', boot);
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — confort d'utilisation : bouton retour Android,
+   messages en bas d'écran, panneaux redimensionnables, mouvements
+   d'argent animés, confirmation et annulation des grosses dépenses
+   ===================================================================== */
+
+const UX = {
+  init() {
+    this.initBack();
+    this.initDrag();
+  },
+
+  /* ---------- bouton retour d'Android ---------- */
+  guard() {
+    if (!history.state || !history.state.corr) history.pushState({ corr: 1 }, '');
+  },
+  initBack() {
+    window.addEventListener('popstate', () => {
+      if (!G.ready) return; // écran d'accueil : comportement normal
+      if (this.handleBack()) { history.pushState({ corr: 1 }, ''); this.lastBack = 0; return; }
+      // plus rien à fermer : un second appui rapide quitte l'appli
+      const now = Date.now();
+      if (now - (this.lastBack || 0) < 2200) { Save.auto(); return; }
+      this.lastBack = now;
+      Save.auto();
+      UI.toast('Appuyez encore sur retour pour quitter.', 'info');
+      clearTimeout(this.backT);
+      this.backT = setTimeout(() => { if (G.ready) this.guard(); }, 2300);
+    });
+  },
+  /** ferme l'élément au premier plan ; renvoie false s'il n'y a rien à fermer */
+  handleBack() {
+    if (!$('#modal').hidden) { if (!G.ui.modalLocked) UI.closeModal(); return true; }
+    const plan = document.getElementById('plan'); if (plan && !plan.hidden) { Plan.close(); return true; }
+    if (RailBuild.b) { RailBuild.cancel(); return true; }
+    if (Build.b) { Build.cancel(); return true; }
+    const sm = $('#speedMenu'); if (sm && !sm.hidden) { UI.speedMenu(false); return true; }
+    if (!$('#card').hidden) { UI.closeCard(); return true; }
+    if (UI.sheetOpen()) {
+      if (G.ui.sheet === 'line' || G.ui.sheet === 'staff') UI.open('lines'); else UI.close();
+      return true;
+    }
+    return false;
+  },
+
+  /* ---------- panneaux : glisser pour agrandir ou fermer ---------- */
+  initDrag() {
+    const sh = $('#sheet'), head = sh.querySelector('.sheet-h');
+    let y0 = null, dy = 0, t0 = 0;
+    const start = (y, target) => { if (target.closest('button')) return; y0 = y; dy = 0; t0 = Date.now(); sh.style.transition = 'none'; };
+    const move = (y) => {
+      if (y0 === null) return;
+      dy = y - y0;
+      sh.style.transform = dy > 0 ? `translateY(${dy}px)` : 'none';
+    };
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null; sh.style.transition = ''; sh.style.transform = '';
+      const quick = Date.now() - t0 < 250;
+      if (Math.abs(dy) < 6 && quick) { sh.classList.toggle('full'); return; } // simple toucher de la poignée
+      if (dy > 110 || (quick && dy > 40)) { if (sh.classList.contains('full')) sh.classList.remove('full'); else UI.close(); }
+      else if (dy < -60 || (quick && dy < -25)) sh.classList.add('full');
+    };
+    head.addEventListener('touchstart', (e) => start(e.touches[0].clientY, e.target), { passive: true });
+    head.addEventListener('touchmove', (e) => move(e.touches[0].clientY), { passive: true });
+    head.addEventListener('touchend', end);
+    head.addEventListener('mousedown', (e) => { start(e.clientY, e.target); const mm = (ev) => move(ev.clientY); const mu = () => { end(); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); }; window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu); });
+  },
+
+  /* ---------- argent : petit chiffre animé près de la trésorerie ---------- */
+  money(delta) {
+    const s = G.s; if (!s || s.unlimited || !G.ready) return;
+    if (Math.abs(delta) < Math.max(2000, Math.abs(s.money) * 0.004)) return;
+    const top = document.getElementById('top'), cash = document.getElementById('cash'); if (!top || !cash) return;
+    const el = document.createElement('span');
+    el.className = 'mfloat ' + (delta < 0 ? 'neg' : 'pos');
+    el.textContent = (delta < 0 ? '−' : '+') + fmtEur(Math.abs(delta));
+    const r = cash.getBoundingClientRect(), rt = top.getBoundingClientRect();
+    el.style.left = (r.left - rt.left + 14) + 'px'; el.style.top = (r.bottom - rt.top - 4) + 'px';
+    top.appendChild(el);
+    setTimeout(() => el.remove(), 1700);
+  },
+
+  /* ---------- grosses dépenses : confirmation, puis annulation possible ---------- */
+  /** fn est exécutée tout de suite, ou après confirmation si la dépense est importante */
+  confirmSpend(amount, label, fn) {
+    const s = G.s;
+    if (Eco.free() || amount <= 0) return fn();
+    const big = amount >= 1e6 || amount > Math.max(0, s.money) * 0.1;
+    if (!big) return fn();
+    if (amount > s.money) return fn(); // fonds insuffisants : le message habituel s'affiche
+    this.pending = fn;
+    UI.modal(`<div class="plate big">${icon('euro')} Confirmer la dépense</div>
+      <p>${esc(label)}</p>
+      <p class="big-num neg">−${fmtEur(amount)}</p>
+      <p class="sub">${Math.round(amount / Math.max(1, s.money) * 100)} % de votre trésorerie · il restera ${fmtEur(s.money - amount)}.</p>
+      <div class="row2"><button class="btn" data-act="spendNo">Annuler</button><button class="btn primary" data-act="spendOk">Confirmer</button></div>`);
+  },
+  /** rembourse exactement une dépense (annulation) */
+  refund(amount, cat) {
+    const s = G.s; if (s.unlimited) return;
+    s.money += amount; s.today[cat] = Math.max(0, (s.today[cat] || 0) - amount);
+    this.money(amount); UI.refreshTop();
+  },
+  /** message avec bouton « Annuler » pendant quelques secondes */
+  undo(text, fn) {
+    const id = 'u' + Date.now();
+    this.undos = this.undos || {};
+    this.undos[id] = fn;
+    UI.toast(text, 'ok', { label: 'Annuler', act: 'undoAct', arg: id });
+    setTimeout(() => { delete this.undos[id]; }, 7000);
+  },
+};
 
 </script>
 </body>

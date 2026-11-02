@@ -150,7 +150,27 @@ small{font-size:12.5px;color:var(--muted)}
 .nav-b.on{color:var(--ink)}
 .nav-b.on .ic{background:var(--ink);color:#fff}
 .nav-build .ic{background:var(--accent);color:var(--ink)}
-.dot{position:absolute;top:7px;right:calc(50% - 18px);width:10px;height:10px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--panel)}
+.dot{position:absolute;top:4px;right:calc(50% - 22px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);box-shadow:0 0 0 2px var(--panel);color:#fff;font:700 10.5px/17px var(--f-display);font-style:normal;text-align:center}
+.nban{position:relative;pointer-events:auto;max-width:460px;width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:var(--panel);padding:8px 10px;border-radius:16px;box-shadow:var(--shadow),inset 4px 0 0 var(--nc,#999);animation:tin .25s ease-out;color:var(--ink)}
+.nban.out{opacity:0;transform:translateY(-6px);transition:.35s}
+.nban.n-bad{--nc:#D9433A}.nban.n-warn{--nc:#E08A12}.nban.n-info{--nc:#8a8a8a}.nban.n-good{--nc:#3BA55C}.nban.n-great{--nc:#F2B705}
+.nb-ic{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font:700 15px/1 var(--f-display);box-shadow:inset 0 0 0 2px rgba(255,255,255,.55)}
+.nb-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.nb-t b{font:600 14px/1.2 var(--f-display)}
+.nb-t small{font-size:12.5px;line-height:1.3;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nb-t small em{font-style:normal;font-weight:600;color:var(--ink)}
+.nb-tone{flex:none;font-size:10px;letter-spacing:-1px;color:var(--nc,#8a8a8a)}
+.nrow{width:100%;display:flex;align-items:flex-start;gap:10px;text-align:left;padding:9px 4px;border-bottom:1px solid var(--line, rgba(35,35,35,.08));color:var(--ink)}
+.nrow.unread{background:rgba(242,183,5,.12);border-radius:10px}
+.nrow .nb-t small{-webkit-line-clamp:3}
+.nrow .nr-t{color:var(--muted);font-size:11.5px}
+.nb-tone.tn{color:#D9433A}.nb-tone.tp{color:#3BA55C}.nb-tone.t0{color:#8a8a8a}
+.tone{display:inline-flex;gap:6px;align-items:center;font:600 12.5px/1 var(--f-display);padding:5px 10px;border-radius:12px;margin:2px 0 6px}
+.tone span{letter-spacing:0}.tone-neg{background:rgba(217,67,58,.12);color:#B8322A}.tone-pos{background:rgba(59,165,92,.14);color:#2D7E46}.tone-neu{background:rgba(35,35,35,.07);color:var(--ink-2)}
+ul.fx{margin:4px 0 8px;padding-left:18px;font-size:13.5px;line-height:1.4}
+ul.fx li{margin:2px 0}
+#sheetTitle .ver{font:500 12.5px/1 var(--f-display);color:var(--muted);margin-left:8px}
+.verpill{display:inline-block;margin:-4px auto 6px;padding:3px 10px;border-radius:12px;background:var(--panel-2);font:500 13px/1.2 var(--f-display);color:var(--ink-2)}
 
 #sheet{position:absolute;z-index:950;left:0;right:0;bottom:calc(var(--nav-h) + var(--sab));max-height:min(74%,calc(100% - 140px - var(--sat)));display:flex;flex-direction:column;background:var(--panel);border-radius:22px 22px 0 0;box-shadow:0 -6px 26px rgba(35,35,35,.16);animation:up .22s ease-out}
 @keyframes up{from{transform:translateY(30px);opacity:.4}}
@@ -446,8 +466,10 @@ const HW = 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|l
 const API = {
   async searchCommunes(q) {
     const u = 'https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(q) +
-      '&fields=nom,code,codesPostaux,population,centre,codeDepartement&boost=population&limit=8';
-    return fetchJSON(u, {}, 15000);
+      '&fields=nom,code,codesPostaux,population,centre,codeDepartement&boost=population&limit=12';
+    // France métropolitaine uniquement (Corse comprise)
+    const r = await fetchJSON(u, {}, 15000);
+    return (r || []).filter((c) => c.codeDepartement && !/^9[78]/.test(c.codeDepartement)).slice(0, 8);
   },
   async communePop(code) {
     const k = 'pop:' + code;
@@ -1156,7 +1178,7 @@ const POI_LABEL = {
 /* ---------- population réelle : recensement INSEE par IRIS (fichiers par département livrés avec l'appli) ---------- */
 const PopData = {
   mem: new Map(), pending: new Map(), failed: new Set(),
-  dep(insee) { return !insee ? null : insee.startsWith('97') ? insee.slice(0, 3) : insee.slice(0, 2); },
+  dep(insee) { return insee ? insee.slice(0, 2) : null; },
   /** fichier unique pop.json (tous les départements), chargé une seule fois puis gardé sur le téléphone */
   async all() {
     if (this.allData !== undefined) return this.allData;
@@ -1867,14 +1889,16 @@ const Lines = {
   },
   targetActive(line, min) {
     const n = line.veh.length; if (!n) return 0;
+    const avail = line.veh.filter((v) => !v.broken).length; if (!avail) return 0;
     const f = line.svc ? (line.svc[this.serviceKey(min)] ?? 1) : 1;
-    return clamp(Math.round(n * f), 1, n);
+    return clamp(Math.round(n * f), 1, avail);
   },
   running(line) { return line.veh.filter((v) => !v.parked).length; },
   /** mise en service de la ligne : la bonne part de la flotte, répartie sur le parcours */
   activate(line, min) {
     const want = this.targetActive(line, min);
-    line.veh.forEach((v, k) => { v.parked = k >= want; v.toPark = false; });
+    let c = 0;
+    for (const v of line.veh) { v.toPark = false; if (v.broken) v.parked = true; else { v.parked = c >= want; c++; } }
     this.placeVehicles(line);
   },
   /** ajuste la flotte en service : sorties au dépôt (au terminus) ou entrées depuis le terminus de départ */
@@ -1894,7 +1918,7 @@ const Lines = {
     const ph = PHYS[line.mode], C = line.C;
     const clear = run.every((o) => Math.min(o.u, C - o.u) > Math.max(ph.safe * 2, 80));
     if (!clear) return;
-    const v = line.veh.find((x) => x.parked); if (!v) return;
+    const v = line.veh.find((x) => x.parked && !x.broken); if (!v) return;
     v.parked = false; v.toPark = false; v.hidden = false;
     v.u = 0; v.ev = 0; v.wrap = false; v.dwell = 0; v.v = 0; v.hold = null; v.cdec = -1; v.load = 0;
     if (v.on) v.on.fill(0); if (v.ont) v.ont.fill(0);
@@ -2105,7 +2129,8 @@ const Traffic = {
       if (evs.length) {
         const mx = (net.x[net.ea[e]] + net.x[net.eb[e]]) / 2, my = (net.y[net.ea[e]] + net.y[net.eb[e]]) / 2;
         for (const ev of evs) {
-          if (ev.zone) { if (net.zone[e] === ev.zone) c *= ev.mult; }
+          if (ev.all) c *= ev.all;
+          else if (ev.zone) { if (net.zone[e] === ev.zone) c *= ev.mult; }
           else if (ev.mx !== undefined) {
             const dd = dist(mx, my, ev.mx, ev.my);
             if (dd < ev.r) c *= 1 + (ev.mult - 1) * (1 - dd / ev.r);
@@ -2148,8 +2173,8 @@ const Eco = {
     UI.toast(on ? 'Argent illimité activé. Construisez librement !' : 'Retour à la gestion normale, trésorerie : ' + fmtEur(G.s.money) + '.', 'ok');
     UI.refreshTop();
   },
-  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0 }; },
-  dayProfit(d) { return d.fares + d.ads - d.ops - d.maint - d.interest - d.events; },
+  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, evIn: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0 }; },
+  dayProfit(d) { return d.fares + d.ads + (d.evIn || 0) - d.ops - d.maint - d.interest - d.events; },
   debt() { return G.s.loans.reduce((a, l) => a + l.amount, 0); },
   loanOffers() {
     const m = G.s.costMul;
@@ -2404,6 +2429,7 @@ const Sim = {
   minute() {
     const s = G.s, m = s.min, mod = Time.mod(m);
     for (const l of s.lines) this.lineMinute(l, m);
+    Events.minute();
     if (mod % 10 === 0) {
       UI.updateTint();
       Traffic.update();
@@ -2434,7 +2460,7 @@ const Sim = {
     // coûts d'exploitation (véhicules en service uniquement)
     let op = 0, nRun = 0;
     for (const v of l.veh) if (!v.parked) { op += MODEL[v.model].op; nRun++; }
-    op = (op * s.costMul) / 60;
+    op = (op * s.costMul * Events.opsMult(l.mode)) / 60;
     Eco.charge(op, 'ops'); l.today.ops += op;
     const adLvl = s.ads[l.mode] || 0;
     const adH = (ADS.perHour[l.mode][adLvl] * nRun) / 60;
@@ -2445,7 +2471,7 @@ const Sim = {
     const prof = we ? (PROF_WE[h] / SUM_WE) * (Time.sundayLike(m) ? 0.6 : 0.85) : PROF_WD[h] / SUM_WD;
     const price = Lines.price(l, m);
     const pf = price <= 0.01 ? 2.2 : clamp(Math.pow(mode.ref / price, 0.55), 0.3, 2.2);
-    const base = (prof / 60) * l.qual * pf * l.rep * Events.demandMult(l.mode) * ADS.demand[adLvl];
+    const base = (prof / 60) * l.qual * pf * l.rep * Events.demandFor(l) * ADS.demand[adLvl];
     if (base <= 0) return;
     const od = l.od, em = l.evMul;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
@@ -2577,6 +2603,8 @@ const Sim = {
       }
       for (const v of l.veh) {
         if (v.parked) continue;
+        if (v.incUntil > tNow) { v.v = 0; v.spd = 0; if (v.dwell <= 0) v.hold = 'incident'; continue; }
+        if (v.hold === 'incident') v.hold = null;
         const a = MODEL[v.model].acc || ph.a;
         if (!(v.v >= 0)) v.v = 0;
         let t = dt, guard = 0;
@@ -2707,7 +2735,7 @@ const Sim = {
       }
       v.load += take;
       const price = Lines.price(l, s.min);
-      const fare = paying * price;
+      const fare = paying * price * Events.fareMult(l);
       const adPax = paying * ADS.perPax[s.ads[l.mode] || 0];
       if (!s.unlimited) { s.money += fare + adPax; s.today.fares += fare; s.today.ads += adPax; }
       s.today.pax += take;
@@ -2945,6 +2973,597 @@ const Save = {
     });
     return s;
   },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — événements : catalogue, planification, effets
+   Chaque événement a une tonalité de −3 (très négatif) à +3 (très positif).
+   Effets possibles (cumulables) :
+     traffic {mx,my,r,mult} | {zone,mult} | {all}   circulation routière
+     demand  {mx,my,r,mult} | {mode|lineId|all, mult} affluence
+     halt    {lineId} | {mode}                      ligne(s) à l'arrêt
+     speed   {mode, mult}                            vitesse d'un mode
+     fare    {mode|lineId|all, mult}                 recettes des billets
+     ops     {mode, mult}                            coûts d'exploitation
+     rep     {lineId|mode|all, delta}                image (appliquée au début)
+     money   montant (+ recette, − dépense, appliqué au début)
+     veh     {lineId, vehId, type: 'hold'|'breakdown', min}
+   ===================================================================== */
+
+const EV_CAT = {
+  trafic: { col: '#E08A12', icon: 'works', label: 'Circulation' },
+  reseau: { col: '#E2563F', icon: 'alert', label: 'Incident réseau' },
+  vehicule: { col: '#D9433A', icon: 'bus', label: 'Véhicule' },
+  usager: { col: '#C2185B', icon: 'user', label: 'Voyageurs' },
+  fete: { col: '#F2B705', icon: 'star', label: 'Fête' },
+  culture: { col: '#8E5BD6', icon: 'music', label: 'Culture' },
+  sport: { col: '#3BA55C', icon: 'flag', label: 'Sport' },
+  eco: { col: '#2D7DD2', icon: 'euro', label: 'Finances' },
+  image: { col: '#EC6FA8', icon: 'heart', label: 'Image' },
+  social: { col: '#8E5BD6', icon: 'strike', label: 'Social' },
+  meteo: { col: '#35B6D6', icon: 'rain', label: 'Météo' },
+};
+
+/* ---------- aides pour placer les événements ---------- */
+const EvCtx = {
+  lines(pred) { return G.s.lines.filter((l) => l.status === 'active' && l.veh.length && (!pred || pred(l))); },
+  line(pred) { const a = this.lines(pred); return a.length ? pick(a) : null; },
+  veh(l) { const a = l.veh.filter((v) => !v.hidden && !v.parked && !v.broken && !(v.incUntil > G.s.sec)); return a.length ? pick(a) : null; },
+  stop(l) { const k = Math.floor(Math.random() * l.stops.length); return { k, st: l.stops[k] }; },
+  anyStop() { const l = this.line(); return l ? { l, ...this.stop(l) } : null; },
+  poi(kinds) {
+    const a = G.w.pois.filter((p) => kinds.includes(p.kind) && p.name && G.w.zoneAt(p.mx, p.my)?.owned);
+    return a.length ? pick(a) : null;
+  },
+  road(maxCls = 2) {
+    const n = G.w.road; if (!n.nE) return null;
+    for (let k = 0; k < 60; k++) {
+      const e = Math.floor(Math.random() * n.nE);
+      if (n.cls[e] <= maxCls && n.zone[e] && G.w.zones.get(n.zone[e])?.owned) {
+        const mx = n.x[n.ea[e]], my = n.y[n.ea[e]];
+        return { mx, my, name: n.name[e] || ('secteur ' + (G.w.zoneAt(mx, my)?.name || 'centre')) };
+      }
+    }
+    return null;
+  },
+  /** point sur le parcours d'une ligne de bus (pour les gênes qui touchent vraiment le réseau) */
+  busSpot() {
+    const l = this.line((x) => x.mode === 'bus'); if (!l) return this.road(3);
+    const P = l.path, i = Math.floor(Math.random() * P.pts.length);
+    const [mx, my] = P.pts[i];
+    const n = G.w.road, e = n.nearest ? n.nearest(mx, my, 60) : -1;
+    const nm = e >= 0 ? (n.adj[e] || []).map((x) => n.name[x]).find(Boolean) : null;
+    return { mx, my, name: nm || ('secteur ' + (G.w.zoneAt(mx, my)?.name || l.stops[0].name)), l };
+  },
+  zone() { const z = [...G.w.zones.values()].filter((z) => z.owned); return z.length ? pick(z) : null; },
+  center() { const c = G.s.city; return { mx: lonToMx(c.lon), my: latToMy(c.lat), name: 'centre-ville' }; },
+  river() {
+    const n = G.w.water; if (!n.nE) return null;
+    for (let k = 0; k < 40; k++) { const i = Math.floor(Math.random() * n.x.length); const z = G.w.zoneAt(n.x[i], n.y[i]); if (z && z.owned) return { mx: n.x[i], my: n.y[i] }; }
+    return null;
+  },
+  scale() { const v = G.s.lines.reduce((a, l) => a + l.veh.length, 0); return 1 + v / 15; },
+  day0() { const m = G.s.min; return m - Time.mod(m); },
+  rint(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); },
+  mec() { const d = G.s.days[0]; return d ? d.mec / Math.max(1, d.pax) : 0; },
+};
+const Rr = (a, b) => EvCtx.rint(a, b);
+const lab = (l) => (l.mode === 'bus' ? 'bus ' : l.mode === 'metro' ? 'métro ' : l.mode === 'boat' ? 'navette ' : '') + Lines.label(l);
+
+/* ---------- catalogue ----------
+   w : poids de tirage · cd : délai minimal (h) avant de revoir le même événement
+   when(ctx) : conditions · make(ctx) : contenu (null = impossible maintenant) */
+const EVENTS = [
+  /* ===== circulation ===== */
+  { id: 'accident', cat: 'trafic', tone: -2, title: 'Accident de la circulation', w: 7, cd: 3, glyph: '!',
+    make() { const p = EvCtx.busSpot(); if (!p) return null; const d = Rr(45, 150);
+      return { dur: d, mx: p.mx, my: p.my, desc: `${p.name} : voie neutralisée, bouchons pendant ${Math.round(d / 60) || 1} h environ.`, traffic: { mx: p.mx, my: p.my, r: 550, mult: 2.3 } }; } },
+  { id: 'carambolage', cat: 'trafic', tone: -3, title: 'Carambolage sur un grand axe', w: 2, cd: 48, glyph: '!',
+    make() { const p = EvCtx.road(1) || EvCtx.road(2); if (!p) return null; const d = Rr(120, 240);
+      return { dur: d, mx: p.mx, my: p.my, desc: `Plusieurs véhicules impliqués sur ${p.name}. Le secteur est paralysé.`, traffic: { mx: p.mx, my: p.my, r: 1000, mult: 3 } }; } },
+  { id: 'demo', cat: 'social', tone: -2, title: 'Manifestation : rues bloquées', w: 4, cd: 30, glyph: '⚑',
+    make() { const c = EvCtx.center(), st = EvCtx.day0() + 1440 + Rr(13, 15) * 60;
+      return { start: st, dur: Rr(150, 240), mx: c.mx, my: c.my, announce: true, desc: 'Cortège demain après-midi en centre-ville : plusieurs rues fermées le temps du défilé.', traffic: { mx: c.mx, my: c.my, r: 900, mult: 2.6 } }; } },
+  { id: 'rassemblement', cat: 'social', tone: -1, title: 'Rassemblement spontané', w: 4, cd: 12, glyph: '⚑',
+    make() { const p = EvCtx.busSpot(); if (!p) return null;
+      return { dur: Rr(60, 120), mx: p.mx, my: p.my, desc: `Quelques centaines de personnes occupent la chaussée ${p.name.startsWith('secteur') ? 'dans le ' + p.name : 'sur ' + p.name}.`, traffic: { mx: p.mx, my: p.my, r: 400, mult: 2.4 } }; } },
+  { id: 'works', cat: 'trafic', tone: -1, title: 'Travaux de voirie', w: 5, cd: 24, glyph: '⚒',
+    make() { const z = EvCtx.zone(); if (!z) return null; const n = Rr(2, 4);
+      return { start: EvCtx.day0() + 1440 + 420, dur: n * 1440 - 420, zone: z.code, announce: true, desc: `Chantier à ${z.name} pendant ${n} jours : circulation difficile dans tout le quartier.`, traffic: { zone: z.code, mult: 1.6 } }; } },
+  { id: 'fuite', cat: 'trafic', tone: -2, title: 'Conduite d’eau rompue', w: 3, cd: 24, glyph: '!',
+    make() { const p = EvCtx.busSpot(); if (!p) return null;
+      return { dur: Rr(180, 360), mx: p.mx, my: p.my, desc: `La chaussée est inondée ${p.name.startsWith('secteur') ? 'dans le ' + p.name : 'sur ' + p.name} : rue fermée, déviation par les rues voisines.`, traffic: { mx: p.mx, my: p.my, r: 320, mult: 3.2 } }; } },
+  { id: 'arbre', cat: 'trafic', tone: -2, title: 'Arbre tombé sur la chaussée', w: 2, cd: 24, glyph: '!', when: () => ['storm', 'rain', 'snow'].includes(Events.weather()),
+    make() { const p = EvCtx.busSpot(); if (!p) return null;
+      return { dur: Rr(90, 180), mx: p.mx, my: p.my, desc: `Les pompiers dégagent la voie ${p.name.startsWith('secteur') ? 'dans le ' + p.name : 'sur ' + p.name}.`, traffic: { mx: p.mx, my: p.my, r: 300, mult: 3.2 } }; } },
+  { id: 'feux', cat: 'trafic', tone: -1, title: 'Feux tricolores en panne', w: 3, cd: 24, glyph: '!',
+    make() { const z = EvCtx.zone(); if (!z) return null;
+      return { dur: Rr(90, 180), zone: z.code, desc: `Carrefours sans feux à ${z.name} : la police règle la circulation à la main.`, traffic: { zone: z.code, mult: 1.6 } }; } },
+  { id: 'livraison', cat: 'trafic', tone: -1, title: 'Camion en double file', w: 4, cd: 6, glyph: '!', when: () => EvCtx.lines((l) => l.mode === 'bus').length > 0,
+    make() { const p = EvCtx.busSpot(); if (!p || !p.l) return null;
+      return { dur: Rr(25, 60), mx: p.mx, my: p.my, desc: `Un poids lourd bloque le passage du ${lab(p.l)} ${p.name.startsWith('secteur') ? 'dans le ' + p.name : 'sur ' + p.name}.`, traffic: { mx: p.mx, my: p.my, r: 160, mult: 3.4 } }; } },
+  { id: 'visite', cat: 'trafic', tone: -1, title: 'Visite officielle', w: 1.5, cd: 72, glyph: '⚑',
+    make() { const c = EvCtx.center(), st = EvCtx.day0() + 1440 + Rr(9, 15) * 60;
+      return { start: st, dur: Rr(90, 180), mx: c.mx, my: c.my, announce: true, desc: 'Un ministre en visite demain : périmètre de sécurité et rues fermées en centre-ville.', traffic: { mx: c.mx, my: c.my, r: 650, mult: 2.6 } }; } },
+  { id: 'departs', cat: 'trafic', tone: -1, title: 'Grands départs en vacances', w: 3, cd: 96, glyph: '!', when: (c) => (c.month === 6 || c.month === 7) && c.dow === 5 && c.h >= 10 && c.h <= 13,
+    make() { const st = EvCtx.day0() + 15 * 60;
+      return { start: st, dur: 360, desc: 'Bison Futé voit rouge : la ville se vide en fin de journée, la circulation sature.', traffic: { all: 1.3 } }; } },
+  { id: 'sansvoiture', cat: 'fete', tone: 3, title: 'Journée sans voiture', w: 1, cd: 300, glyph: '★', when: (c) => c.dow === 5,
+    make() { const st = EvCtx.day0() + 2 * 1440 + 600;
+      return { start: st, dur: 480, announce: true, desc: 'Dimanche, le centre est réservé aux piétons, vélos et transports en commun : affluence record attendue.', traffic: { all: 0.55 }, demand: { all: true, mult: 1.45 } }; } },
+  { id: 'marathon', cat: 'sport', tone: 0, title: 'Semi-marathon', w: 1, cd: 300, glyph: '⚑', when: (c) => c.dow === 5,
+    make() { const c = EvCtx.center(), st = EvCtx.day0() + 2 * 1440 + 480;
+      return { start: st, dur: 300, mx: c.mx, my: c.my, announce: true, desc: 'Dimanche matin, rues fermées sur le parcours de la course, mais beaucoup de spectateurs à transporter.', traffic: { mx: c.mx, my: c.my, r: 1300, mult: 2.4 }, demand: { mx: c.mx, my: c.my, r: 1300, mult: 1.6 } }; } },
+
+  /* ===== incidents sur le réseau ===== */
+  { id: 'panne_bus', cat: 'vehicule', tone: -2, title: 'Bus en panne', w: 7, cd: 4, glyph: '×', when: () => EvCtx.lines((l) => l.mode === 'bus').length > 0,
+    make() { const l = EvCtx.line((x) => x.mode === 'bus'); const v = l && EvCtx.veh(l); if (!v) return null; const d = Rr(120, 360), cost = Rr(15, 60) * 100;
+      return { dur: d, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'breakdown', min: 8 }, money: -cost, desc: `Un ${MODEL[v.model].name} de la ligne ${lab(l)} tombe en panne : immobilisé quelques minutes, puis remorqué au dépôt. Réparation : ${fmtEur(cost)}.` }; } },
+  { id: 'panne_rame', cat: 'vehicule', tone: -2, title: 'Rame en panne', w: 3, cd: 12, glyph: '×', when: () => EvCtx.lines((l) => l.mode === 'metro' || l.mode === 'ter').length > 0,
+    make() { const l = EvCtx.line((x) => x.mode === 'metro' || x.mode === 'ter'); const v = l && EvCtx.veh(l); if (!v) return null; const cost = Rr(8, 30) * 1000;
+      return { dur: Rr(240, 480), lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'breakdown', min: Rr(10, 20) }, money: -cost, desc: `Une rame de la ligne ${lab(l)} est immobilisée en pleine voie : les rames suivantes attendent derrière, puis elle est évacuée. Réparation : ${fmtEur(cost)}.` }; } },
+  { id: 'failure', cat: 'reseau', tone: -2, title: 'Panne de signalisation', w: 3, cd: 12, glyph: '!', when: () => EvCtx.lines((l) => l.mode === 'metro' || l.mode === 'ter').length > 0,
+    make() { const l = EvCtx.line((x) => x.mode === 'metro' || x.mode === 'ter'); if (!l) return null; const d = Rr(30, 90);
+      return { dur: d, lineId: l.id, halt: { lineId: l.id }, desc: `Ligne ${lab(l)} interrompue pendant environ ${d} min, le temps de réparer la signalisation.` }; } },
+  { id: 'colis', cat: 'reseau', tone: -2, title: 'Colis suspect', w: 3, cd: 12, glyph: '!',
+    make() { const l = EvCtx.line(); if (!l) return null; const { st } = EvCtx.stop(l); const d = Rr(30, 60);
+      return { dur: d, lineId: l.id, mx: st.mx, my: st.my, halt: { lineId: l.id }, desc: `Bagage abandonné à ${st.name} : périmètre de sécurité, ligne ${lab(l)} arrêtée ${d} min environ.` }; } },
+  { id: 'courant', cat: 'reseau', tone: -3, title: 'Coupure de courant', w: 0.8, cd: 96, glyph: '⚡', when: () => EvCtx.lines((l) => l.mode === 'metro').length > 0,
+    make() { const d = Rr(30, 75);
+      return { dur: d, halt: { mode: 'metro' }, desc: `Panne générale d’alimentation : tout le métro est à l’arrêt pendant ${d} min environ.` }; } },
+  { id: 'animal', cat: 'reseau', tone: -1, title: 'Animal sur la voie', w: 2, cd: 24, glyph: '!', when: () => EvCtx.lines((l) => l.mode === 'ter').length > 0,
+    make() { const l = EvCtx.line((x) => x.mode === 'ter'); if (!l) return null; const d = Rr(15, 40);
+      return { dur: d, lineId: l.id, halt: { lineId: l.id }, desc: `Un troupeau de vaches s’est échappé près des voies : circulation suspendue ${d} min sur la ligne ${lab(l)}.` }; } },
+  { id: 'feuilles', cat: 'reseau', tone: -1, title: 'Feuilles mortes sur les rails', w: 2, cd: 120, glyph: '!', when: (c) => c.month >= 9 && c.month <= 10 && EvCtx.lines((l) => l.mode === 'ter').length > 0,
+    make() { return { dur: 1440, speed: { mode: 'ter', mult: 0.8 }, desc: 'Les trains patinent : les TER roulent prudemment toute la journée.' }; } },
+  { id: 'crue', cat: 'meteo', tone: -2, title: 'Crue', w: 2, cd: 120, glyph: '≈', when: () => Events.weather() === 'rain' && EvCtx.lines((l) => l.mode === 'boat').length > 0,
+    make() { const n = Rr(1, 2); return { dur: n * 1440, halt: { mode: 'boat' }, desc: `Le niveau monte : la navigation est interdite pendant ${n} jour${n > 1 ? 's' : ''}.` }; } },
+  { id: 'vandalisme', cat: 'vehicule', tone: -2, title: 'Véhicule vandalisé', w: 3, cd: 24, glyph: '×',
+    make() { const l = EvCtx.line(); const v = l && EvCtx.veh(l); if (!v) return null; const cost = Math.round(Rr(8, 25) * 1000 * (l.mode === 'bus' ? 1 : 2.5));
+      return { dur: 1440, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'breakdown', min: 3 }, money: -cost, desc: `Vitres brisées et sièges lacérés sur un véhicule de la ligne ${lab(l)} : retiré du service pour 24 h. Remise en état : ${fmtEur(cost)}.` }; } },
+  { id: 'tags', cat: 'vehicule', tone: -1, title: 'Graffitis', w: 4, cd: 24, glyph: '×',
+    make() { const l = EvCtx.line(); if (!l) return null; const cost = Rr(15, 60) * 100;
+      return { dur: 60, lineId: l.id, money: -cost, desc: `Des véhicules et des arrêts de la ligne ${lab(l)} ont été tagués cette nuit. Nettoyage : ${fmtEur(cost)}.` }; } },
+  { id: 'billettique', cat: 'reseau', tone: -2, title: 'Valideurs en panne', w: 3, cd: 24, glyph: '€',
+    make() { const l = EvCtx.line(); if (!l) return null; const d = Rr(120, 240);
+      return { dur: d, fare: { mode: l.mode, mult: 0 }, desc: `Panne du système de billettique sur tout le réseau ${MODES[l.mode].label.toLowerCase()} : les voyageurs montent sans payer pendant ${Math.round(d / 60)} h.` }; } },
+  { id: 'cyber', cat: 'reseau', tone: -3, title: 'Cyberattaque', w: 0.6, cd: 240, glyph: '⚡',
+    make() { const d = Rr(360, 720), cost = Math.round(30000 * EvCtx.scale());
+      return { dur: d, fare: { all: true, mult: 0 }, money: -cost, desc: `Un rançongiciel paralyse la vente de titres : transport gratuit de fait pendant ${Math.round(d / 60)} h, et ${fmtEur(cost)} d’intervention informatique.` }; } },
+  { id: 'clim', cat: 'vehicule', tone: -1, title: 'Climatisation en panne', w: 3, cd: 48, glyph: '!', when: () => Events.weather() === 'heat',
+    make() { const l = EvCtx.line((x) => x.mode !== 'boat'); if (!l) return null;
+      return { dur: 1440, lineId: l.id, rep: { lineId: l.id, delta: -0.03 }, demand: { lineId: l.id, mult: 0.85 }, desc: `Fournaise à bord de la ligne ${lab(l)} : les voyageurs se plaignent et certains préfèrent marcher.` }; } },
+  { id: 'carburant', cat: 'eco', tone: -1, title: 'Flambée du gazole', w: 1.5, cd: 168, glyph: '€', when: () => EvCtx.lines((l) => l.mode === 'bus').length > 0,
+    make() { const n = Rr(3, 5); return { dur: n * 1440, ops: { mode: 'bus', mult: 1.2 }, desc: `Le prix du carburant s’envole : coûts d’exploitation des bus +20 % pendant ${n} jours.` }; } },
+
+  /* ===== voyageurs ===== */
+  { id: 'malaise', cat: 'usager', tone: -1, title: 'Malaise d’un voyageur', w: 5, cd: 3, glyph: '+',
+    make() { const l = EvCtx.line(); const v = l && EvCtx.veh(l); if (!v) return null; const d = Rr(6, 15);
+      return { dur: d + 5, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'hold', min: d }, desc: `Un voyageur fait un malaise à bord d’un véhicule de la ligne ${lab(l)} : arrêt prolongé le temps des secours (${d} min).` }; } },
+  { id: 'altercation', cat: 'usager', tone: -2, title: 'Altercation à bord', w: 3, cd: 8, glyph: '!',
+    make() { const l = EvCtx.line(); const v = l && EvCtx.veh(l); if (!v) return null; const d = Rr(12, 25);
+      return { dur: d + 5, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'hold', min: d }, rep: { lineId: l.id, delta: -0.03 }, desc: `Bagarre entre passagers sur la ligne ${lab(l)} : le véhicule attend la police pendant ${d} min. La scène circule sur les réseaux sociaux.` }; } },
+  { id: 'portes', cat: 'usager', tone: -1, title: 'Portes bloquées', w: 4, cd: 3, glyph: '!',
+    make() { const l = EvCtx.line(); const v = l && EvCtx.veh(l); if (!v) return null; const d = Rr(3, 7);
+      return { dur: d + 3, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'hold', min: d }, desc: `Un voyageur pressé force la fermeture des portes sur la ligne ${lab(l)} : ${d} min de retard.` }; } },
+  { id: 'fraude', cat: 'usager', tone: -1, title: 'Fraude en hausse', w: 3, cd: 48,  glyph: '€',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 1440, lineId: l.id, fare: { lineId: l.id, mult: 0.75 }, desc: `Un quart des voyageurs de la ligne ${lab(l)} voyagent sans billet aujourd’hui.` }; } },
+  { id: 'controle', cat: 'usager', tone: 0, title: 'Opération de contrôle', w: 3, cd: 48, glyph: '€',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 720, fare: { mode: l.mode, mult: 1.12 }, rep: { mode: l.mode, delta: -0.01 }, desc: `Contrôleurs en nombre sur le réseau ${MODES[l.mode].label.toLowerCase()} : les fraudeurs passent à la caisse (+12 % de recettes), un peu de grogne.` }; } },
+  { id: 'portefeuille', cat: 'image', tone: 1, title: 'Objet trouvé rendu', w: 4, cd: 24, glyph: '♥',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 60, lineId: l.id, rep: { lineId: l.id, delta: 0.03 }, desc: `Un conducteur de la ligne ${lab(l)} rapporte un sac oublié contenant 2 000 € en liquide. La propriétaire remercie le réseau dans la presse.` }; } },
+  { id: 'naissance', cat: 'image', tone: 2, title: 'Naissance à bord !', w: 1.2, cd: 240, glyph: '♥',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 60, lineId: l.id, rep: { lineId: l.id, delta: 0.06 }, desc: `Un bébé est né dans un véhicule de la ligne ${lab(l)}, avec l’aide du conducteur. Toute la ville en parle.` }; } },
+  { id: 'heros', cat: 'image', tone: 2, title: 'Un conducteur héroïque', w: 2.5, cd: 48, glyph: '♥',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 60, lineId: l.id, rep: { mode: l.mode, delta: 0.04 }, desc: `Un agent de la ligne ${lab(l)} porte secours à un passant renversé. Il sera décoré par le maire.` }; } },
+  { id: 'touristes', cat: 'culture', tone: 1, title: 'Afflux de touristes', w: 4, cd: 12, glyph: '★',
+    make() { const p = EvCtx.poi(['museum', 'attraction']) || EvCtx.center();
+      return { dur: Rr(240, 420), mx: p.mx, my: p.my, demand: { mx: p.mx, my: p.my, r: 800, mult: 1.8 }, desc: `Des cars de touristes déposent leurs visiteurs près de ${p.name || 'du centre'} : beaucoup de monde aux arrêts.` }; } },
+  { id: 'rentree', cat: 'culture', tone: 2, title: 'Rentrée universitaire', w: 3, cd: 600, glyph: '★', when: (c) => c.month === 8,
+    make() { const p = EvCtx.poi(['university', 'college']) || EvCtx.center();
+      return { dur: 3 * 1440, mx: p.mx, my: p.my, demand: { mx: p.mx, my: p.my, r: 1200, mult: 1.5 }, desc: `Les étudiants reviennent${p.name ? ' à ' + p.name : ''} : fréquentation en forte hausse pendant trois jours.` }; } },
+
+  { id: 'musicien', cat: 'usager', tone: 1, title: 'Musicien à bord', w: 3, cd: 24, glyph: '♪',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 180, lineId: l.id, demand: { lineId: l.id, mult: 1.1 }, rep: { lineId: l.id, delta: 0.01 }, desc: `Un violoniste enchante les voyageurs de la ligne ${lab(l)} : les vidéos circulent, l’ambiance est au beau fixe.` }; } },
+  { id: 'ponctuelle', cat: 'image', tone: 1, title: 'Ligne la plus ponctuelle', w: 2, cd: 96, glyph: '♥', when: () => EvCtx.mec() < 0.1,
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 60, lineId: l.id, rep: { lineId: l.id, delta: 0.025 }, desc: `L’association des usagers décerne à la ligne ${lab(l)} le titre de ligne la plus ponctuelle du mois.` }; } },
+  { id: 'employeur', cat: 'eco', tone: 2, title: 'Plan de mobilité d’entreprise', w: 1.5, cd: 240, glyph: '€',
+    make() { const p = EvCtx.poi(['business', 'hospital', 'university', 'mall']) || EvCtx.center();
+      return { dur: 7 * 1440, mx: p.mx, my: p.my, demand: { mx: p.mx, my: p.my, r: 1000, mult: 1.35 }, desc: `${p.name ? 'Les employeurs autour de ' + p.name : 'Un grand employeur du centre'} remboursent désormais 75 % de l’abonnement : plus de salariés laissent leur voiture pendant une semaine.` }; } },
+  { id: 'expo', cat: 'culture', tone: 1, title: 'Exposition événement', w: 2, cd: 96, glyph: '★',
+    make() { const p = EvCtx.poi(['museum', 'attraction', 'library', 'theatre']); if (!p) return null; const st = EvCtx.day0() + 1440 + 600;
+      return { start: st, dur: 2 * 1440 + 480, mx: p.mx, my: p.my, announce: true, desc: `À partir de demain, une exposition très attendue à ${p.name} : files d’attente garanties pendant trois jours.`, demand: { mx: p.mx, my: p.my, r: 700, mult: 1.7 } }; } },
+  { id: 'avantpremiere', cat: 'culture', tone: 1, title: 'Avant-première au cinéma', w: 2, cd: 48, glyph: '★',
+    make() { const p = EvCtx.poi(['cinema', 'theatre']); if (!p) return null; const st = EvCtx.day0() + 1440 + 19 * 60 + 30;
+      return { start: st, dur: 240, mx: p.mx, my: p.my, announce: true, desc: `Demain soir, avant-première en présence de l’équipe du film à ${p.name}.`, demand: { mx: p.mx, my: p.my, r: 650, mult: 2 } }; } },
+  { id: 'marche', cat: 'fete', tone: 1, title: 'Grand marché du samedi', w: 2, cd: 120, glyph: '★', when: (c) => c.dow === 5,
+    make() { const p = EvCtx.poi(['marketplace', 'townhall']) || EvCtx.center(); const st = EvCtx.day0() + 1440 + 480;
+      return { start: st, dur: 330, mx: p.mx, my: p.my, announce: true, desc: `Demain matin, marché exceptionnel près de ${p.name || 'du centre'} : producteurs, artisans et foule des grands jours.`, demand: { mx: p.mx, my: p.my, r: 650, mult: 1.7 } }; } },
+  { id: 'soldes', cat: 'eco', tone: 2, title: 'Début des soldes', w: 2, cd: 300, glyph: '€', when: (c) => c.month === 0 || c.month === 5 || c.month === 6,
+    make() { const p = EvCtx.poi(['mall', 'department_store']) || EvCtx.center(); const st = EvCtx.day0() + 1440 + 540;
+      return { start: st, dur: 2 * 1440 + 600, mx: p.mx, my: p.my, announce: true, desc: `Les soldes démarrent demain : ruée vers ${p.name || 'les boutiques du centre'} pendant trois jours.`, demand: { mx: p.mx, my: p.my, r: 900, mult: 1.8 } }; } },
+  { id: 'inauguration', cat: 'eco', tone: 2, title: 'Nouveau centre commercial', w: 1, cd: 600, glyph: '★',
+    make() { const p = EvCtx.poi(['mall', 'business']) || EvCtx.anyStop()?.st; if (!p) return null; const st = EvCtx.day0() + 1440 + 600;
+      return { start: st, dur: 4 * 1440, mx: p.mx, my: p.my, announce: true, desc: `Ouverture demain d’un grand pôle commercial près de ${p.name} : la fréquentation des lignes voisines va bondir.`, demand: { mx: p.mx, my: p.my, r: 900, mult: 1.6 } }; } },
+  { id: 'grosfroid', cat: 'meteo', tone: 0, title: 'Grand froid', w: 1.5, cd: 120, glyph: '≈', when: (c) => c.month === 11 || c.month <= 1,
+    make() { return { dur: 1440, demand: { all: true, mult: 1.15 }, speed: { mode: 'bus', mult: 0.9 }, desc: 'Températures négatives : plus de monde dans les transports, mais des bus prudents sur les chaussées glissantes.' }; } },
+  { id: 'pont', cat: 'eco', tone: 0, title: 'Pont et vacances', w: 1.5, cd: 240, glyph: '≈', when: (c) => c.dow === 3,
+    make() { const st = EvCtx.day0() + 1440 + 300;
+      return { start: st, dur: 1140, announce: true, traffic: { all: 0.8 }, demand: { all: true, mult: 0.8 }, desc: 'Demain, beaucoup d’actifs font le pont : rues plus calmes mais transports moins remplis.' }; } },
+
+  /* ===== fêtes, culture, sport (annoncés à l'avance) ===== */
+  { id: 'big', cat: 'culture', tone: 2, title: 'Concert en plein air', w: 5, cd: 16, glyph: '♪',
+    make() { const p = EvCtx.poi(['stadium', 'theatre', 'attraction']) || EvCtx.anyStop()?.st; if (!p) return null; const st = EvCtx.day0() + 1440 + Rr(18, 20) * 60;
+      const who = pick(['un groupe de rock', 'une star de la chanson', 'un orchestre symphonique', 'un DJ international', 'un rappeur en tournée']);
+      return { start: st, dur: Rr(240, 330), mx: p.mx, my: p.my, announce: true, desc: `Demain soir, ${who} près de ${p.name}. Forte affluence avant et après le concert.`, demand: { mx: p.mx, my: p.my, r: 750, mult: 3.2 }, traffic: { mx: p.mx, my: p.my, r: 900, mult: 1.5 } }; } },
+  { id: 'festival', cat: 'culture', tone: 3, title: 'Festival', w: 3, cd: 96, glyph: '♪', when: (c) => c.month >= 4 && c.month <= 8,
+    make() { const p = EvCtx.poi(['attraction', 'stadium', 'museum']) || EvCtx.center(); const n = Rr(2, 3); const st = EvCtx.day0() + 1440 + 14 * 60;
+      const nm = pick(['Festival des Lumières du Son', 'Les Nuits Électriques', 'Festival des arts de la rue', 'Jazz au bord de l’eau', 'Festival du film en plein air']);
+      return { start: st, dur: (n - 1) * 1440 + 660, mx: p.mx, my: p.my, announce: true, desc: `« ${nm} » pendant ${n} jours près de ${p.name || 'du centre'} : des dizaines de milliers de visiteurs.`, demand: { mx: p.mx, my: p.my, r: 950, mult: 2.3 }, traffic: { mx: p.mx, my: p.my, r: 900, mult: 1.35 } }; } },
+  { id: 'match', cat: 'sport', tone: 2, title: 'Match au stade', w: 3, cd: 72, glyph: '⚑',
+    make() { const p = EvCtx.poi(['stadium']); if (!p) return null; const st = EvCtx.day0() + 1440 + Rr(18, 20) * 60 + 30;
+      const sport = pick(['football', 'rugby', 'handball']);
+      return { start: st, dur: 240, mx: p.mx, my: p.my, announce: true, desc: `Demain soir, match de ${sport} à ${p.name} : les supporters prendront d’assaut les lignes voisines.`, demand: { mx: p.mx, my: p.my, r: 850, mult: 3.6 }, traffic: { mx: p.mx, my: p.my, r: 1000, mult: 1.7 } }; } },
+  { id: 'braderie', cat: 'fete', tone: 1, title: 'Grande braderie', w: 1.5, cd: 168, glyph: '★', when: (c) => c.dow === 6 && c.month >= 3 && c.month <= 9,
+    make() { const z = EvCtx.zone(); if (!z) return null; const st = EvCtx.day0() + 1440 + 420;
+      return { start: st, dur: 660, zone: z.code, announce: true, desc: `Dimanche, brocante géante à ${z.name} : rues fermées aux voitures, chineurs par milliers.`, traffic: { zone: z.code, mult: 2 }, demand: { mx: z.cx, my: z.cy, r: 900, mult: 1.8 } }; } },
+  { id: 'salon', cat: 'eco', tone: 1, title: 'Salon professionnel', w: 3, cd: 48, glyph: '★',
+    make() { const p = EvCtx.poi(['business', 'mall']) || EvCtx.center(); const st = EvCtx.day0() + 1440 + 510;
+      return { start: st, dur: 1440 + 540, mx: p.mx, my: p.my, announce: true, desc: `Deux jours de salon près de ${p.name || 'du centre'} : visiteurs nombreux aux heures de bureau.`, demand: { mx: p.mx, my: p.my, r: 800, mult: 1.9 } }; } },
+  { id: 'nocturne', cat: 'fete', tone: 1, title: 'Marché nocturne', w: 3, cd: 72, glyph: '★', when: (c) => c.month >= 5 && c.month <= 8,
+    make() { const p = EvCtx.poi(['marketplace', 'townhall']) || EvCtx.center(); const st = EvCtx.day0() + 1440 + 18 * 60;
+      return { start: st, dur: 300, mx: p.mx, my: p.my, announce: true, desc: `Demain soir, marché de producteurs et guinguette près de ${p.name || 'du centre'}.`, demand: { mx: p.mx, my: p.my, r: 700, mult: 2 } }; } },
+
+  /* ===== finances et image ===== */
+  { id: 'subvention', cat: 'eco', tone: 2, title: 'Subvention accordée', w: 3, cd: 72, glyph: '€',
+    make() { const amt = Math.round(Rr(4, 12) * 10000 * EvCtx.scale() / 1000) * 1000;
+      return { dur: 60, money: amt, desc: `La Région soutient la transition écologique de votre réseau : ${fmtEur(amt)} versés.` }; } },
+  { id: 'prix', cat: 'eco', tone: 3, title: 'Prix du réseau de l’année', w: 0.5, cd: 720, glyph: '★', when: () => G.s.lines.length >= 3 && EvCtx.mec() < 0.05,
+    make() { const amt = Math.round(100000 * EvCtx.scale() / 1000) * 1000;
+      return { dur: 60, money: amt, rep: { all: true, delta: 0.05 }, desc: `Votre réseau est élu meilleur réseau urbain de l’année ! ${fmtEur(amt)} de dotation et une image au beau fixe.` }; } },
+  { id: 'presse_plus', cat: 'image', tone: 1, title: 'Article élogieux', w: 3, cd: 72, glyph: '♥', when: () => EvCtx.mec() < 0.08,
+    make() { return { dur: 60, rep: { all: true, delta: 0.03 }, desc: '« Ponctuel, propre, pratique » : la presse locale salue la qualité de votre réseau.' }; } },
+  { id: 'presse_moins', cat: 'image', tone: -1, title: 'Article critique', w: 3, cd: 72, glyph: '!', when: () => EvCtx.mec() > 0.08,
+    make() { return { dur: 60, rep: { all: true, delta: -0.03 }, desc: '« Bondé et en retard » : un quotidien local pointe les quais saturés et les voyageurs laissés à quai.' }; } },
+  { id: 'viral_plus', cat: 'image', tone: 2, title: 'Vidéo virale', w: 2.5, cd: 72, glyph: '♥',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 2 * 1440, lineId: l.id, demand: { lineId: l.id, mult: 1.35 }, rep: { lineId: l.id, delta: 0.04 }, desc: `Une influenceuse filme son trajet sur la ligne ${lab(l)} : « la plus belle ligne de France ». Effet garanti pendant deux jours.` }; } },
+  { id: 'viral_moins', cat: 'image', tone: -2, title: 'Bad buzz', w: 1.5, cd: 120, glyph: '!',
+    make() { const l = EvCtx.line(); if (!l) return null;
+      return { dur: 60, lineId: l.id, rep: { lineId: l.id, delta: -0.05 }, desc: `Une vidéo de voyageurs entassés sur la ligne ${lab(l)} fait le tour des réseaux sociaux.` }; } },
+  { id: 'mecene', cat: 'eco', tone: 1, title: 'Mécène', w: 2.5, cd: 96, glyph: '€',
+    make() { const amt = Rr(3, 8) * 10000;
+      return { dur: 60, money: amt, desc: `Une fondation locale finance la rénovation de vos abris voyageurs : ${fmtEur(amt)}.` }; } },
+  { id: 'amende', cat: 'eco', tone: -2, title: 'Pénalités contractuelles', w: 2, cd: 168, glyph: '€', when: () => EvCtx.mec() > 0.12,
+    make() { const amt = Math.round(Rr(2, 6) * 10000 * EvCtx.scale() / 1000) * 1000;
+      return { dur: 60, money: -amt, desc: `Trop de voyageurs laissés à quai : l’autorité organisatrice applique ${fmtEur(amt)} de pénalités.` }; } },
+
+  /* ===== choix ===== */
+  { id: 'pollution', cat: 'meteo', tone: 0, title: 'Pic de pollution', w: 1.2, cd: 240, glyph: '!', choice: true, when: (c) => c.h >= 7 && c.h <= 16,
+    make() { return { start: EvCtx.day0() + 1440 + 300, dur: 1140, announce: true, desc: 'Demain, la préfecture limite la circulation et recommande la gratuité des transports.', traffic: { all: 0.85 },
+      q: 'La préfecture recommande la gratuité des transports demain. Que faites-vous ?', opts: ['Transports gratuits', 'Tarifs normaux'] }; },
+    choose(e, i) {
+      if (i === 0) { e.fare = { all: true, mult: 0 }; e.demand = { all: true, mult: 1.4 }; e.rep = { all: true, delta: 0.04 }; e.desc = 'Gratuité décidée : affluence en hausse, recettes nulles, image en hausse.'; e.tone = 1; }
+      else { e.rep = { all: true, delta: -0.02 }; e.desc = 'Tarifs maintenus : circulation restreinte, un peu de grogne chez les élus.'; e.tone = -1; }
+    } },
+  { id: 'tournage', cat: 'culture', tone: 1, title: 'Tournage d’un film', w: 1.2, cd: 240, glyph: '★', choice: true,
+    make() { const p = EvCtx.busSpot(); if (!p) return null; const amt = Rr(25, 60) * 1000;
+      return { start: EvCtx.day0() + 1440 + 480, dur: 420, mx: p.mx, my: p.my, announce: true, amt, place: p.name, desc: `Une production propose ${fmtEur(amt)} pour fermer une rue ${p.name.startsWith('secteur') ? 'dans le ' + p.name : '(' + p.name + ')'} demain pendant 7 h.`,
+        q: `Une équipe de cinéma veut bloquer une rue ${p.name.startsWith('secteur') ? 'dans le ' + p.name : '(' + p.name + ')'} demain pendant 7 h, contre ${fmtEur(amt)}. Vos bus devront être déviés.`, opts: ['Accepter', 'Refuser'] }; },
+    choose(e, i) {
+      if (i === 0) { e.money = e.amt; e.traffic = { mx: e.mx, my: e.my, r: 350, mult: 3 }; e.desc = `Tournage accepté : ${fmtEur(e.amt)} encaissés, rue fermée et bus déviés demain.`; e.moneyNow = true; }
+      else { e.void = true; e.desc = 'Tournage refusé : la production ira voir ailleurs.'; e.tone = 0; }
+    } },
+  { id: 'sponsor', cat: 'eco', tone: 1, title: 'Proposition de sponsoring', w: 1, cd: 300, glyph: '€', choice: true, when: () => G.s.lines.length >= 2,
+    make() { const l = EvCtx.line(); if (!l) return null; const amt = Math.round(Rr(4, 10) * 10000 * EvCtx.scale() / 1000) * 1000;
+      return { dur: 7 * 1440, lineId: l.id, amt, desc: `Une marque de boissons veut habiller les véhicules de la ligne ${lab(l)} pendant une semaine.`,
+        q: `Une marque de boissons propose ${fmtEur(amt)} pour couvrir les véhicules de la ligne ${lab(l)} de publicité pendant 7 jours. Certains voyageurs risquent de ne pas apprécier.`, opts: ['Accepter', 'Refuser'] }; },
+    choose(e, i) {
+      if (i === 0) { e.money = e.amt; e.rep = { lineId: e.lineId, delta: -0.02 }; e.desc = `Ligne habillée aux couleurs du sponsor pendant une semaine (${fmtEur(e.amt)}).`; e.moneyNow = true; }
+      else { e.void = true; e.desc = 'Proposition déclinée.'; e.tone = 0; }
+    } },
+];
+
+/* ---------- moteur ---------- */
+const EVDEF = {};
+for (const d of EVENTS) EVDEF[d.id] = d;
+const SEASONAL = [
+  { id: 'musique', month: 5, day: 21, cat: 'fete', tone: 3, title: 'Fête de la musique', glyph: '♪', start: 17 * 60, dur: 9 * 60,
+    desc: 'Concerts à chaque coin de rue jusque tard dans la nuit : affluence exceptionnelle, centre-ville piéton.',
+    fx: (c) => ({ demand: { all: true, mult: 1.5 }, traffic: { mx: c.mx, my: c.my, r: 1200, mult: 1.6 }, mx: c.mx, my: c.my }) },
+  { id: 'quatorze', month: 6, day: 14, cat: 'fete', tone: 2, title: 'Feu d’artifice du 14 Juillet', glyph: '★', start: 20 * 60 + 30, dur: 240,
+    desc: 'Toute la ville converge vers le feu d’artifice, puis repart en même temps : préparez vos véhicules.',
+    fx: (c) => { const p = EvCtx.river() || c; return { demand: { mx: p.mx, my: p.my, r: 1300, mult: 3.2 }, traffic: { mx: p.mx, my: p.my, r: 1000, mult: 2.4 }, mx: p.mx, my: p.my }; } },
+  { id: 'nuitblanche', month: 9, day: 3, cat: 'culture', tone: 2, title: 'Nuit blanche', glyph: '★', start: 19 * 60, dur: 8 * 60,
+    desc: 'Musées et lieux culturels ouverts toute la nuit : les noctambules comptent sur vous.',
+    fx: () => ({ demand: { all: true, mult: 1.3 } }) },
+  { id: 'noel', month: 11, day: 1, cat: 'fete', tone: 2, title: 'Marché de Noël', glyph: '★', start: 16 * 60, dur: 23 * 1440 + 300,
+    desc: 'Chalets et illuminations en centre-ville jusqu’à Noël : affluence chaque fin de journée.',
+    fx: (c) => ({ demand: { mx: c.mx, my: c.my, r: 900, mult: 1.6 }, mx: c.mx, my: c.my }) },
+  { id: 'reveillon', month: 11, day: 31, cat: 'fete', tone: 2, title: 'Réveillon du Nouvel An', glyph: '★', start: 21 * 60, dur: 7 * 60,
+    desc: 'La nuit la plus festive de l’année : beaucoup de monde dans les transports, surtout après minuit.',
+    fx: () => ({ demand: { all: true, mult: 1.4 } }) },
+];
+
+Object.assign(Events, {
+  def(e) { return EVDEF[e.kind] || null; },
+  cat(e) { return EV_CAT[e.cat || (this.def(e) || {}).cat] || EV_CAT.reseau; },
+  color(e) { return this.cat(e).col; },
+  glyph(e) { return e.glyph || (this.def(e) || {}).glyph || '!'; },
+  icon(e) { return EV_INFO[e.kind]?.icon || this.cat(e).icon; },
+  tone(e) { return e.tone ?? (this.def(e) || {}).tone ?? (e.bad ? -1 : 0); },
+
+  /** anciennes sauvegardes : effets reconstitués */
+  normalize(e) {
+    if (e.kind === 'big' && !e.demand && e.mx !== undefined) e.demand = { mx: e.mx, my: e.my, r: 700, mult: 4 };
+    if (e.kind === 'failure' && !e.halt && e.lineId) e.halt = { lineId: e.lineId };
+    if (e.tone === undefined) e.tone = this.tone(e);
+    if (!e.cat) e.cat = (this.def(e) || {}).cat || (e.kind === 'strike' ? 'social' : 'reseau');
+    if (e.applied === undefined) e.applied = e.start <= G.s.min;
+    e.dialogOpen = false;
+    return e;
+  },
+
+  /* ---- effets agrégés ---- */
+  active() { return this.live(); },
+  upcoming() { const m = G.s.min; return G.s.events.filter((e) => !e.void && e.start > m); },
+  live() { const m = G.s.min; return G.s.events.filter((e) => !e.void && e.start <= m && e.end > m); },
+  trafficEvents() { return this.live().filter((e) => e.traffic).map((e) => e.traffic); },
+  speedMult(mode) {
+    const w = this.weather();
+    let f = 1;
+    if (mode === 'bus') f = w === 'snow' ? 0.6 : w === 'rain' ? 0.92 : 1;
+    else if (mode === 'boat') f = w === 'storm' ? 0 : 1;
+    else if (mode === 'ter') f = w === 'snow' ? 0.85 : 1;
+    for (const e of this.live()) if (e.speed && e.speed.mode === mode) f *= e.speed.mult;
+    return f;
+  },
+  /** affluence d'une ligne (météo + événements touchant le mode, la ligne ou tout le réseau) */
+  demandFor(l) {
+    let f = this.demandMult(l.mode);
+    for (const e of this.live()) {
+      const d = e.demand; if (!d || d.mx !== undefined) continue;
+      if (d.all || d.mode === l.mode || d.lineId === l.id) f *= d.mult;
+    }
+    return f;
+  },
+  fareMult(l) {
+    let f = 1;
+    for (const e of this.live()) { const x = e.fare; if (x && (x.all || x.mode === l.mode || x.lineId === l.id)) f *= x.mult; }
+    return f;
+  },
+  opsMult(mode) {
+    let f = 1;
+    for (const e of this.live()) if (e.ops && e.ops.mode === mode) f *= e.ops.mult;
+    return f;
+  },
+  halted(line) {
+    for (const e of this.live()) {
+      if (e.kind === 'strike' && !e.resolved && e.mode === line.mode) return true;
+      const h = e.halt;
+      if (h && (h.lineId === line.id || h.mode === line.mode)) return true;
+    }
+    if (line.mode === 'boat' && this.weather() === 'storm') return true;
+    return false;
+  },
+  stopMult(line) {
+    const m = line.evMul; m.fill(1);
+    for (const e of this.live()) {
+      const d = e.demand; if (!d || d.mx === undefined) continue;
+      line.stops.forEach((st, k) => { const dd = dist(st.mx, st.my, d.mx, d.my); if (dd < d.r) m[k] = Math.max(m[k], 1 + (d.mult - 1) * (1 - 0.6 * dd / d.r)); });
+    }
+  },
+  where(e) {
+    if (e.veh) {
+      const l = G.s.lines.find((x) => x.id === e.veh.lineId), v = l && l.veh.find((x) => x.id === e.veh.vehId);
+      if (l && v && !v.hidden) { const p = Lines.posOf(l, v); return [p.mx, p.my]; }
+    }
+    if (e.mx !== undefined) return [e.mx, e.my];
+    if (e.zone) { const z = G.w.zones.get(e.zone); return z ? [z.cx, z.cy] : null; }
+    if (e.lineId) { const l = G.s.lines.find((x) => x.id === e.lineId); if (l) { const st = l.stops[Math.floor(l.stops.length / 2)]; return [st.mx, st.my]; } }
+    return null;
+  },
+  /** effets lisibles par le joueur */
+  effects(e) {
+    const out = [], L = (id) => { const l = G.s.lines.find((x) => x.id === id); return l ? 'ligne ' + lab(l) : 'une ligne'; };
+    const pct = (m) => (m >= 1 ? '+' : '−') + Math.round(Math.abs(m - 1) * 100) + ' %';
+    if (e.traffic) out.push(e.traffic.all ? `Circulation ${e.traffic.all < 1 ? 'fluidifiée' : 'chargée'} dans toute la ville (${pct(e.traffic.all)})` : e.traffic.zone ? `Circulation difficile dans le quartier (${pct(e.traffic.mult)} de trafic)` : `Bouchons dans un rayon de ${Math.round(e.traffic.r / 50) * 50} m (trafic ×${e.traffic.mult.toLocaleString('fr-FR', { maximumFractionDigits: 1 })})`);
+    if (e.demand) out.push(e.demand.mx !== undefined ? `Affluence jusqu’à ×${e.demand.mult.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} aux arrêts à moins de ${Math.round(e.demand.r / 50) * 50} m` : `Fréquentation ${pct(e.demand.mult)} (${e.demand.all ? 'tout le réseau' : e.demand.mode ? MODES[e.demand.mode].label.toLowerCase() : L(e.demand.lineId)})`);
+    if (e.halt) out.push(e.halt.mode ? `Toutes les lignes ${MODES[e.halt.mode].label.toLowerCase()} à l’arrêt` : `${L(e.halt.lineId)} interrompue`);
+    if (e.kind === 'strike' && !e.resolved) out.push('Toutes les lignes du mode concerné restent au dépôt');
+    if (e.speed) out.push(`Vitesse des ${MODES[e.speed.mode].label.toLowerCase()} ${pct(e.speed.mult)}`);
+    if (e.fare) out.push(e.fare.mult === 0 ? `Aucune recette billets (${e.fare.all ? 'tout le réseau' : e.fare.mode ? MODES[e.fare.mode].label.toLowerCase() : L(e.fare.lineId)})` : `Recettes billets ${pct(e.fare.mult)} (${e.fare.all ? 'tout le réseau' : e.fare.mode ? MODES[e.fare.mode].label.toLowerCase() : L(e.fare.lineId)})`);
+    if (e.ops) out.push(`Coûts d’exploitation des ${MODES[e.ops.mode].label.toLowerCase()} ${pct(e.ops.mult)}`);
+    if (e.veh) out.push(e.veh.type === 'hold' ? `Un véhicule immobilisé ${e.veh.min} min (ceux qui suivent attendent derrière)` : `Un véhicule immobilisé ${e.veh.min} min puis indisponible jusqu’à la fin de l’événement`);
+    if (e.rep) out.push(`Image ${e.rep.delta > 0 ? '+' : '−'}${Math.round(Math.abs(e.rep.delta) * 100)} % (${e.rep.all ? 'tout le réseau' : e.rep.mode ? MODES[e.rep.mode].label.toLowerCase() : L(e.rep.lineId)})`);
+    if (e.money) out.push(`${e.money > 0 ? 'Recette' : 'Dépense'} de ${fmtEur(Math.abs(e.money))}`);
+    return out;
+  },
+
+  /* ---- création ---- */
+  add(e) {
+    e.id = G.s.nextId++;
+    if (e.tone === undefined) e.tone = this.tone(e);
+    if (!e.cat) e.cat = (this.def(e) || {}).cat || 'reseau';
+    e.bad = e.tone < 0;
+    e.applied = false;
+    G.s.events.push(e);
+    this.log(e.title + ' — ' + e.desc, e.kind);
+    if (e.start <= G.s.min) this.apply(e);
+    Notif.push(e, e.start > G.s.min ? 'announce' : 'now');
+    if (e.q && !e.decided) UI.choiceDialog(e);
+    Render.dirty = true;
+    UI.refreshInfoBadge();
+    return e;
+  },
+  /** effets immédiats au début de l'événement */
+  apply(e) {
+    if (e.applied || e.void) return;
+    e.applied = true;
+    const s = G.s;
+    if (e.money && !e.moneyDone) { e.moneyDone = true; if (e.money > 0) Eco.earn(e.money, 'evIn'); else Eco.charge(-e.money, 'events'); }
+    if (e.rep) for (const l of s.lines) if (e.rep.all || e.rep.mode === l.mode || e.rep.lineId === l.id) l.rep = clamp(l.rep + e.rep.delta, 0.6, 1.1);
+    if (e.veh) {
+      const l = s.lines.find((x) => x.id === e.veh.lineId), v = l && l.veh.find((x) => x.id === e.veh.vehId);
+      if (v && !v.hidden && !v.parked) {
+        v.incUntil = s.sec + e.veh.min * 60; v.incEv = e.id;
+        if (e.veh.type === 'breakdown') { v.towAt = s.min + e.veh.min; v.brokenUntil = e.end; }
+      }
+    }
+    if (e.announce && e.start < s.min + 1 && Math.abs(e.tone) >= 2 && e.notified === 'announce') Notif.push(e, 'start');
+  },
+  /** chaque minute : début des événements annoncés, véhicules en panne */
+  minute() {
+    const s = G.s, m = s.min;
+    for (const e of s.events) if (!e.applied && !e.void && e.start <= m) {
+      if (e.q && !e.decided) { e.decided = true; const d = this.def(e); if (d && d.choose) d.choose(e, 1); } // sans réponse : option prudente
+      this.apply(e);
+    }
+    for (const l of s.lines) for (const v of l.veh) {
+      if (v.towAt && m >= v.towAt) {
+        v.towAt = 0;
+        // remorquage : les voyageurs à bord attendent le véhicule suivant au prochain arrêt
+        if (!v.parked && !v.hidden && l.ev && l.ev[v.ev]) {
+          const n = l.stops.length, evt = l.ev[v.ev], k = evt.k, R = evt.d === 0 ? l.Rf : l.Rb;
+          for (let j = 0; j < n; j++) if (j !== k && v.on && v.on[j] > 0) R[k * n + j] += v.on[j];
+        }
+        v.parked = true; v.broken = true; v.hidden = true; v.load = 0; v.toPark = false;
+        if (v.on) v.on.fill(0); if (v.ont) v.ont.fill(0);
+        if (G.ui && G.ui.follow === v) G.ui.follow = null;
+        Render.dirty = true;
+      }
+      if (v.broken && m >= (v.brokenUntil || 0)) { v.broken = false; v.brokenUntil = 0; }
+    }
+  },
+  hourly() {
+    const s = G.s, m = s.min, h = Time.hour(m);
+    // grève à confirmer (dialogue la veille)
+    for (const e of s.events) if (e.kind === 'strike' && !e.asked && e.start - m < 1200) { e.asked = true; UI.strikeDialog(e); }
+    // choix restés sans réponse (après un rechargement)
+    for (const e of s.events) if (e.q && !e.decided && !e.dialogOpen && e.start > m) UI.choiceDialog(e);
+    // rythme : 3 à 14 événements par jour selon la taille du réseau, surtout en journée
+    const nL = s.lines.length, nV = s.lines.reduce((a, l) => a + l.veh.length, 0);
+    const perDay = nL ? Math.min(14, 4 + nL * 0.9 + nV * 0.06) : 1.5;
+    const day = h >= 6 && h <= 22;
+    const p = day ? perDay / 17 * 0.95 : perDay / 17 * 0.15;
+    if (Math.random() < p) this.spawn();
+    if (Math.random() < p * 0.25) this.spawn(); // parfois deux à la fois
+  },
+  ctx() {
+    const m = G.s.min;
+    return { m, h: Time.hour(m), dow: Time.dow(m), month: Time.month(m) };
+  },
+  spawn(forceId) {
+    const s = G.s, c = this.ctx();
+    s.evLast = s.evLast || {};
+    const cands = EVENTS.filter((d) => {
+      if (forceId) return d.id === forceId;
+      if (s.evLast[d.id] && s.min - s.evLast[d.id] < (d.cd || 12) * 60) return false;
+      if (d.when && !d.when(c)) return false;
+      // pas deux fois le même événement en cours
+      return !s.events.some((e) => e.kind === d.id && e.end > s.min);
+    });
+    if (!forceId) {
+      // d'abord la tonalité (≈ 50 % négatifs, 40 % positifs, 10 % mitigés), puis l'événement
+      const r = Math.random(), want = r < 0.5 ? -1 : r < 0.9 ? 1 : 0;
+      const sub = cands.filter((d) => Math.sign(d.tone) === want);
+      if (sub.length) { cands.length = 0; cands.push(...sub); }
+    }
+    for (let tries = 0; tries < 6 && cands.length; tries++) {
+      const tot = cands.reduce((a, d) => a + d.w, 0);
+      let r = Math.random() * tot, d = cands[0];
+      for (const x of cands) { r -= x.w; if (r <= 0) { d = x; break; } }
+      const x = d.make(c);
+      if (!x) { cands.splice(cands.indexOf(d), 1); continue; }
+      const start = x.start ?? s.min;
+      const e = { kind: d.id, cat: d.cat, tone: d.tone, title: d.title, glyph: d.glyph, ...x, start, end: start + Math.max(1, x.dur || 60) };
+      delete e.dur;
+      s.evLast[d.id] = s.min;
+      return this.add(e);
+    }
+    return null;
+  },
+  /** chaque matin : météo, grève éventuelle, purge, fêtes du calendrier */
+  daily() {
+    const s = G.s, m = s.min, month = Time.month(m);
+    if (!RealWeather.active()) {
+      const r = Math.random();
+      let w = 'sun';
+      const winter = month === 11 || month <= 1, summer = month >= 5 && month <= 7;
+      if (winter && r < 0.1) w = 'snow';
+      else if (summer && r < 0.15) w = 'heat';
+      else if (r < 0.04) w = 'storm';
+      else if (r < 0.3) w = 'rain';
+      const prev = s.weather;
+      s.weather = w;
+      if (w !== 'sun' && w !== prev) {
+        this.log('Météo : ' + EV_INFO[w].title.toLowerCase() + ' aujourd’hui.', w);
+        const txt = { rain: 'Plus de monde dans le métro et les bus, circulation un peu plus lente.', snow: 'Les bus roulent au ralenti, le métro fait le plein.', heat: 'Chaleur écrasante : les navettes fluviales ont la cote.', storm: 'Vent violent : navettes fluviales à quai, circulation perturbée.' }[w];
+        Notif.push({ title: 'Météo : ' + EV_INFO[w].title.toLowerCase(), desc: txt, tone: w === 'heat' ? 0 : -1, cat: 'meteo', glyph: '≈' }, 'now');
+      }
+    }
+    s.events = s.events.filter((e) => e.end > m - 1440);
+    const modes = new Set(s.lines.map((l) => l.mode));
+    const day0 = m - Time.mod(m);
+    // grève (annoncée la veille, avec négociation possible)
+    if (Math.random() < 0.03 && (modes.has('bus') || modes.has('metro'))) {
+      const mode = modes.has('metro') && Math.random() < 0.5 ? 'metro' : modes.has('bus') ? 'bus' : 'metro';
+      const cost = Math.round((40000 + s.lines.filter((l) => l.mode === mode).reduce((a, l) => a + l.veh.length, 0) * 6000) * s.costMul);
+      this.add({ kind: 'strike', cat: 'social', tone: -3, glyph: '⚑', mode, start: day0 + 1440 + 300, end: day0 + 2880, title: 'Préavis de grève', desc: 'les agents ' + (mode === 'bus' ? 'des bus' : 'du métro') + ' cesseront le travail demain.', cost, resolved: false, asked: false, announce: true });
+    }
+    // fêtes du calendrier (annoncées la veille)
+    const tomorrow = Time.date(day0 + 1440);
+    for (const f of SEASONAL) {
+      if (tomorrow.getUTCMonth() !== f.month || tomorrow.getUTCDate() !== f.day) continue;
+      if (s.events.some((e) => e.kind === f.id && e.end > m)) continue;
+      const c = EvCtx.center(), st = day0 + 1440 + f.start;
+      this.add({ kind: f.id, cat: f.cat, tone: f.tone, title: f.title, glyph: f.glyph, desc: f.desc, start: st, end: st + f.dur, announce: true, ...f.fx(c) });
+    }
+  },
+});
+
+/* =====================================================================
+   NOTIFICATIONS DANS LE JEU
+   ===================================================================== */
+const Notif = {
+  push(e, phase) {
+    const s = G.s; if (!s) return;
+    s.notifs = s.notifs || [];
+    const tone = e.tone ?? 0;
+    const when = phase === 'announce' ? (Time.label(e.start).day === Time.label(s.min).day ? 'aujourd’hui ' : Time.label(e.start).day + ' ') + Time.label(e.start).time : null;
+    const n = { id: s.nextId++, t: s.min, title: (phase === 'start' ? 'C’est maintenant : ' : '') + e.title, text: e.desc, tone, cat: e.cat || 'reseau', glyph: e.glyph || '!', evId: e.id || null, when, read: false };
+    if (e.id) e.notified = phase;
+    s.notifs.unshift(n);
+    if (s.notifs.length > 60) s.notifs.length = 60;
+    const mode = s.settings.notif || 'all';
+    if (mode === 'all' || (mode === 'major' && Math.abs(tone) >= 2)) this.banner(n);
+    UI.refreshInfoBadge();
+  },
+  unread() { return (G.s.notifs || []).filter((n) => !n.read).length; },
+  readAll() { for (const n of G.s.notifs || []) n.read = true; UI.refreshInfoBadge(); },
+  banner(n) {
+    const box = document.getElementById('toasts'); if (!box || !G.ready) return;
+    // panneau ou fenêtre ouverte : pas de bannière (la pastille Infos compte la notification)
+    if (UI.sheetOpen() || !document.getElementById('modal').hidden) return;
+    const el = document.createElement('button');
+    const c = EV_CAT[n.cat] || EV_CAT.reseau;
+    el.className = 'nban ' + (n.tone <= -2 ? 'n-bad' : n.tone < 0 ? 'n-warn' : n.tone >= 2 ? 'n-great' : n.tone > 0 ? 'n-good' : 'n-info');
+    el.dataset.act = 'notifOpen'; el.dataset.arg = String(n.id);
+    el.innerHTML = `<span class="nb-ic" style="background:${c.col}">${esc(n.glyph)}</span><span class="nb-t"><b>${esc(n.title)}</b><small>${n.when ? '<em>' + esc(n.when) + '</em> · ' : ''}${esc(n.text)}</small></span><span class="nb-tone">${Notif.toneLabel(n.tone)}</span>`;
+    box.appendChild(el);
+    const bans = box.querySelectorAll('.nban');
+    if (bans.length > 2) bans[0].remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, Math.abs(n.tone) >= 2 ? 6500 : 5000);
+  },
+  toneLabel(t) { return t <= -3 ? '▼▼▼' : t === -2 ? '▼▼' : t === -1 ? '▼' : t >= 3 ? '▲▲▲' : t === 2 ? '▲▲' : t === 1 ? '▲' : '●'; },
 };
 
 'use strict';
@@ -3815,17 +4434,18 @@ const Render = {
 
     /* marqueurs d'événements (touchables) */
     this.evpos = [];
-    const showEv = Events.active().concat(Events.upcoming().filter((e) => e.kind === 'big' && e.start - s.min < 720));
+    const showEv = Events.active().concat(Events.upcoming().filter((e) => (e.announce || e.kind === 'big') && e.tone > 0 && e.start - s.min < 720));
     for (const e of showEv) {
+      if (e.veh && e.start <= s.min) continue; // dessiné sur le véhicule (calque dynamique)
       const pos = Events.where(e); if (!pos) continue;
       const x = X(pos[0]), y = Y(pos[1]);
       if (out(x, y, 10)) continue;
       this.evpos.push({ x, y, e });
-      const col = EV_COL[e.kind] || INK, up = e.start > s.min;
+      const col = Events.color(e), up = e.start > s.min;
       ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
       ctx.lineWidth = 3.5; ctx.strokeStyle = col; ctx.setLineDash(up ? [4, 3] : []); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle = INK; ctx.font = '700 15px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(EV_GLYPH[e.kind] || '!', x, y + 1);
+      ctx.fillText(Events.glyph(e), x, y + 1);
     }
   },
 
@@ -3870,7 +4490,7 @@ const Render = {
         }
       }
     }
-    this.vpos = [];
+    this.vpos = []; this.evposD = [];
     for (const l of s.lines) {
       if (!l.active) continue;
       if (l.mode === 'bus' && z < 11.5) continue;
@@ -3914,6 +4534,18 @@ const Render = {
           }
         }
         ctx.restore();
+        if (v.incUntil > s.sec && v.incEv) {
+          // incident en cours sur ce véhicule : pastille touchable
+          const e = s.events.find((x) => x.id === v.incEv);
+          if (e) {
+            const bx = x + L2 + 6, by = y - L2 - 6, br = 9;
+            ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            ctx.lineWidth = 2.6; ctx.strokeStyle = Events.color(e); ctx.stroke();
+            ctx.fillStyle = INK; ctx.font = '700 11px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(Events.glyph(e), bx, by + 0.5);
+            this.evposD.push({ x: bx, y: by, e });
+          }
+        }
         if (G.ui.selVeh === v) {
           ctx.beginPath(); ctx.arc(x, y, L2 + 7, 0, 7); ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.stroke();
         }
@@ -3988,7 +4620,7 @@ const Render = {
 
   /** élément touché sur la carte */
   hit(px, py) {
-    for (const it of this.evpos || []) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 22 * 22) return { type: 'event', e: it.e };
+    for (const it of (this.evposD || []).concat(this.evpos || [])) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 22 * 22) return { type: 'event', e: it.e };
     let best = null, bd = 24 * 24;
     for (const it of this.vpos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bd) { bd = d; best = { type: 'veh', ...it }; } }
     if (best) return best;
@@ -4452,6 +5084,12 @@ const IC = {
   ok: '<path d="M5 12.5l4.5 4.5L19 7.5" stroke-width="2.4"/>',
   follow: '<circle cx="12" cy="12" r="3"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  bus: '<rect x="5" y="3" width="14" height="15" rx="3"/><path d="M5 11h14M8 18v2.5M16 18v2.5"/><circle cx="8.5" cy="14.5" r=".8" fill="currentColor"/><circle cx="15.5" cy="14.5" r=".8" fill="currentColor"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  flag: '<path d="M5 21V4h12l-2 4 2 4H5"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
 };
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
 const pict = (mode) => `<span class="pict pict-${mode}" aria-label="${MODES[mode].label}">${mode === 'metro' ? 'M' : mode === 'bus' ? 'BUS' : mode === 'ter' ? 'TER' : '≈'}</span>`;
@@ -4511,8 +5149,8 @@ const UI = {
     $('#btnSpeed').classList.toggle('rt', G.speed === 'rt');
   },
   refreshInfoBadge() {
-    const n = Events.active().filter((e) => e.bad).length + Events.upcoming().filter((e) => e.bad).length;
-    const d = $('#infoDot'); if (d) d.hidden = n === 0;
+    const n = Notif.unread();
+    const d = $('#infoDot'); if (d) { d.hidden = n === 0; d.textContent = n > 9 ? '9+' : String(n); }
   },
   /** la photo reste en version jour : la nuit est un calque percé de lumières.
    *  Pendant une animation de zoom seulement, on assombrit directement la photo. */
@@ -4553,6 +5191,7 @@ const UI = {
   /* ---- panneau du bas ---- */
   open(name, arg) {
     G.ui.sheet = name; G.ui.sheetArg = arg;
+    document.querySelectorAll('#toasts .nban').forEach((b) => b.remove());
     this.closeCard();
     const sh = $('#sheet');
     sh.hidden = false;
@@ -4604,7 +5243,7 @@ const UI = {
       <div class="kv"><span>À bord</span><b>${fmtInt(v.load)} / ${md.cap} · ${fmtPct(f)}</b></div>
       <div class="kv"><span>Prochain arrêt</span><b>${esc(next)}</b></div>
       <div class="kv"><span>Direction</span><b>${esc(dir)}</b></div>
-      <div class="kv"><span>Vitesse${Lines.limitAt(l, v) ? ' · limitée à ' + Lines.limitAt(l, v) + ' km/h' : ''}</span><b>${v.hold === 'queue' ? 'derrière le véhicule précédent' : v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage', reg: 'régulation (garde l’écart)', queue: 'derrière le véhicule précédent' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
+      <div class="kv"><span>Vitesse${Lines.limitAt(l, v) ? ' · limitée à ' + Lines.limitAt(l, v) + ' km/h' : ''}</span><b>${v.incUntil > G.s.sec ? 'immobilisé (incident)' : v.hold === 'queue' ? 'derrière le véhicule précédent' : v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage', reg: 'régulation (garde l’écart)', queue: 'derrière le véhicule précédent', incident: 'immobilisé (incident)' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
       <div class="row2"><button class="btn sm ${G.ui.follow === v ? 'on' : ''}" data-act="follow">${icon('follow')} ${G.ui.follow === v ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="openLine" data-arg="${l.id}">Voir la ligne</button></div>`);
   },
   showStop(l, k) {
@@ -4671,19 +5310,14 @@ const UI = {
     const up = e.start > s.min;
     const total = Math.max(1, e.end - e.start), done = clamp((s.min - e.start) / total, 0, 1);
     const lab = (m) => Time.label(m).time + (Math.floor(m / 1440) !== Math.floor(s.min / 1440) ? ' (' + Time.label(m).day + ')' : '');
-    const effect = {
-      accident: 'Bouchons dans un rayon d’environ 550 m : les bus qui passent par là ralentissent fortement.',
-      works: 'Circulation difficile dans tout le quartier (+60 % de trafic).',
-      demo: 'Cortège en centre-ville : forts ralentissements dans un rayon de 900 m.',
-      big: 'Affluence multipliée jusqu’à ×4 aux arrêts situés à moins de 700 m, et trafic chargé autour.',
-      failure: 'La ligne est totalement interrompue pendant l’incident.',
-      strike: 'Toutes les lignes du mode concerné restent au dépôt.',
-    }[e.kind] || '';
-    const lines = G.s.lines.filter((l) => { const p = Events.where(e); return p && l.stops.some((st) => dist(st.mx, st.my, p[0], p[1]) < 900); });
-    this.card(`<div class="card-h"><span class="evcard-ic" style="--c:${EV_COL[e.kind] || '#232323'}">${EV_GLYPH[e.kind] || '!'}</span><div class="card-t"><b>${esc(e.title)}</b><small>${up ? 'à venir · début ' + lab(e.start) : 'en cours · fin prévue ' + lab(e.end)}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+    const fx = Events.effects(e), tone = Events.tone(e), cat = Events.cat(e);
+    const direct = new Set([e.lineId, e.halt && e.halt.lineId, e.veh && e.veh.lineId].filter(Boolean));
+    const lines = G.s.lines.filter((l) => { if (direct.has(l.id)) return true; if (e.halt && e.halt.mode === l.mode) return true; const p = (e.traffic || e.demand) && Events.where(e); return p && l.stops.some((st) => dist(st.mx, st.my, p[0], p[1]) < 900); });
+    this.card(`<div class="card-h"><span class="evcard-ic" style="--c:${Events.color(e)}">${esc(Events.glyph(e))}</span><div class="card-t"><b>${esc(e.title)}</b><small>${esc(cat.label)} · ${up ? 'à venir · début ' + lab(e.start) : e.end - e.start <= 60 && !e.veh ? lab(e.start) : 'en cours · fin prévue ' + lab(e.end)}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
       <p class="sub">${esc(e.desc.charAt(0).toUpperCase() + e.desc.slice(1))}</p>
-      ${!up ? `<div class="timeline"><i style="width:${(done * 100).toFixed(0)}%"></i></div><small>${lab(e.start)} → ${lab(e.end)}</small>` : ''}
-      ${effect ? `<p class="note">${effect}</p>` : ''}
+      <div class="tone tone-${tone < 0 ? 'neg' : tone > 0 ? 'pos' : 'neu'}">${Notif.toneLabel(tone)} <span>${tone <= -3 ? 'Très pénalisant' : tone === -2 ? 'Pénalisant' : tone === -1 ? 'Gênant' : tone >= 3 ? 'Excellente nouvelle' : tone === 2 ? 'Très favorable' : tone === 1 ? 'Favorable' : 'Mitigé'}</span></div>
+      ${!up && e.end - e.start > 60 ? `<div class="timeline"><i style="width:${(done * 100).toFixed(0)}%"></i></div><small>${lab(e.start)} → ${lab(e.end)}</small>` : ''}
+      ${fx.length ? `<ul class="fx">${fx.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       ${lines.length ? `<div class="sec">Lignes concernées</div>${lines.map((l) => `<button class="lrow" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="lrow-t">${esc(l.name)}</span></button>`).join('')}` : ''}`);
   },
 
@@ -4697,6 +5331,15 @@ const UI = {
   closeModal() {
     $('#modal').hidden = true;
     if (G.ui.modalPaused) { G.paused = G.ui.prevPaused; G.ui.modalPaused = false; this.refreshTop(); }
+  },
+  choiceDialog(e) {
+    if (e.decided || !e.q) return;
+    if (!$('#modal').hidden) { e.dialogOpen = false; return; } // une autre fenêtre est ouverte : on reproposera plus tard
+    e.dialogOpen = true;
+    const c = Events.cat(e);
+    this.modal(`<div class="plate big"><span class="evcard-ic" style="--c:${c.col}">${esc(Events.glyph(e))}</span> ${esc(e.title)}</div>
+      <p>${esc(e.q)}</p>
+      <div class="row2">${e.opts.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>`, { pause: true });
   },
   strikeDialog(e) {
     this.modal(`<div class="plate big">${icon('strike')} Préavis de grève</div>
@@ -4862,7 +5505,7 @@ const SHEETS = {
       ${section('Compte d’exploitation')}
       <div class="tblw"><table class="tbl"><thead><tr><th></th><th>Aujourd’hui</th><th>Hier</th></tr></thead><tbody>
       ${row('Billets', d.fares, y && y.fares)}${row('Publicité', d.ads, y && y.ads)}
-      ${row('Exploitation véhicules', d.ops, y && y.ops, true)}${row('Maintenance', d.maint, y && y.maint, true)}${row('Intérêts', d.interest, y && y.interest, true)}${row('Négociations', d.events, y && y.events, true)}
+      ${row('Exploitation véhicules', d.ops, y && y.ops, true)}${row('Maintenance', d.maint, y && y.maint, true)}${row('Intérêts', d.interest, y && y.interest, true)}${row('Événements (recettes)', d.evIn || 0, y && (y.evIn || 0))}${row('Événements et négociations', d.events, y && y.events, true)}
       <tr class="tot"><th>Résultat</th><td class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</td><td class="${resY < 0 ? 'neg' : 'pos'}">${col(resY)}</td></tr>
       ${row('Investissements', d.capex + d.zones, y && y.capex + y.zones, true)}${row('Ventes de véhicules', d.sales, y && y.sales)}
       </tbody></table></div>
@@ -4910,11 +5553,15 @@ const SHEETS = {
 
   infos() {
     const s = G.s, w = Events.weather();
-    const evRow = (e, up) => `<div class="evrow ${e.bad ? 'bad' : ''}" ${Events.where(e) ? `data-act="seeEvent" data-arg="${e.id}" style="cursor:pointer"` : ''}>${icon(EV_INFO[e.kind]?.icon || 'info')}<div><b>${esc(e.title)}</b><small>${esc(e.desc)}</small><small>${up ? 'à partir du ' + Time.label(e.start).day + ' ' + Time.label(e.start).time : 'jusqu’à ' + Time.label(e.end).time + (Time.mod(e.end) < Time.mod(s.min) || e.end - s.min > 1440 ? ' (' + Time.label(e.end).day + ')' : '')}${e.kind === 'strike' && e.resolved ? ' · désamorcée' : ''}</small></div></div>`;
+    const evRow = (e, up) => `<div class="evrow ${e.bad ? 'bad' : ''}" data-act="seeEvent" data-arg="${e.id}" style="cursor:pointer">${icon(Events.icon(e))}<div><b>${esc(e.title)}</b><small>${esc(e.desc)}</small><small>${up ? 'à partir du ' + Time.label(e.start).day + ' ' + Time.label(e.start).time : 'jusqu’à ' + Time.label(e.end).time + (Time.mod(e.end) < Time.mod(s.min) || e.end - s.min > 1440 ? ' (' + Time.label(e.end).day + ')' : '')}${e.kind === 'strike' && e.resolved ? ' · désamorcée' : ''}</small></div></div>`;
     const act = Events.active(), up = Events.upcoming();
+    const ns = (s.notifs || []).slice(0, 25);
+    const nrow = (n) => { const c = EV_CAT[n.cat] || EV_CAT.reseau; return `<button class="nrow ${n.read ? '' : 'unread'}" data-act="notifOpen" data-arg="${n.id}"><span class="nb-ic" style="background:${c.col}">${esc(n.glyph)}</span><span class="nb-t"><b>${esc(n.title)}</b><small>${esc(n.text)}</small><small class="nr-t">${Time.label(n.t).day} ${Time.label(n.t).time}${n.when ? ' · prévu ' + esc(n.when) : ''}</small></span><span class="nb-tone t${n.tone < 0 ? 'n' : n.tone > 0 ? 'p' : '0'}">${Notif.toneLabel(n.tone)}</span></button>`; };
+    setTimeout(() => { if (G.ui.sheet === 'infos') Notif.readAll(); }, 1500);
     return {
       title: 'Infos trafic',
       html: `<div class="wxbig">${icon(EV_INFO[w].icon)}<div><b>${RealWeather.active() ? esc(s.wxReal.label) + ' · ' + Math.round(s.wxReal.temp) + ' °C' : EV_INFO[w].title}</b>${RealWeather.active() ? `<small>Météo réelle à ${esc(s.city.nom)} · vent ${Math.round(s.wxReal.wind || 0)} km/h · ${esc(s.wxReal.src)}</small>` : ''}<small>${{ sun: 'Aucun effet sur le réseau.', rain: 'Plus de monde dans le métro et les bus, circulation un peu plus lente.', snow: 'Bus très ralentis, le métro fait le plein.', heat: 'Les navettes fluviales ont la cote.', storm: 'Navettes fluviales à quai, circulation perturbée.' }[w]}</small></div></div>
+      ${section('Notifications')}${ns.map(nrow).join('') || '<p class="note">Aucune notification pour l’instant.</p>'}
       ${section('En cours')}${act.map((e) => evRow(e)).join('') || '<p class="note">Rien à signaler.</p>'}
       ${section('À venir')}${up.map((e) => evRow(e, true)).join('') || '<p class="note">Aucun événement annoncé.</p>'}
       ${section('Journal')}${s.journal.slice(0, 30).map((j) => `<div class="jrow"><small>${Time.label(j.t).day} ${Time.label(j.t).time}</small><span>${esc(j.text)}</span></div>`).join('') || '<p class="note">Le journal est vide.</p>'}`,
@@ -4925,17 +5572,19 @@ const SHEETS = {
     const s = G.s;
     const slots = Save.list().map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}${s.slot === n ? ' · en cours' : ''}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + (meta.unlimited ? 'illimité' : fmtEur(meta.money)) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div><div class="row2 tight"><button class="btn sm primary" data-act="saveSlot" data-arg="${n}">Sauver</button>${meta ? `<button class="btn sm" data-act="loadSlot" data-arg="${n}">Charger</button>` : ''}</div></div>`).join('');
     const tg = (k, lab) => `<label class="tgl"><input type="checkbox" data-change="setting" data-arg="${k}" ${s.settings[k] ? 'checked' : ''}><span>${lab}</span></label>`;
+    const nset = s.settings.notif || 'all';
     return {
-      title: 'Menu',
+      title: `Menu <small class="ver">version ${APP_VERSION}</small>`,
       html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
       ${section('Affichage')}
       <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
+      <div class="vrow"><div><b>Bannières d’événements</b><small>Toujours consultables dans l’onglet Infos</small></div><div class="seg">${[['all', 'Toutes'], ['major', 'Importantes'], ['none', 'Aucune']].map(([v, l]) => `<button class="${nset === v ? 'on' : ''}" data-act="notifSet" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       ${tg('realWeather', 'Météo réelle (modèles Météo-France via Open-Meteo)')}
       <p class="sub">${s.realtime ? 'Mode temps réel actif : l’horloge suit l’heure de Paris.' : 'Le mode temps réel s’active avec le bouton de vitesse (après ×60).'}${s.wxReal && s.settings.realWeather ? ' Dernière météo : ' + esc(s.wxReal.label.toLowerCase()) + ', ' + Math.round(s.wxReal.temp) + ' °C.' : ''}</p>
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
-      ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
+      ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population des quartiers : recensement INSEE 2019 (France métropolitaine) ; emplois : estimations du jeu.</p>`,
     };
   },
 };
@@ -5353,7 +6002,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.8.2';
+const APP_VERSION = '1.9';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -5468,6 +6117,25 @@ const ACT = {
     Sim.lineQuality(l); UI.refreshSheet();
   },
   openPlan() { Plan.open(); },
+  notifSet(v) { G.s.settings.notif = v; UI.refreshSheet(); },
+  notifOpen(id) {
+    const n = (G.s.notifs || []).find((x) => x.id === +id); if (!n) return;
+    n.read = true; UI.refreshInfoBadge();
+    const e = n.evId && G.s.events.find((x) => x.id === n.evId);
+    if (e) ACT.seeEvent(e.id); else UI.open('infos');
+  },
+  evChoose(arg) {
+    const [id, i] = arg.split('|').map(Number);
+    const e = G.s.events.find((x) => x.id === id); if (!e) { UI.closeModal(); return; }
+    const d = Events.def(e);
+    if (d && d.choose && !e.decided) {
+      d.choose(e, i); e.decided = true; e.dialogOpen = false; e.bad = e.tone < 0;
+      if (e.moneyNow && e.money && !e.moneyDone) { e.moneyDone = true; Eco.earn(e.money, 'evIn'); }
+      Events.log(e.title + ' — ' + e.desc, e.kind);
+      UI.toast(e.desc, e.tone < 0 ? 'warn' : 'ok');
+    }
+    UI.closeModal(); Render.dirty = true; Traffic.update(); UI.refreshTop();
+  },
   planClose() { Plan.close(); },
   planShare() { Plan.share(); },
   planFilter(f) { Plan.setFilter(f); },
@@ -5518,7 +6186,8 @@ const ACT = {
   offlineOk() { UI.closeModal(); },
   seeEvent(id) {
     const e = G.s.events.find((x) => x.id === +id); if (!e) return;
-    const p = Events.where(e); if (!p) return;
+    const p = Events.where(e);
+    if (!p) { UI.close(); UI.showEvent(e); return; }
     UI.close();
     G.map.setView([myToLat(p[1]), mxToLon(p[0])], Math.max(G.map.getZoom(), 15));
     UI.showEvent(e);
@@ -5570,6 +6239,7 @@ const StartScreen = {
     if (view === 'home') {
       const lm = last ? slots[last - 1].meta : null;
       box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
+        <p class="verpill">Version ${APP_VERSION}</p>
         <p class="tagline">Bâtissez le réseau de transport de votre ville, sur la vraie carte de France.</p>
         <div class="stack">
           ${lm ? `<button class="btn primary big" data-act="stContinue">Continuer · ${esc(lm.city)}<small>${esc(lm.date)} · ${lm.unlimited ? 'argent illimité' : fmtEur(lm.money)}</small></button>` : ''}
@@ -5759,6 +6429,9 @@ const Game = {
     if (!G.s.rail) G.s.rail = { stations: [], tracks: [] };
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
+    if (!G.s.settings.notif) G.s.settings.notif = 'all';
+    if (!G.s.notifs) G.s.notifs = [];
+    for (const e of G.s.events) Events.normalize(e);
     Rail.inject();
     for (const l of G.s.lines) { Lines.prepare(l); Render.lineBox(l); }
     Transfers.rebuild();

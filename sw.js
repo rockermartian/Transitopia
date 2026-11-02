@@ -1,5 +1,5 @@
 /* Correspondance — service worker : appli hors cache réseau + cache des photos aériennes */
-const APP = 'corr-app-v4';
+const APP = 'corr-app-v5';
 const TILES = 'corr-tiles-v1';
 const MAX_TILES = 3000;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',

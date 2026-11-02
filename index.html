@@ -1213,35 +1213,45 @@ const Loader = {
 
 const MODES = {
   bus: { label: 'Bus', short: 'Bus', ref: 1.8, K: 0.04, catch: 400, dwell: 14, perPax: 1.1, maxDwell: 70, refKmh: 14, loop: true },
-  metro: { label: 'Métro', short: 'Métro', ref: 2.1, K: 0.1, catch: 650, dwell: 22, perPax: 0.06, maxDwell: 50, refKmh: 30, loop: true },
-  ter: { label: 'TER', short: 'TER', ref: 3.6, K: 0.045, catch: 1200, dwell: 45, perPax: 0.12, maxDwell: 120, refKmh: 60, loop: false },
-  boat: { label: 'Navette fluviale', short: 'Fluvial', ref: 2.5, K: 0.028, catch: 450, dwell: 35, perPax: 0.5, maxDwell: 90, refKmh: 15, loop: false },
+  metro: { label: 'Métro', short: 'Métro', ref: 2.1, K: 0.1, catch: 650, dwell: 16, perPax: 0.04, maxDwell: 35, refKmh: 32, loop: true },
+  ter: { label: 'TER', short: 'TER', ref: 3.6, K: 0.045, catch: 1200, dwell: 30, perPax: 0.06, maxDwell: 75, refKmh: 60, loop: false },
+  boat: { label: 'Navette fluviale', short: 'Fluvial', ref: 2.5, K: 0.028, catch: 450, dwell: 35, perPax: 0.5, maxDwell: 90, refKmh: 10, loop: false },
 };
 const MODE_ORDER = ['bus', 'metro', 'ter', 'boat'];
+/** accélération (a) et freinage (b) de service, en m/s² ; vitesse plafond éventuelle */
+const PHYS = { bus: { a: 1.0, b: 1.3 }, metro: { a: 1.0, b: 1.1 }, ter: { a: 0.6, b: 0.75, vmax: 100 / 3.6 }, boat: { a: 0.25, b: 0.3 } };
+/** durée d'un trajet de d mètres départ et arrivée arrêtés (profil trapèze ou triangle) */
+function runTime(d, vc, a, b) {
+  if (d <= 0) return 0;
+  const da = vc * vc / (2 * a), db = vc * vc / (2 * b);
+  if (d >= da + db) return (d - da - db) / vc + vc / a + vc / b;
+  const vp = Math.sqrt(2 * d * a * b / (a + b));
+  return vp / a + vp / b;
+}
 
 const CATALOG = {
   bus: [
-    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 14 },
-    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 24 },
-    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 15 },
-    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 28 },
-    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 32 },
-    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 40 },
+    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 14, acc: 1.2 },
+    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 24, acc: 1.0 },
+    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 15, acc: 1.25 },
+    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 28, acc: 0.85 },
+    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 32, acc: 0.9 },
+    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 40, acc: 0.85 },
   ],
   metro: [
-    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 70 },
-    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 95 },
-    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 45 },
+    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 70, acc: 1.0 },
+    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 95, acc: 1.0 },
+    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 45, acc: 1.3 },
   ],
   ter: [
-    { id: 't1', name: 'Régio 1', desc: 'Autorail 1 caisse', cap: 140, kmh: 140, price: 1.6e6, op: 90 },
-    { id: 't4', name: 'Régio 4', desc: 'Automotrice 4 caisses', cap: 310, kmh: 160, price: 3.6e6, op: 140 },
-    { id: 'td', name: 'Régio Duplex', desc: 'Rame à deux niveaux', cap: 560, kmh: 160, price: 5.8e6, op: 190 },
+    { id: 't1', name: 'Régio 1', desc: 'Autorail diesel 1 caisse', cap: 140, kmh: 100, price: 1.6e6, op: 90, acc: 0.5 },
+    { id: 't4', name: 'Régio 4', desc: 'Automotrice électrique 4 caisses', cap: 310, kmh: 100, price: 3.6e6, op: 140, acc: 0.75 },
+    { id: 'td', name: 'Régio Duplex', desc: 'Rame électrique à deux niveaux', cap: 560, kmh: 100, price: 5.8e6, op: 190, acc: 0.6 },
   ],
   boat: [
-    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 18, price: 320000, op: 22 },
-    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 22, price: 720000, op: 35 },
-    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 28, price: 1.3e6, op: 50 },
+    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 12, price: 320000, op: 22, acc: 0.3 },
+    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 14, price: 720000, op: 35, acc: 0.25 },
+    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 16, price: 1.3e6, op: 50, acc: 0.2 },
   ],
 };
 const MODEL = {};
@@ -1640,7 +1650,7 @@ const Lines = {
       v.ev = 0; v.wrap = false;
       while (v.ev < line.ev.length && line.ev[v.ev].u < v.u - 1e-6) v.ev++;
       if (v.ev >= line.ev.length) { v.ev = 0; v.wrap = true; }
-      v.dwell = 0; if (v.on) v.on.fill(0); v.load = 0; v.hold = null;
+      v.dwell = 0; if (v.on) v.on.fill(0); v.load = 0; v.hold = null; v.v = 0; v.cdec = -1;
       this.ctlPointer(line, v);
     });
   },
@@ -1718,13 +1728,23 @@ const Traffic = {
 const Eco = {
   spend(amount, cat) {
     const s = G.s;
+    if (s.unlimited) return true; // argent illimité : rien n'est débité
     if (amount > s.money) { UI.toast('Fonds insuffisants : il manque ' + fmtEur(amount - s.money) + '.', 'bad'); return false; }
     s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount;
     UI.refreshTop();
     return true;
   },
-  charge(amount, cat) { const s = G.s; s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount; },
-  earn(amount, cat) { const s = G.s; s.money += amount; s.today[cat] = (s.today[cat] || 0) + amount; UI.refreshTop(); },
+  charge(amount, cat) { const s = G.s; if (s.unlimited) return; s.money -= amount; s.today[cat] = (s.today[cat] || 0) + amount; },
+  earn(amount, cat) { const s = G.s; if (s.unlimited) return; s.money += amount; s.today[cat] = (s.today[cat] || 0) + amount; UI.refreshTop(); },
+  /** mode argent illimité : dépenses et recettes en pause */
+  free() { return !!(G.s && G.s.unlimited); },
+  canAfford(x) { return this.free() || G.s.money >= x; },
+  setUnlimited(on) {
+    G.s.unlimited = !!on;
+    Events.log(on ? 'Argent illimité activé : dépenses et recettes en pause.' : 'Argent illimité désactivé : la trésorerie reprend.', 'info');
+    UI.toast(on ? 'Argent illimité activé. Construisez librement !' : 'Retour à la gestion normale, trésorerie : ' + fmtEur(G.s.money) + '.', 'ok');
+    UI.refreshTop();
+  },
   blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, loanIn: 0, repay: 0, pax: 0, mec: 0 }; },
   dayProfit(d) { return d.fares + d.ads - d.ops - d.maint - d.interest - d.events; },
   debt() { return G.s.loans.reduce((a, l) => a + l.amount, 0); },
@@ -1739,6 +1759,7 @@ const Eco = {
   maxDebt() { return 20e6 * G.s.costMul; },
   borrow(o) {
     const s = G.s;
+    if (s.unlimited) { UI.toast('Inutile d’emprunter en mode argent illimité.', 'info'); return; }
     if (this.debt() + o.amount > this.maxDebt()) { UI.toast('La banque refuse : endettement maximum atteint (' + fmtEur(this.maxDebt()) + ').', 'bad'); return; }
     s.loans.push({ id: s.nextId++, amount: o.amount, rate: o.rate, taken: s.min });
     s.money += o.amount; s.today.loanIn += o.amount;
@@ -1931,9 +1952,9 @@ const Sim = {
     const startMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     return {
       v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301,
-      owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun',
+      owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun', rail: { stations: [], tracks: [] },
       today: Eco.blankDay(), days: [], ads: { bus: 1, metro: 1, ter: 1, boat: 1 },
-      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, base: 'pale' },
+      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, base: 'pale' },
       modalShift: 0, view: null, lastReal: Date.now(), created: Date.now(), zoneMode: 'iris',
     };
   },
@@ -1943,6 +1964,7 @@ const Sim = {
       const want = (l.path.pairs || []).filter(Boolean).length + ((l.pathB && l.pathB.pairs) || []).filter(Boolean).length;
       if (!(l.segE && l.segFound >= want)) Lines.resolveEdges(l);
     }
+    if (G.s.rail && G.s.rail.joins && G.s.rail.joins.length) Rail.inject(); // aiguillages vers des voies nouvellement chargées
     this.rerouteOld();
   },
   /** lignes créées avant la gestion des sens uniques : nouveau calcul automatique */
@@ -2008,7 +2030,7 @@ const Sim = {
     Eco.charge(op, 'ops'); l.today.ops += op;
     const adLvl = s.ads[l.mode] || 0;
     const adH = (ADS.perHour[l.mode][adLvl] * l.veh.length) / 60;
-    if (adH) { s.money += adH; s.today.ads += adH; l.today.ads += adH; }
+    if (adH) { if (!s.unlimited) { s.money += adH; s.today.ads += adH; } l.today.ads += adH; }
     if (!l.veh.length) return;
     // génération des voyageurs
     const h = Time.hour(m), we = Time.weekend(m);
@@ -2047,43 +2069,55 @@ const Sim = {
           num += segL; den += segL / (vmax * Traffic.busFactor(e, l) * (l.signal ? 1.05 : 1) * Events.speedMult('bus'));
         }
       });
-      // attente moyenne aux feux et stops
-      for (const c of l.ctl || []) den += c.t === 'sig' ? (l.signal ? 4 : 18) : c.t === 'stop' ? 4 : 1.5;
+      // feux et stops : attente + redémarrage
+      const a = l.veh[0] ? MODEL[l.veh[0].model].acc || 1 : 1, vc = 8.3;
+      const restart = vc / (2 * a) + vc / (2 * PHYS.bus.b);
+      for (const c of l.ctl || []) den += c.t === 'sig' ? (l.signal ? 1 + restart * 0.15 : 0.5 * (20 + restart)) : c.t === 'stop' ? 4 + restart : 0.45 * (2 + restart);
+      // arrêts : décélération + redémarrage
+      den += l.ev.length * restart;
       spd = den > 0 ? num / den : 6;
-    } else {
-      const v0 = l.veh[0] ? MODEL[l.veh[0].model].kmh / 3.6 : 10;
-      spd = v0 * (l.mode === 'metro' ? 0.6 : l.mode === 'ter' ? 0.7 : 0.85) * (Events.speedMult(l.mode) || 0.01);
     }
-    const nStopsCycle = l.ev.length;
-    const cycle = l.C / Math.max(1, spd) + nStopsCycle * (mode.dwell + 10);
+    let cycle;
+    if (l.mode === 'bus') cycle = l.C / Math.max(1, spd) + l.ev.length * (mode.dwell + 6);
+    else {
+      const md = l.veh[0] ? MODEL[l.veh[0].model] : CATALOG[l.mode][0];
+      const ph = PHYS[l.mode], a = md.acc || ph.a;
+      let vc = md.kmh / 3.6 * (Events.speedMult(l.mode) || 0.01);
+      if (ph.vmax) vc = Math.min(vc, ph.vmax);
+      if (l.mode === 'metro') vc *= 0.97;
+      cycle = 0;
+      for (let k = 0; k < l.ev.length; k++) {
+        const u0 = l.ev[k].u, u1 = k + 1 < l.ev.length ? l.ev[k + 1].u : l.ev[0].u + l.C;
+        cycle += runTime(u1 - u0, Math.max(0.5, vc), a, ph.b) + (u1 - u0 > 1 ? mode.dwell + 4 : 0);
+      }
+      spd = l.C / Math.max(1, cycle);
+    }
     const nA = Math.max(1, l.veh.length);
     l.headway = cycle / nA / 60;
     l.cycleMin = cycle / 60;
-    l.speedAvg = (spd * 3.6) * (l.C / Math.max(1, cycle * spd));
+    l.speedAvg = l.C / Math.max(1, cycle) * 3.6;
     const qWait = clamp(1.25 - l.headway / 40, 0.25, 1.15);
     const qSpeed = clamp(Math.pow(l.speedAvg / mode.refKmh, 0.6), 0.55, 1.35);
     l.qual = l.veh.length ? qWait * qSpeed : 0;
   },
 
-  vehSpeed(l, v, p) {
-    const seg = p.seg;
-    const segE = l.segEs ? l.segEs[p.dir || 0] : l.segE;
+  /** vitesse de croisière visée sur le tronçon courant (m/s) */
+  cruise(l, v, p) {
     const md = MODEL[v.model];
     const vm = md.kmh / 3.6;
     const sm = Events.speedMult(l.mode);
+    const segE = l.segEs ? l.segEs[p.dir || 0] : l.segE;
+    const e = segE ? segE[p.seg] : -1;
     if (l.mode === 'bus') {
-      const e = segE ? segE[seg] : -1;
-      const net = G.w.road;
-      const lim = e >= 0 ? net.spd[e] : 8.3;
-      return Math.max(1.2, Math.min(vm, lim * 0.95) * Traffic.busFactor(e, l) * sm);
+      const lim = e >= 0 ? G.w.road.spd[e] : 8.3;
+      return Math.max(1.5, Math.min(vm, lim) * Traffic.busFactor(e, l) * sm);
     }
-    if (l.mode === 'metro') return vm * 0.62;
+    if (l.mode === 'metro') return vm * 0.97;
     if (l.mode === 'ter') {
-      const e = segE ? segE[seg] : -1;
-      const lim = e >= 0 ? G.w.rail.spd[e] : vm;
-      return Math.max(3, Math.min(vm, lim) * 0.72 * sm);
+      const lim = e >= 0 ? G.w.rail.spd[e] : PHYS.ter.vmax;
+      return Math.max(3, Math.min(vm, PHYS.ter.vmax, Math.max(lim, 60 / 3.6)) * sm);
     }
-    return Math.max(0.5, vm * 0.9 * (sm || 0.01));
+    return Math.max(0.5, vm * (sm || 0.01));
   },
 
   /** attente à un feu / stop / cédez-le-passage (en secondes de jeu) */
@@ -2101,35 +2135,62 @@ const Sim = {
     const tNow = G.s.sec;
     for (const l of G.s.lines) {
       if (!l.active || !l.veh.length) continue;
-      const ctl = l.ctl || [];
+      const ctl = l.ctl || [], ph = PHYS[l.mode], b = ph.b;
       for (const v of l.veh) {
+        const a = MODEL[v.model].acc || ph.a;
+        if (!(v.v >= 0)) v.v = 0;
         let t = dt, guard = 0;
-        while (t > 1e-6 && guard++ < 80) {
+        while (t > 1e-6 && guard++ < 800) {
           if (v.dwell > 0) { const d = Math.min(t, v.dwell); v.dwell -= d; t -= d; if (v.dwell <= 0) v.hold = null; continue; }
+          const h = Math.min(t, 1);
           const evt = l.ev[v.ev];
           const tStop = evt.u + (v.wrap ? l.C : 0);
-          let tCtl = Infinity, c = null;
-          if (ctl.length) { c = ctl[v.ci]; tCtl = c.u + (v.cwrap ? l.C : 0); }
-          const target = Math.min(tStop, tCtl);
+          let c = null, tCtl = Infinity, key = -1, mustC = false;
+          if (ctl.length) { c = ctl[v.ci]; tCtl = c.u + (v.cwrap ? l.C : 0); key = v.ci + (v.cwrap ? 1e6 : 0); }
+          if (c && tCtl <= tStop) {
+            // à l'approche d'un feu : on décide une fois s'il faudra s'arrêter
+            if (v.cdec !== key) {
+              const gapC = tCtl - v.u;
+              if (gapC <= (v.v * v.v) / (2 * b) + 30) {
+                v.cdec = key;
+                v.cstop = c.t === 'stop' || this.ctlWait(l, c, tNow + (dt - t) + gapC / Math.max(v.v, 2)) > 0;
+              }
+            }
+            mustC = v.cdec === key && v.cstop;
+          }
+          const target = mustC ? tCtl : tStop;
+          const gap = Math.max(0, target - v.u);
           const p = Lines.posOf(l, v);
-          const spd = this.vehSpeed(l, v, p);
-          v.spd = spd;
-          const need = (target - v.u) / spd;
-          if (need > t) { v.u += spd * t; t = 0; break; }
-          v.u = target; t -= Math.max(0, need);
-          if (tCtl <= tStop) {
-            // feu, stop ou cédez-le-passage
-            v.ci++;
-            if (v.ci >= ctl.length) { v.ci = 0; v.cwrap = true; }
-            const w = this.ctlWait(l, c, tNow + (dt - t));
-            if (w > 0) { v.dwell = w; v.hold = c.t; }
+          const vt = Math.min(this.cruise(l, v, p), Math.sqrt(2 * b * gap));
+          v.v = v.v < vt ? Math.min(vt, v.v + a * h) : Math.max(vt, v.v - 2 * b * h);
+          v.spd = v.v;
+          if (gap <= Math.max(0.8, v.v * h)) {
+            // arrivée (arrêt ou feu), à vitesse quasi nulle
+            const used = v.v > 0.1 ? Math.min(h, gap / v.v) : Math.min(h, 0.5);
+            v.u = target; t -= used; v.v = 0; v.spd = 0;
+            if (mustC) {
+              v.ci++; if (v.ci >= ctl.length) { v.ci = 0; v.cwrap = true; }
+              v.cdec = -1;
+              const w = c.t === 'stop' ? 2.5 + Math.random() * 2.5 : c.t === 'yield' ? 1 + Math.random() * 3 : this.ctlWait(l, c, tNow + (dt - t));
+              if (w > 0) { v.dwell = w; v.hold = c.t; }
+              continue;
+            }
+            if (v.wrap) { v.u -= l.C; v.wrap = false; v.cwrap = false; if (v.u < 0) v.u = 0; }
+            this.atStop(l, v, evt);
+            v.hold = null;
+            v.ev++;
+            if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
             continue;
           }
-          if (v.wrap) { v.u -= l.C; v.wrap = false; v.cwrap = false; if (v.u < 0) v.u = 0; }
-          this.atStop(l, v, evt);
-          v.hold = null;
-          v.ev++;
-          if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
+          v.u += v.v * h; t -= h;
+          // feux verts et cédez-le-passage dégagés : franchis sans s'arrêter
+          let g2 = 0;
+          while (ctl.length && g2++ < ctl.length) {
+            const cc = ctl[v.ci], tc = cc.u + (v.cwrap ? l.C : 0);
+            if (tc > v.u) break;
+            v.ci++; if (v.ci >= ctl.length) { v.ci = 0; v.cwrap = true; }
+            v.cdec = -1;
+          }
         }
       }
     }
@@ -2158,8 +2219,8 @@ const Sim = {
       const price = Lines.price(l, s.min);
       const fare = take * price;
       const adPax = take * ADS.perPax[s.ads[l.mode] || 0];
-      s.money += fare + adPax;
-      s.today.fares += fare; s.today.ads += adPax; s.today.pax += take;
+      if (!s.unlimited) { s.money += fare + adPax; s.today.fares += fare; s.today.ads += adPax; }
+      s.today.pax += take;
       l.today.fares += fare; l.today.ads += adPax; l.today.pax += take;
     }
     if (want - take > 0.5) {
@@ -2196,7 +2257,7 @@ const Sim = {
     s.today = Eco.blankDay();
     const servedPop = this.servedPop();
     s.modalShift = Math.min(0.22, d.pax / Math.max(20000, servedPop * 2.8));
-    if (Eco.dayProfit(d) < 0 && s.money < 0) UI.toast('Trésorerie négative : pensez à un prêt ou à ajuster vos tarifs.', 'bad');
+    if (!s.unlimited && Eco.dayProfit(d) < 0 && s.money < 0) UI.toast('Trésorerie négative : pensez à un prêt ou à ajuster vos tarifs.', 'bad');
     Save.auto();
   },
 
@@ -2218,7 +2279,7 @@ const Sim = {
     const gameMin = Math.min(realSec, 5 * 1440); // 1 min de jeu par seconde réelle, plafonné à 5 jours
     if (gameMin < 30) return null;
     const perMin = this.avgDailyProfit() / 1440;
-    const gain = perMin * gameMin;
+    const gain = s.unlimited ? 0 : perMin * gameMin;
     const days = Math.floor((Time.mod(s.min) + gameMin) / 1440);
     s.money += gain;
     for (let k = 0; k < days; k++) {
@@ -2273,7 +2334,7 @@ const Save = {
     G.s.slot = n;
     try {
       localStorage.setItem(this.key(n), this.serialize());
-      const meta = { city: G.s.city.nom, date: Time.label(G.s.min).day, money: G.s.money, lines: G.s.lines.length, real: Date.now(), diff: G.s.diff };
+      const meta = { city: G.s.city.nom, date: Time.label(G.s.min).day, money: G.s.money, unlimited: !!G.s.unlimited, lines: G.s.lines.length, real: Date.now(), diff: G.s.diff };
       localStorage.setItem('corr.meta.' + n, JSON.stringify(meta));
       localStorage.setItem('corr.last', String(n));
       return true;
@@ -2297,6 +2358,280 @@ const Save = {
       return line;
     });
     return s;
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — lieux d'intérêt + construction ferroviaire
+   (gares orientables, voies ferrées en longues courbes)
+   ===================================================================== */
+
+/* ---------- pictogrammes des lieux ---------- */
+const POI_CAT = {
+  transport: '#2D7DD2', sante: '#E5413A', admin: '#232323', ecole: '#8E5BD6',
+  culture: '#F27B2B', commerce: '#3BA55C', sport: '#00A69C', eco: '#5B6770',
+};
+const P_TRAIN = 'M7 4h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM5 10h14M8 20l2-4M16 20l-2-4';
+const P_BOOK = 'M4 6h6.5a1.5 1.5 0 0 1 1.5 1.5V19a2 2 0 0 0-2-2H4zM20 6h-6.5A1.5 1.5 0 0 0 12 7.5V19a2 2 0 0 1 2-2h6z';
+const P_COLS = 'M3 9l9-5 9 5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18';
+const P_STAR = 'M12 4l2.4 5 5.4.7-4 3.7 1 5.4-4.8-2.6-4.8 2.6 1-5.4-4-3.7 5.4-.7z';
+const P_BAG = 'M6 8h12l-1 12H7zM9 8a3 3 0 0 1 6 0';
+const POI_ICON = {
+  station: { cat: 'transport', d: P_TRAIN, major: true },
+  bus_station: { cat: 'transport', d: 'M6 4h12a2 2 0 0 1 2 2v11H4V6a2 2 0 0 1 2-2zM4 11h16M7 20v-3M17 20v-3', major: true },
+  hospital: { cat: 'sante', d: 'M12 5v14M5 12h14', w: 3.6, major: true },
+  townhall: { cat: 'admin', d: P_COLS, major: true },
+  university: { cat: 'ecole', d: 'M2 9l10-4 10 4-10 4zM6 11v5c3 2 9 2 12 0v-5', major: true },
+  stadium: { cat: 'sport', d: 'M12 6c5 0 8 2.7 8 6s-3 6-8 6-8-2.7-8-6 3-6 8-6zM12 9.5c2.6 0 4 1.1 4 2.5s-1.4 2.5-4 2.5-4-1.1-4-2.5 1.4-2.5 4-2.5z', major: true },
+  mall: { cat: 'commerce', d: P_BAG, major: true },
+  college: { cat: 'ecole', d: P_BOOK }, school: { cat: 'ecole', d: P_BOOK }, library: { cat: 'culture', d: P_BOOK },
+  museum: { cat: 'culture', d: P_COLS }, cinema: { cat: 'culture', d: P_STAR }, theatre: { cat: 'culture', d: P_STAR },
+  attraction: { cat: 'culture', d: P_STAR }, marketplace: { cat: 'commerce', d: P_BAG }, department_store: { cat: 'commerce', d: P_BAG },
+  supermarket: { cat: 'commerce', d: P_BAG },
+  business: { cat: 'eco', d: 'M4 8h16v11H4zM9 8V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M4 13h16' },
+};
+const PATH2D = {};
+function poiPath(kind) {
+  const ic = POI_ICON[kind]; if (!ic) return null;
+  if (!PATH2D[kind]) PATH2D[kind] = new Path2D(ic.d);
+  return PATH2D[kind];
+}
+
+/* ---------- réseau ferré du joueur ---------- */
+const Rail = {
+  KM: 1.5e6, STATION: 400000,
+  st() {
+    if (!G.s.rail) G.s.rail = { stations: [], tracks: [] };
+    if (!G.s.rail.joins) G.s.rail.joins = [];
+    return G.s.rail;
+  },
+  /** aiguillage : nœud posé sur une voie existante, relié aux deux extrémités du tronçon */
+  applyJoin(j) {
+    const net = G.w.rail;
+    const i = net.node(j.nid, j.mx, j.my);
+    for (const end of [j.a, j.b]) {
+      if (!net.idx.has(end)) continue; // tronçon pas encore chargé : on réessaiera
+      net.edge(i, net.idx.get(end), 0, j.kmh || 120, '', 'j:' + j.nid + ':' + end, 0, 0);
+    }
+  },
+  /** point d'accroche sur le réseau ferré : un nœud proche, sinon un aiguillage sur le tronçon le plus proche */
+  attach(mx, my, maxM) {
+    const net = G.w.rail;
+    const n = net.nearest(mx, my, Math.min(25, maxM));
+    if (n >= 0) return { nid: net.ids[n], mx: net.x[n], my: net.y[n], ang: this.railAngle(n), join: null };
+    let best = null, bd = maxM;
+    for (let e = 0; e < net.nE; e++) {
+      const a = net.ea[e], b = net.eb[e];
+      const ax = net.x[a], ay = net.y[a], dx = net.x[b] - ax, dy = net.y[b] - ay;
+      const L2 = dx * dx + dy * dy; if (L2 <= 0) continue;
+      const t = clamp(((mx - ax) * dx + (my - ay) * dy) / L2, 0, 1);
+      const px = ax + t * dx, py = ay + t * dy, d = dist(px, py, mx, my);
+      if (d < bd) { bd = d; best = { e, px, py, ang: Math.atan2(dy, dx) }; }
+    }
+    if (!best) return null;
+    const nid = 'j' + Math.round(best.px * 1e9) + '_' + Math.round(best.py * 1e9);
+    return { nid, mx: best.px, my: best.py, ang: best.ang, join: { nid, mx: best.px, my: best.py, a: net.ids[net.ea[best.e]], b: net.ids[net.eb[best.e]], kmh: Math.round(net.spd[best.e] * 3.6) } };
+  },
+  commitJoin(j) {
+    if (!j) return;
+    const R = this.st();
+    if (!R.joins.some((x) => x.nid === j.nid)) R.joins.push(j);
+    this.applyJoin(j);
+  },
+  /** réinjecte gares et voies du joueur dans le réseau ferré et dans les lieux (idempotent) */
+  inject() {
+    const R = this.st(), net = G.w.rail, w = G.w;
+    for (const j of R.joins) this.applyJoin(j);
+    for (const s of R.stations) {
+      net.node(s.nid, s.mx, s.my);
+      const key = 'gs' + s.id;
+      if (!w.poiSeen.has(key)) {
+        w.poiSeen.add(key);
+        w.pois.push({ mx: s.mx, my: s.my, kind: 'station', name: s.name, w: POI_W.station, train: true, own: true, sid: s.id });
+      }
+    }
+    for (const t of R.tracks) this.injectTrack(t);
+    net.version++;
+  },
+  injectTrack(t) {
+    const net = G.w.rail;
+    let prev = -1;
+    t.pts.forEach((p, k) => {
+      const id = k === 0 && t.aNid ? t.aNid : k === t.pts.length - 1 && t.bNid ? t.bNid : 't' + t.id + ':' + k;
+      const i = net.node(id, p[0], p[1]);
+      if (prev >= 0) net.edge(prev, i, 0, t.kmh || 140, '', 't' + t.id + ':' + k, 0, 0);
+      prev = i;
+    });
+  },
+  stationById(id) { return this.st().stations.find((s) => s.id === id); },
+  stationNear(mx, my, rM) {
+    let best = null, bd = rM;
+    for (const s of this.st().stations) { const d = dist(s.mx, s.my, mx, my); if (d < bd) { bd = d; best = s; } }
+    return best;
+  },
+  /** direction d'une voie existante au nœud i (angle en radians, écran mercator) */
+  railAngle(i) {
+    const net = G.w.rail; const e = net.adj[i][0];
+    if (e === undefined) return null;
+    const j = net.other(e, i);
+    return Math.atan2(net.y[j] - net.y[i], net.x[j] - net.x[i]);
+  },
+  /** courbe lisse (Hermite cubique) passant par les points, tangente aux ancrages */
+  curve(P, dirA, dirB) {
+    const n = P.length; if (n < 2) return P.slice();
+    const tan = [];
+    for (let i = 0; i < n; i++) {
+      let tx, ty;
+      if (i === 0) { tx = P[1][0] - P[0][0]; ty = P[1][1] - P[0][1]; }
+      else if (i === n - 1) { tx = P[n - 1][0] - P[n - 2][0]; ty = P[n - 1][1] - P[n - 2][1]; }
+      else { tx = (P[i + 1][0] - P[i - 1][0]) / 2; ty = (P[i + 1][1] - P[i - 1][1]) / 2; }
+      tan.push([tx, ty]);
+    }
+    const orient = (i, ang) => {
+      if (ang === null || ang === undefined) return;
+      const L = Math.hypot(tan[i][0], tan[i][1]) || 1e-9;
+      let ux = Math.cos(ang), uy = Math.sin(ang);
+      if (ux * tan[i][0] + uy * tan[i][1] < 0) { ux = -ux; uy = -uy; }
+      tan[i] = [ux * L * 1.15, uy * L * 1.15];
+    };
+    orient(0, dirA); orient(n - 1, dirB);
+    const out = [P[0]];
+    for (let i = 0; i < n - 1; i++) {
+      const a = P[i], b = P[i + 1], ta = tan[i], tb = tan[i + 1];
+      const segM = dist(a[0], a[1], b[0], b[1]);
+      const N = Math.max(2, Math.ceil(segM / 20));
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, t2 = t * t, t3 = t2 * t;
+        const h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+        out.push([h00 * a[0] + h10 * ta[0] + h01 * b[0] + h11 * tb[0], h00 * a[1] + h10 * ta[1] + h01 * b[1] + h11 * tb[1]]);
+      }
+    }
+    return out;
+  },
+  length(pts) { let L = 0; for (let i = 1; i < pts.length; i++) L += dist(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]); return L; },
+  trackCost(L) { return Math.round(L / 1000 * this.KM * G.s.costMul / 1000) * 1000; },
+  stationCost() { return Math.round(this.STATION * G.s.costMul / 1000) * 1000; },
+  /** gares qu'une ligne TER utilise (empêche la démolition) */
+  stationUsed(s) {
+    return G.s.lines.some((l) => l.mode === 'ter' && l.stops.some((st) => dist(st.mx, st.my, s.mx, s.my) < 60))
+      || this.st().tracks.some((t) => t.aNid === s.nid || t.bNid === s.nid);
+  },
+};
+
+/* ---------- outils de construction : gare et voie ferrée ---------- */
+const RailBuild = {
+  b: null,
+  start(kind) {
+    if (Build.b) Build.cancel();
+    UI.close(); UI.closeCard();
+    this.b = kind === 'gare' ? { kind, pos: null, ang: 0, snap: -1 } : { kind, ctrl: [], a: null, end: null, pts: null };
+    $('#buildbar').hidden = false; $('#nav').classList.add('dim');
+    this.bar();
+    UI.toast(kind === 'gare' ? 'Touchez la carte pour placer la gare. Près d’une voie, elle s’y accroche et s’aligne.' : 'Touchez une gare ou une voie pour partir, puis ajoutez des points de passage. Finissez sur une gare ou une voie.', 'info');
+  },
+  cancel() { this.b = null; $('#buildbar').hidden = true; $('#nav').classList.remove('dim'); Render.dirty = true; },
+  bar() {
+    const b = this.b; if (!b) return;
+    const ico = `<span class="pict pict-ter">${b.kind === 'gare' ? 'GARE' : '═'}</span>`;
+    if (b.kind === 'gare') {
+      const deg = Math.round(((b.ang * 180 / Math.PI) % 180 + 180) % 180);
+      $('#buildbar').innerHTML = `<div class="bb-t">${ico}<div><b>${b.pos ? 'Nouvelle gare' : 'Placez la gare'}</b><small>${b.pos ? (b.snap >= 0 ? 'sur la voie · ' : 'libre · ') + deg + '°' : fmtEur(Rail.stationCost())}</small></div></div>
+        <div class="bb-a"><button class="icon-b" data-act="rbRot" data-arg="-1" aria-label="Tourner à gauche" ${b.pos ? '' : 'disabled'}>⟲</button><button class="icon-b" data-act="rbRot" data-arg="1" aria-label="Tourner à droite" ${b.pos ? '' : 'disabled'}>⟳</button><button class="icon-b" data-act="rbCancel" aria-label="Annuler">${icon('close')}</button><button class="btn primary sm" data-act="rbOk" ${b.pos ? '' : 'disabled'}>${fmtEur(Rail.stationCost())}</button></div>`;
+    } else {
+      const L = b.pts ? Rail.length(b.pts) : 0;
+      $('#buildbar').innerHTML = `<div class="bb-t">${ico}<div><b>${b.ctrl.length ? fmtKm(L) + ' de voie' : 'Point de départ'}</b><small>${b.ctrl.length >= 2 ? fmtEur(Rail.trackCost(L)) : '1,5 M€/km'}${b.end ? ' · arrivée fixée' : ''}</small></div></div>
+        <div class="bb-a"><button class="icon-b" data-act="rbUndo" aria-label="Retirer le dernier point" ${b.ctrl.length ? '' : 'disabled'}>${icon('undo')}</button><button class="icon-b" data-act="rbCancel" aria-label="Annuler">${icon('close')}</button><button class="btn primary sm" data-act="rbOk" ${b.ctrl.length >= 2 ? '' : 'disabled'}>${icon('check')} Valider</button></div>`;
+    }
+  },
+  owned(mx, my) { const z = G.w.zoneAt(mx, my); return z && z.owned; },
+  /** ancrage : gare du joueur, voie existante, ou rien */
+  anchor(mx, my) {
+    const s = Rail.stationNear(mx, my, 80);
+    if (s) return { type: 'station', nid: s.nid, mx: s.mx, my: s.my, ang: s.ang };
+    const at = Rail.attach(mx, my, 60);
+    if (at) return { type: 'rail', nid: at.nid, mx: at.mx, my: at.my, ang: at.ang, join: at.join };
+    return null;
+  },
+  tap(mx, my) {
+    const b = this.b;
+    if (b.kind === 'gare') {
+      const at = Rail.attach(mx, my, 60);
+      const pos = at ? [at.mx, at.my] : [mx, my];
+      if (!this.owned(pos[0], pos[1])) { UI.toast('Hors de votre zone d’exploitation.', 'warn'); return; }
+      if (Rail.stationNear(pos[0], pos[1], 150) || G.w.pois.some((p) => p.kind === 'station' && p.train && dist(p.mx, p.my, pos[0], pos[1]) < 150)) { UI.toast('Il y a déjà une gare à moins de 150 m.', 'warn'); return; }
+      b.pos = pos; b.snap = at ? 1 : -1; b.at = at;
+      if (at && at.ang !== null) b.ang = at.ang;
+      this.bar(); Render.dirty = true;
+      return;
+    }
+    if (b.end) { UI.toast('L’arrivée est fixée : validez, ou retirez le dernier point.', 'info'); return; }
+    const an = this.anchor(mx, my);
+    const p = an ? [an.mx, an.my] : [mx, my];
+    if (!this.owned(p[0], p[1])) { UI.toast('Hors de votre zone d’exploitation.', 'warn'); return; }
+    if (!b.ctrl.length) { b.a = an; b.ctrl.push(p); }
+    else {
+      const last = b.ctrl[b.ctrl.length - 1];
+      if (dist(last[0], last[1], p[0], p[1]) < 40) return;
+      b.ctrl.push(p);
+      if (an) b.end = an;
+    }
+    this.recompute();
+  },
+  recompute() {
+    const b = this.b;
+    b.pts = b.ctrl.length >= 2 ? Rail.curve(b.ctrl, b.a ? b.a.ang : null, b.end ? b.end.ang : null) : null;
+    this.bar(); Render.dirty = true;
+  },
+  rotate(dir) { const b = this.b; if (!b || !b.pos) return; b.ang += dir * Math.PI / 12; this.bar(); Render.dirty = true; },
+  undo() {
+    const b = this.b; if (!b || !b.ctrl) return;
+    b.ctrl.pop();
+    if (b.end) b.end = null;
+    if (!b.ctrl.length) b.a = null;
+    this.recompute();
+  },
+  stationName(mx, my) {
+    const used = new Set([...Rail.st().stations.map((s) => s.name), ...G.w.pois.filter((p) => p.kind === 'station').map((p) => p.name)]);
+    let base = '';
+    const net = G.w.road, i = net.nE ? net.nearest(mx, my, 200) : -1;
+    if (i >= 0) { const nm = net.adj[i].map((e) => net.name[e]).filter(Boolean); if (nm.length) base = nm[0].replace(/^(rue|avenue|boulevard|place|quai|chemin|route|allée|cours)\s+(de la |du |des |de l’|de l'|de |d’)?/i, ''); }
+    if (!base) { const z = G.w.zoneAt(mx, my); base = z ? z.name : 'Nouvelle'; }
+    let n = 'Gare ' + base, k = 2;
+    while (used.has(n)) n = 'Gare ' + base + ' ' + k++;
+    return n;
+  },
+  confirm() {
+    const b = this.b; if (!b) return;
+    const R = Rail.st();
+    if (b.kind === 'gare') {
+      if (!b.pos) return;
+      if (!Eco.spend(Rail.stationCost(), 'capex')) return;
+      const id = G.s.nextId++;
+      const nid = b.at ? b.at.nid : 'gs' + id;
+      if (b.at) Rail.commitJoin(b.at.join);
+      const s = { id, mx: b.pos[0], my: b.pos[1], ang: b.ang, name: this.stationName(b.pos[0], b.pos[1]), nid };
+      R.stations.push(s);
+      Rail.inject();
+      Events.log('Nouvelle gare : ' + s.name + '.', 'ok');
+      UI.toast(s.name + ' construite. Reliez-la avec une voie, puis créez une ligne TER.', 'ok');
+    } else {
+      if (!b.pts || b.ctrl.length < 2) return;
+      for (const p of b.pts) if (!this.owned(p[0], p[1])) { UI.toast('La voie sort de votre zone d’exploitation. Ajoutez un point de passage ou achetez la zone.', 'warn'); return; }
+      const cost = Rail.trackCost(Rail.length(b.pts));
+      if (!Eco.spend(cost, 'capex')) return;
+      const id = G.s.nextId++;
+      const r9 = (x) => Math.round(x * 1e9) / 1e9;
+      if (b.a) Rail.commitJoin(b.a.join);
+      if (b.end) Rail.commitJoin(b.end.join);
+      const t = { id, pts: b.pts.map((p) => [r9(p[0]), r9(p[1])]), aNid: b.a ? b.a.nid : null, bNid: b.end ? b.end.nid : null, kmh: 140 };
+      R.tracks.push(t);
+      Rail.injectTrack(t);
+      G.w.rail.version++;
+      Events.log('Nouvelle voie ferrée de ' + fmtKm(Rail.length(b.pts)) + '.', 'ok');
+      UI.toast('Voie ferrée posée (' + fmtKm(Rail.length(b.pts)) + ').', 'ok');
+    }
+    this.cancel(); Render.dirty = true; Save.auto();
   },
 };
 
@@ -2450,6 +2785,28 @@ const Render = {
       ctx.globalAlpha = 1;
     }
 
+    /* voies ferrées (réelles et construites) */
+    const rn = w.rail;
+    if (rn.nE && z >= 11) {
+      ctx.beginPath();
+      for (let e = 0; e < rn.nE; e++) {
+        const a = rn.ea[e], b2 = rn.eb[e];
+        const x1 = X(rn.x[a]), y1 = Y(rn.y[a]), x2 = X(rn.x[b2]), y2 = Y(rn.y[b2]);
+        if ((x1 < -10 && x2 < -10) || (x1 > W + 10 && x2 > W + 10) || (y1 < -10 && y2 < -10) || (y1 > H + 10 && y2 > H + 10)) continue;
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+      }
+      ctx.lineCap = 'butt'; ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(35,35,35,.5)'; ctx.lineWidth = z >= 15 ? 2.4 : 1.5; ctx.stroke();
+      if (z >= 15) { ctx.setLineDash([1.6, 6]); ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(35,35,35,.3)'; ctx.stroke(); ctx.setLineDash([]); }
+    }
+    const R = G.s.rail || { stations: [], tracks: [] };
+    for (const t of R.tracks) {
+      ctx.beginPath();
+      t.pts.forEach((p, i) => { const x = X(p[0]), y = Y(p[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = INK; ctx.lineWidth = z >= 15 ? 3 : 2; ctx.stroke();
+    }
+
     /* lignes */
     const zf = z >= 16 ? 1.35 : z >= 14 ? 1 : 0.75;
     const order = [...s.lines].sort((a, b) => MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode));
@@ -2511,6 +2868,38 @@ const Render = {
         }
         if (showNames) labels.push({ x, y, t: st.name, pri: l.mode === 'metro' || l.mode === 'ter' ? 0 : 1 });
       });
+    }
+    /* gares construites (quais orientés) */
+    this.stpos = [];
+    for (const g of R.stations) {
+      const x = X(g.mx), y = Y(g.my);
+      if (x < -30 || y < -30 || x > W + 30 || y > H + 30) continue;
+      this.stpos.push({ x, y, g });
+      this.platform(ctx, x, y, g.ang, zf, '#FFFFFF');
+      if (s.settings.names && z >= 13.5) labels.push({ x, y, t: g.name, pri: 0 });
+    }
+
+    /* lieux d'intérêt */
+    this.poipos = [];
+    if (s.settings.pois !== false && z >= 13.5) {
+      const r = z >= 16 ? 10 : z >= 15 ? 9 : 7.5;
+      const placed = [];
+      const pois = w.pois.filter((p) => !p.own && POI_ICON[p.kind] && (POI_ICON[p.kind].major ? true : z >= 15.5));
+      pois.sort((a, b) => (POI_ICON[b.kind].major ? 1 : 0) - (POI_ICON[a.kind].major ? 1 : 0) || b.w - a.w);
+      for (const p of pois) {
+        const x = X(p.mx), y = Y(p.my);
+        if (x < -15 || y < -15 || x > W + 15 || y > H + 15) continue;
+        if (placed.some((q) => (q[0] - x) ** 2 + (q[1] - y) ** 2 < (2 * r + 3) ** 2)) continue;
+        placed.push([x, y]);
+        this.poipos.push({ x, y, p });
+        const ic = POI_ICON[p.kind];
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = POI_CAT[ic.cat]; ctx.fill();
+        ctx.lineWidth = 1.6; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+        ctx.save(); ctx.translate(x - r * 0.62, y - r * 0.62); ctx.scale(r * 1.24 / 24, r * 1.24 / 24);
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = ic.w || 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.stroke(poiPath(p.kind)); ctx.restore();
+        if (s.settings.names && p.name && (ic.major ? z >= 15.5 : z >= 17)) labels.push({ x: x + r - 6, y, t: p.name, pri: 2 });
+      }
     }
     labels.sort((a, b) => a.pri - b.pri);
     ctx.font = '500 12.5px ' + FONT;
@@ -2612,6 +3001,32 @@ const Render = {
         }
       }
     }
+    /* aperçu : gare ou voie ferrée */
+    const rb = RailBuild.b;
+    if (rb && rb.kind === 'gare' && rb.pos) {
+      this.platform(ctx, X(rb.pos[0]), Y(rb.pos[1]), rb.ang, Math.max(1.2, zf), '#F2B705');
+      const L = 34;
+      ctx.save(); ctx.translate(X(rb.pos[0]), Y(rb.pos[1])); ctx.rotate(rb.ang);
+      ctx.setLineDash([5, 5]); ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-L - 30, 0); ctx.lineTo(-L + 10, 0); ctx.moveTo(L - 10, 0); ctx.lineTo(L + 30, 0); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+    }
+    if (rb && rb.kind === 'track') {
+      if (rb.pts) {
+        ctx.beginPath();
+        rb.pts.forEach((p, i) => { const x = X(p[0]), y = Y(p[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 8; ctx.stroke();
+        ctx.strokeStyle = INK; ctx.lineWidth = 3.5; ctx.setLineDash([10, 6]); ctx.stroke(); ctx.setLineDash([]);
+      }
+      rb.ctrl.forEach((p, i) => {
+        const x = X(p[0]), y = Y(p[1]);
+        const anchored = (i === 0 && rb.a) || (i === rb.ctrl.length - 1 && i > 0 && rb.end);
+        ctx.beginPath(); ctx.arc(x, y, anchored ? 9 : 7, 0, 7); ctx.fillStyle = anchored ? '#F2B705' : '#FFFFFF'; ctx.fill();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+      });
+    }
+
     /* aperçu de construction */
     const b = Build.b;
     if (b) {
@@ -2631,6 +3046,16 @@ const Render = {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y + 0.5);
       });
     }
+  },
+
+  /** quai de gare : rectangle orienté */
+  platform(ctx, x, y, ang, zf, fill) {
+    const L = 15 * zf, Wd = 5.5 * zf;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang || 0);
+    this.rr(ctx, -L, -Wd, 2 * L, 2 * Wd, 2.5);
+    ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 2.8; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-L + 4, 0); ctx.lineTo(L - 4, 0); ctx.lineWidth = 1.4; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.restore();
   },
 
   rr(ctx, x, y, w, h, r) {
@@ -2654,7 +3079,11 @@ const Render = {
       const d = (x - px) ** 2 + (y - py) ** 2;
       if (d < bd) { bd = d; best = { type: 'stop', l, k, st }; }
     });
-    return best;
+    if (best) return best;
+    for (const it of this.stpos || []) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 20 * 20) return { type: 'station', g: it.g };
+    let bp = null, bpd = 16 * 16;
+    for (const it of this.poipos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bpd) { bpd = d; bp = { type: 'poi', p: it.p }; } }
+    return bp;
   },
 };
 
@@ -2739,7 +3168,8 @@ const UI = {
     const s = G.s;
     const t = Time.label(s.min);
     const prof = s.days[0] ? Eco.dayProfit(s.days[0]) : null;
-    $('#cash').innerHTML = `<b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b><small>${prof === null ? 'trésorerie' : (prof >= 0 ? '+' : '') + fmtEur(prof) + ' hier'}</small>`;
+    $('#cash').innerHTML = s.unlimited ? `<b>∞ Illimité</b><small>sans limite</small>`
+      : `<b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b><small>${prof === null ? 'trésorerie' : (prof >= 0 ? '+' : '') + fmtEur(prof) + ' hier'}</small>`;
     const mod = Time.mod(s.min), ah = ((mod / 60) % 12) * 30, am = (mod % 60) * 6;
     const night = Time.night(s.min);
     $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${t.day}</small></span>`;
@@ -2863,6 +3293,29 @@ const UI = {
           : `<p class="note">Zone non contiguë : achetez d’abord une zone voisine. Prix : ${fmtEur(z.price)}.</p>`}`);
   },
 
+  showPoi(p) {
+    G.ui.cardType = 'poi'; G.ui.selVeh = null; G.ui.selZone = null;
+    const ic = POI_ICON[p.kind], col = POI_CAT[ic ? ic.cat : 'admin'];
+    const stars = p.w >= 2000 ? 3 : p.w >= 800 ? 2 : 1;
+    const near = G.s.lines.filter((l) => l.stops.some((st) => dist(st.mx, st.my, p.mx, p.my) < MODES[l.mode].catch + 150));
+    const svg = ic ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="${ic.w || 2.4}" stroke-linecap="round" stroke-linejoin="round"><path d="${ic.d}"/></svg>` : '';
+    this.card(`<div class="card-h"><span class="evcard-ic" style="background:${col};box-shadow:none">${svg}</span><div class="card-t"><b>${esc(p.name || POI_LABEL[p.kind] || 'Lieu')}</b><small>${esc(POI_LABEL[p.kind] || '')}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+      <div class="kv"><span>Attractivité</span><b>${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</b></div>
+      <p class="sub">${stars === 3 ? 'Génère beaucoup de déplacements : un arrêt à proximité fera le plein.' : stars === 2 ? 'Attire un flux régulier de voyageurs.' : 'Petit générateur de déplacements.'}</p>
+      ${near.length ? `<div class="sec">Desservi par</div>${near.map((l) => `<button class="lrow" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="lrow-t">${esc(l.name)}</span></button>`).join('')}` : '<p class="note">Aucune de vos lignes ne dessert ce lieu.</p>'}
+      ${p.kind === 'station' && p.train ? `<div class="row2"><button class="btn" data-act="buildMode" data-arg="ter">Ligne TER</button><button class="btn" data-act="poiTrack" data-arg="${p.mx},${p.my}">Voie depuis ici</button></div>` : ''}`);
+  },
+  showStation(g) {
+    G.ui.cardType = 'station'; G.ui.selVeh = null; G.ui.selZone = null; G.ui.cardStation = g;
+    const deg = Math.round(((g.ang * 180 / Math.PI) % 180 + 180) % 180);
+    const used = Rail.stationUsed(g);
+    const tracks = Rail.st().tracks.filter((t) => t.aNid === g.nid || t.bNid === g.nid).length;
+    this.card(`<div class="card-h"><span class="pict pict-ter">GARE</span><div class="card-t"><b>${esc(g.name)}</b><small>Gare construite · orientation ${deg}°</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+      <div class="kv"><span>Voies raccordées</span><b>${tracks}</b></div>
+      <div class="vrow"><div><b>Orientation</b><small>Les nouvelles voies partent dans l’axe du quai</small></div><div class="stepper"><button data-act="stRot" data-arg="${g.id}|-1" aria-label="Tourner à gauche">⟲</button><b>${deg}°</b><button data-act="stRot" data-arg="${g.id}|1" aria-label="Tourner à droite">⟳</button></div></div>
+      <div class="row2"><button class="btn" data-act="stTrack" data-arg="${g.id}">Tracer une voie</button><button class="btn" data-act="buildMode" data-arg="ter">Ligne TER</button></div>
+      ${used ? '' : `<button class="btn danger wide" data-act="stDemolish" data-arg="${g.id}">Démolir (remboursé 30 %)</button>`}`);
+  },
   showEvent(e) {
     G.ui.cardType = 'event'; G.ui.selVeh = null; G.ui.selZone = null;
     const s = G.s, info = EV_INFO[e.kind] || {};
@@ -2959,7 +3412,7 @@ const SHEETS = {
       const md = MODEL[m];
       return `<div class="vrow"><div><b>${esc(md.name)}</b><small>${md.cap} places · ${md.kmh} km/h · ${fmtEur(md.op * G.s.costMul)}/h</small></div><div class="stepper"><button data-act="sellVeh" data-arg="${l.id}|${m}" aria-label="Vendre">−</button><b>${c}</b><button data-act="buyVeh" data-arg="${l.id}|${m}" aria-label="Acheter">+</button></div></div>`;
     }).join('') || '<p class="note">Aucun véhicule : la ligne ne transporte personne.</p>';
-    const cat = CATALOG[l.mode].map((md) => `<button class="catrow" data-act="buyVeh" data-arg="${l.id}|${md.id}"><span><b>${esc(md.name)}</b><small>${esc(md.desc)} · ${md.cap} pl. · ${md.kmh} km/h · ${fmtEur(md.op * G.s.costMul)}/h</small></span><em>${fmtEur(md.price * G.s.costMul)}</em></button>`).join('');
+    const cat = CATALOG[l.mode].map((md) => `<button class="catrow" data-act="buyVeh" data-arg="${l.id}|${md.id}"><span><b>${esc(md.name)}</b><small>${esc(md.desc)} · ${md.cap} pl. · ${md.kmh} km/h en ${accTime(md)} s · ${fmtEur(md.op * G.s.costMul)}/h</small></span><em>${fmtEur(md.price * G.s.costMul)}</em></button>`).join('');
     const price = (k, lab) => `<div class="vrow"><div><b>${lab}</b><small>réf. ${MODES[l.mode].ref.toFixed(2).replace('.', ',')} €</small></div><div class="stepper"><button data-act="price" data-arg="${l.id}|${k}|-0.1">−</button><b>${l.prices[k].toFixed(2).replace('.', ',')} €</b><button data-act="price" data-arg="${l.id}|${k}|0.1">+</button></div></div>`;
     const hourOpts = (vals, cur) => vals.map((v) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${Time.hhmm(v)}</option>`).join('');
     const laneKm = l.mode === 'bus' ? laneLength(l) / 1000 : 0;
@@ -3001,11 +3454,14 @@ const SHEETS = {
 
   build() {
     const cards = MODE_ORDER.map((m) => {
-      const hint = { bus: 'Suit les vraies routes, subit le trafic. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'Circule sur les voies ferrées existantes, de gare en gare.', boat: 'Navigue sur les fleuves et canaux. 60 k€ par ponton.' }[m];
+      const hint = { bus: 'Suit les vraies routes, subit le trafic. ≈ 15-20 km/h. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. ≈ 30-35 km/h. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'De gare en gare sur les voies ferrées. Le plus rapide : jusqu’à 100 km/h, ≈ 40-75 km/h de moyenne selon l’écart entre gares.', boat: 'Sur les fleuves et canaux. Le plus lent : ≈ 10 km/h, mais apprécié des touristes. 60 k€ par ponton.' }[m];
       const cheapest = CATALOG[m][0];
       return `<button class="modecard" data-act="buildMode" data-arg="${m}">${pict(m)}<span><b>${MODES[m].label}</b><small>${hint}</small><small>Véhicules dès ${fmtEur(cheapest.price * G.s.costMul)}</small></span></button>`;
     }).join('');
-    return { title: 'Construire une ligne', html: `<p class="sub">Choisissez un mode, puis touchez la carte pour placer les arrêts dans vos zones.</p>${cards}` };
+    const infra = `<h3 class="sec">Infrastructures ferroviaires</h3>
+      <button class="modecard" data-act="railMode" data-arg="gare"><span class="pict pict-ter">GARE</span><span><b>Nouvelle gare</b><small>Posée sur une voie existante ou en pleine ville, orientable. ${fmtEur(Rail.stationCost())}.</small></span></button>
+      <button class="modecard" data-act="railMode" data-arg="track"><span class="pict pict-ter">═</span><span><b>Nouvelle voie ferrée</b><small>Tracée en longues courbes, de gare en gare ou en se branchant sur les voies existantes. ${fmtEur(Rail.KM * G.s.costMul)}/km.</small></span></button>`;
+    return { title: 'Construire', html: `<p class="sub">Choisissez un mode, puis touchez la carte pour placer les arrêts dans vos zones.</p>${cards}${infra}` };
   },
 
   zones() {
@@ -3030,9 +3486,16 @@ const SHEETS = {
     const loans = s.loans.map((ln) => `<div class="vrow"><div><b>${fmtEur(ln.amount)}</b><small>${(ln.rate * 100).toFixed(0)} %/an · ${fmtEur(ln.amount * ln.rate / 365)} d’intérêts/jour</small></div><div class="row2 tight"><button class="btn sm" data-act="repay" data-arg="${ln.id}|0.25">−25 %</button><button class="btn sm" data-act="repay" data-arg="${ln.id}|1">Solder</button></div></div>`).join('') || '<p class="note">Aucun emprunt en cours.</p>';
     const offers = Eco.loanOffers().map((o, i) => `<button class="catrow" data-act="borrow" data-arg="${i}"><span><b>${o.label}</b><small>${(o.rate * 100).toFixed(0)} %/an · remboursable à tout moment</small></span><em>+${fmtEur(o.amount)}</em></button>`).join('');
     const ads = MODE_ORDER.map((m) => `<div class="vrow"><div><b>${MODES[m].label}</b><small>${ADS.label[s.ads[m]]}${s.ads[m] === 2 ? ' · −4 % de fréquentation' : ''}</small></div><div class="seg">${[0, 1, 2].map((k) => `<button class="${s.ads[m] === k ? 'on' : ''}" data-act="ads" data-arg="${m}|${k}">${ADS.label[k]}</button>`).join('')}</div></div>`).join('');
+    const toggle = `<label class="tgl"><input type="checkbox" data-change="unlimited" ${s.unlimited ? 'checked' : ''}><span><b>Argent illimité</b><br><small>Construisez sans compter. Dépenses et recettes sont mises en pause tant que c’est activé ; votre trésorerie reprend telle quelle quand vous le désactivez.</small></span></label>`;
+    if (s.unlimited) return {
+      title: 'Finances',
+      html: `${toggle}<p class="note ok">Mode argent illimité actif : véhicules, lignes, zones, gares et voies sont gratuits. Le réseau tourne normalement mais ne rapporte ni ne coûte rien.</p>
+      <div class="kpis"><div><small>Trésorerie mise de côté</small><b>${fmtEur(s.money)}</b></div><div><small>Voyageurs aujourd’hui</small><b>${fmtInt(s.today.pax)}</b></div></div>
+      ${section('Publicité')}${ads}`,
+    };
     return {
       title: 'Finances',
-      html: `<div class="kpis"><div><small>Trésorerie</small><b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b></div><div><small>Dette</small><b>${fmtEur(Eco.debt())}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div><div><small>Moy. 3 jours</small><b class="${Sim.avgDailyProfit() < 0 ? 'neg' : 'pos'}">${fmtEur(Sim.avgDailyProfit())}</b></div></div>
+      html: `${toggle}<div class="kpis"><div><small>Trésorerie</small><b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b></div><div><small>Dette</small><b>${fmtEur(Eco.debt())}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div><div><small>Moy. 3 jours</small><b class="${Sim.avgDailyProfit() < 0 ? 'neg' : 'pos'}">${fmtEur(Sim.avgDailyProfit())}</b></div></div>
       ${section('Compte d’exploitation')}
       <div class="tblw"><table class="tbl"><thead><tr><th></th><th>Aujourd’hui</th><th>Hier</th></tr></thead><tbody>
       ${row('Billets', d.fares, y && y.fares)}${row('Publicité', d.ads, y && y.ads)}
@@ -3095,14 +3558,14 @@ const SHEETS = {
 
   menu() {
     const s = G.s;
-    const slots = Save.list().map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}${s.slot === n ? ' · en cours' : ''}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + fmtEur(meta.money) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div><div class="row2 tight"><button class="btn sm primary" data-act="saveSlot" data-arg="${n}">Sauver</button>${meta ? `<button class="btn sm" data-act="loadSlot" data-arg="${n}">Charger</button>` : ''}</div></div>`).join('');
+    const slots = Save.list().map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}${s.slot === n ? ' · en cours' : ''}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + (meta.unlimited ? 'illimité' : fmtEur(meta.money)) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div><div class="row2 tight"><button class="btn sm primary" data-act="saveSlot" data-arg="${n}">Sauver</button>${meta ? `<button class="btn sm" data-act="loadSlot" data-arg="${n}">Charger</button>` : ''}</div></div>`).join('');
     const tg = (k, lab) => `<label class="tgl"><input type="checkbox" data-change="setting" data-arg="${k}" ${s.settings[k] ? 'checked' : ''}><span>${lab}</span></label>`;
     return {
       title: 'Menu',
       html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
       ${section('Affichage')}
       <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
-      ${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
+      ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
       ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population et emplois des quartiers : estimations du jeu à partir du type de quartier INSEE.</p>`,
@@ -3127,6 +3590,9 @@ function barChart(items, posOnly) {
   const last = items[items.length - 1];
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Graphique"><line x1="0" x2="${W}" y1="${zero}" y2="${zero}" class="axis"/>${bars}</svg><small>Dernier jour : <b>${posOnly ? fmtInt(last.v) : fmtEur(last.v)}</b> · max ${posOnly ? fmtInt(max) : fmtEur(max)}</small></div>`;
 }
+
+/** secondes pour atteindre la vitesse maximale depuis l'arrêt */
+function accTime(md) { return Math.round(md.kmh / 3.6 / (md.acc || PHYS[md.mode].a)); }
 
 function laneLength(l) {
   if (!l.segE) return 0;
@@ -3287,15 +3753,15 @@ const Build = {
     const sp = { bus: 4.2, metro: 12.4, ter: 18, boat: 5.5 }[b.mode];
     const cyc = (b.loop ? q.path.L : 2 * q.path.L) / sp / 60 + b.stops.length * 2 * 0.6;
     const hw = cyc / q.count;
-    const cat = CATALOG[b.mode].map((m) => `<button class="catrow ${m.id === q.model ? 'on' : ''}" data-act="bModel" data-arg="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(m.desc)} · ${m.cap} pl. · ${m.kmh} km/h · ${fmtEur(m.op * G.s.costMul)}/h</small></span><em>${fmtEur(m.price * G.s.costMul)}</em></button>`).join('');
+    const cat = CATALOG[b.mode].map((m) => `<button class="catrow ${m.id === q.model ? 'on' : ''}" data-act="bModel" data-arg="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(m.desc)} · ${m.cap} pl. · ${m.kmh} km/h en ${accTime(m)} s · ${fmtEur(m.op * G.s.costMul)}/h</small></span><em>${fmtEur(m.price * G.s.costMul)}</em></button>`).join('');
     const sw = LINE_COLORS.map((c) => `<button class="sw ${c === q.color ? 'on' : ''}" style="background:${c}" data-act="bColor" data-arg="${c}" aria-label="Couleur ${c}"></button>`).join('');
     UI.modal(`<div class="plate big">${pict(b.mode)} Nouvelle ligne · ${esc(MODES[b.mode].label)}</div>
       <p class="sub">${b.stops.length} arrêts · ${fmtKm(q.path.L)}${b.loop ? ' · circulaire' : ''} · de ${esc(b.stops[0].name)} à ${esc(b.loop ? b.stops[0].name : b.stops[b.stops.length - 1].name)}${b.mode === 'metro' ? `<br>Chantier : ${q.path.L > 4000 ? '2 jours' : '1 jour'} avant l’ouverture.` : ''}</p>
       <h3 class="sec">Couleur</h3><div class="swatches">${sw}</div>
       <h3 class="sec">Véhicules</h3>${cat}
       <div class="vrow"><div><b>Nombre</b><small>passage toutes les ~${Math.max(1, Math.round(hw))} min</small></div><div class="stepper"><button data-act="bCount" data-arg="-1">−</button><b>${q.count}</b><button data-act="bCount" data-arg="1">+</button></div></div>
-      <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${fmtEur(total)}</td></tr><tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr></tbody></table>
-      <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bBuild" ${G.s.money < total ? 'disabled' : ''}>Construire</button></div>`);
+      <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${fmtEur(total)}</td></tr>${Eco.free() ? '<tr><th>Argent illimité</th><td>gratuit</td></tr>' : `<tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr>`}</tbody></table>
+      <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bBuild" ${Eco.canAfford(total) ? '' : 'disabled'}>Construire</button></div>`);
   },
   build() {
     const b = this.b, q = G.ui.bSel;
@@ -3318,10 +3784,11 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.4';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
+    if (RailBuild.b) RailBuild.cancel();
     if (G.ui.sheet === k && UI.sheetOpen()) { UI.close(); return; }
     UI.open(k);
   },
@@ -3333,7 +3800,33 @@ const ACT = {
   speed() { const v = [1, 5, 20, 60]; G.speed = v[(v.indexOf(G.speed) + 1) % v.length]; G.paused = false; UI.refreshTop(); },
   openLine(id) { UI.open('line', id); Render.dirty = true; },
   follow() { G.ui.follow = G.ui.follow === G.ui.selVeh ? null : G.ui.selVeh; UI.renderVehCard(); },
-  buildMode(m) { Build.start(m); },
+  buildMode(m) { if (RailBuild.b) RailBuild.cancel(); Build.start(m); },
+  railMode(k) { RailBuild.start(k); },
+  rbRot(d) { RailBuild.rotate(+d); },
+  rbCancel() { RailBuild.cancel(); },
+  rbOk() { RailBuild.confirm(); },
+  rbUndo() { RailBuild.undo(); },
+  stRot(arg) {
+    const [id, d] = arg.split('|'); const g = Rail.stationById(+id); if (!g) return;
+    g.ang += (+d) * Math.PI / 12; Render.dirty = true; UI.showStation(g);
+  },
+  stTrack(id) {
+    const g = Rail.stationById(+id); if (!g) return;
+    RailBuild.start('track'); RailBuild.tap(g.mx, g.my);
+  },
+  poiTrack(arg) {
+    const [mx, my] = arg.split(',').map(Number);
+    RailBuild.start('track'); RailBuild.tap(mx, my);
+  },
+  stDemolish(id, el) {
+    const g = Rail.stationById(+id); if (!g || Rail.stationUsed(g)) return;
+    if (!el.dataset.confirm) { el.dataset.confirm = '1'; el.textContent = 'Confirmer la démolition'; return; }
+    const R = Rail.st();
+    R.stations = R.stations.filter((x) => x !== g);
+    G.w.pois = G.w.pois.filter((p) => p.sid !== g.id); G.w.poiSeen.delete('gs' + g.id);
+    Eco.earn(Math.round(Rail.stationCost() * 0.3), 'sales');
+    UI.closeCard(); Render.dirty = true; UI.toast(g.name + ' démolie.', 'info');
+  },
   bUndo() { Build.undo(); },
   bCancel() { Build.cancel(); },
   bOk() { Build.confirm(); },
@@ -3411,7 +3904,7 @@ const ACT = {
   statsSet(arg) { const [k, v] = arg.split('|'); G.ui[k] = v; UI.refreshSheet(); },
   strikeYes(id) {
     const e = G.s.events.find((x) => x.id === +id);
-    if (e && G.s.money >= e.cost) { Eco.charge(e.cost, 'events'); e.resolved = true; Events.log('Grève évitée après négociation (' + fmtEur(e.cost) + ').', 'ok'); UI.toast('Accord trouvé : la grève est levée.', 'ok'); }
+    if (e && Eco.canAfford(e.cost)) { Eco.charge(e.cost, 'events'); e.resolved = true; Events.log('Grève évitée après négociation (' + fmtEur(e.cost) + ').', 'ok'); UI.toast('Accord trouvé : la grève est levée.', 'ok'); }
     else if (e) { UI.toast('Trésorerie insuffisante pour négocier.', 'bad'); }
     UI.closeModal(); UI.refreshTop();
   },
@@ -3453,6 +3946,7 @@ const CHG = {
   night(_, el) { const l = findLine(el.dataset.arg); if (l) { l.night = el.checked; UI.refreshSheet(); } },
   setting(_, el) { G.s.settings[el.dataset.arg] = el.checked; Render.dirty = true; },
   statsAdv(_, el) { G.ui.statsAdv = el.checked; UI.refreshSheet(); },
+  unlimited(_, el) { Eco.setUnlimited(el.checked); UI.refreshSheet(); },
 };
 
 /* =====================================================================
@@ -3469,7 +3963,7 @@ const StartScreen = {
       box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
         <p class="tagline">Bâtissez le réseau de transport de votre ville, sur la vraie carte de France.</p>
         <div class="stack">
-          ${lm ? `<button class="btn primary big" data-act="stContinue">Continuer · ${esc(lm.city)}<small>${esc(lm.date)} · ${fmtEur(lm.money)}</small></button>` : ''}
+          ${lm ? `<button class="btn primary big" data-act="stContinue">Continuer · ${esc(lm.city)}<small>${esc(lm.date)} · ${lm.unlimited ? 'argent illimité' : fmtEur(lm.money)}</small></button>` : ''}
           <button class="btn ${lm ? '' : 'primary'} big" data-act="stNew">Nouvelle partie</button>
           ${slots.some((s) => s.meta) ? '<button class="btn big" data-act="stLoad">Charger une partie</button>' : ''}
         </div>
@@ -3492,7 +3986,7 @@ const StartScreen = {
       if (inp && !this.city) inp.focus();
     } else if (view === 'load') {
       box.innerHTML = `<div class="plate big">Charger une partie</div>
-        ${slots.map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + fmtEur(meta.money) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div>${meta ? `<div class="row2 tight"><button class="btn sm primary" data-act="stLoadSlot" data-arg="${n}">Jouer</button><button class="btn sm danger" data-act="stDelSlot" data-arg="${n}">Effacer</button></div>` : ''}</div>`).join('')}
+        ${slots.map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + (meta.unlimited ? 'illimité' : fmtEur(meta.money)) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div>${meta ? `<div class="row2 tight"><button class="btn sm primary" data-act="stLoadSlot" data-arg="${n}">Jouer</button><button class="btn sm danger" data-act="stDelSlot" data-arg="${n}">Effacer</button></div>` : ''}</div>`).join('')}
         <button class="btn wide" data-act="stHome">Retour</button>`;
     } else if (view === 'loading') {
       box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
@@ -3547,9 +4041,12 @@ const Game = {
   onTap(e) {
     if (!G.ready) return;
     const mx = lonToMx(e.latlng.lng), my = latToMy(e.latlng.lat);
+    if (RailBuild.b) { RailBuild.tap(mx, my); return; }
     if (Build.b) { Build.tap(mx, my); return; }
     const h = Render.hit(e.containerPoint.x, e.containerPoint.y);
     if (h && h.type === 'event') { UI.showEvent(h.e); return; }
+    if (h && h.type === 'station') { UI.showStation(h.g); return; }
+    if (h && h.type === 'poi') { UI.showPoi(h.p); return; }
     if (h && h.type === 'veh') { UI.showVehicle(h.l, h.v); return; }
     if (h && h.type === 'stop') { UI.showStop(h.l, h.k); return; }
     const z = G.w.zoneAt(mx, my);
@@ -3637,6 +4134,9 @@ const Game = {
     const v = G.s.view;
     if (v) G.map.setView([v.lat, v.lng], v.z, { animate: false });
     else G.map.setView([G.s.city.lat, G.s.city.lon], 14.5, { animate: false });
+    if (!G.s.rail) G.s.rail = { stations: [], tracks: [] };
+    if (G.s.settings.pois === undefined) G.s.settings.pois = true;
+    Rail.inject();
     for (const l of G.s.lines) { Lines.prepare(l); Render.lineBox(l); }
     G.ready = true;
     Render.resize(); Render.dirty = true;
@@ -3649,7 +4149,7 @@ const Game = {
     });
   },
 
-  stop() { G.ready = false; Build.cancel(); UI.closeCard(); UI.closeModal(); },
+  stop() { G.ready = false; Build.cancel(); if (RailBuild.b) RailBuild.cancel(); UI.closeCard(); UI.closeModal(); },
 };
 
 /* ownedBoxes ajouté à la sauvegarde pour recharger le bon secteur */

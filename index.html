@@ -1219,7 +1219,12 @@ const MODES = {
 };
 const MODE_ORDER = ['bus', 'metro', 'ter', 'boat'];
 /** accélération (a) et freinage (b) de service, en m/s² ; vitesse plafond éventuelle */
-const PHYS = { bus: { a: 1.0, b: 1.3 }, metro: { a: 1.0, b: 1.1 }, ter: { a: 0.6, b: 0.75, vmax: 100 / 3.6 }, boat: { a: 0.25, b: 0.3 } };
+const PHYS = {
+  bus: { a: 1.0, b: 1.3, safe: 30, maxHold: 150 },
+  metro: { a: 1.0, b: 1.1, safe: 120, maxHold: 75 },
+  ter: { a: 0.6, b: 0.75, vmax: 100 / 3.6, safe: 600, maxHold: 240 },
+  boat: { a: 0.25, b: 0.3, safe: 60, maxHold: 240 },
+};
 /** durée d'un trajet de d mètres départ et arrivée arrêtés (profil trapèze ou triangle) */
 function runTime(d, vc, a, b) {
   if (d <= 0) return 0;
@@ -2136,6 +2141,13 @@ const Sim = {
     for (const l of G.s.lines) {
       if (!l.active || !l.veh.length) continue;
       const ctl = l.ctl || [], ph = PHYS[l.mode], b = ph.b;
+      // véhicule qui précède chacun sur la ligne (même sens de parcours)
+      let lead = null;
+      if (l.veh.length > 1) {
+        const ord = l.veh.filter((x) => !x.hidden).sort((x, y) => x.u - y.u);
+        lead = new Map();
+        ord.forEach((x, i) => lead.set(x, ord[(i + 1) % ord.length]));
+      }
       for (const v of l.veh) {
         const a = MODEL[v.model].acc || ph.a;
         if (!(v.v >= 0)) v.v = 0;
@@ -2161,7 +2173,18 @@ const Sim = {
           const target = mustC ? tCtl : tStop;
           const gap = Math.max(0, target - v.u);
           const p = Lines.posOf(l, v);
-          const vt = Math.min(this.cruise(l, v, p), Math.sqrt(2 * b * gap));
+          let vt = Math.min(this.cruise(l, v, p), Math.sqrt(2 * b * gap));
+          // distance de sécurité avec le véhicule de devant : jamais de dépassement ni de chevauchement
+          const L = lead && lead.get(v);
+          if (L && L !== v) {
+            let gl = L.u - v.u; if (gl <= 0) gl += l.C;
+            const free = gl - Math.min(ph.safe, l.C / l.veh.length * 0.4);
+            if (free < gap) {
+              vt = Math.min(vt, Math.sqrt(2 * b * Math.max(0, free)));
+              if (free <= 0.5) { v.v = 0; v.spd = 0; v.hold = 'queue'; t -= h; continue; }
+            }
+          }
+          if (v.hold === 'queue') v.hold = null;
           v.v = v.v < vt ? Math.min(vt, v.v + a * h) : Math.max(vt, v.v - 2 * b * h);
           v.spd = v.v;
           if (gap <= Math.max(0.8, v.v * h)) {
@@ -2177,7 +2200,7 @@ const Sim = {
             }
             if (v.wrap) { v.u -= l.C; v.wrap = false; v.cwrap = false; if (v.u < 0) v.u = 0; }
             this.atStop(l, v, evt);
-            v.hold = null;
+            v.hold = this.regulate(l, v) ? 'reg' : null;
             v.ev++;
             if (v.ev >= l.ev.length) { v.ev = 0; v.wrap = true; }
             continue;
@@ -2194,6 +2217,27 @@ const Sim = {
         }
       }
     }
+  },
+
+  /** Régulation à l'intervalle : à l'arrêt, un véhicule trop proche de celui de devant
+   *  patiente pour se recentrer entre son prédécesseur et son suiveur. */
+  regulate(l, v) {
+    if (G.noReg) return false;
+    const vis = l.veh.filter((x) => !x.hidden);
+    if (vis.length < 2) return false;
+    let ahead = Infinity, behind = Infinity;
+    for (const o of vis) {
+      if (o === v) continue;
+      let d = o.u - v.u; if (d <= 0) d += l.C;
+      if (d < ahead) ahead = d;
+      let e = v.u - o.u; if (e <= 0) e += l.C;
+      if (e < behind) behind = e;
+    }
+    const spd = Math.max(1, (l.speedAvg || 15) / 3.6);
+    const extra = clamp((behind - ahead) / 2 / spd, 0, PHYS[l.mode].maxHold);
+    if (extra < 4) return false;
+    v.dwell += extra;
+    return true;
   },
 
   atStop(l, v, evt) {
@@ -3259,7 +3303,7 @@ const UI = {
       <div class="kv"><span>À bord</span><b>${fmtInt(v.load)} / ${md.cap} · ${fmtPct(f)}</b></div>
       <div class="kv"><span>Prochain arrêt</span><b>${esc(next)}</b></div>
       <div class="kv"><span>Direction</span><b>${esc(dir)}</b></div>
-      <div class="kv"><span>Vitesse</span><b>${v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
+      <div class="kv"><span>Vitesse</span><b>${v.hold === 'queue' ? 'derrière le véhicule précédent' : v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage', reg: 'régulation (garde l’écart)', queue: 'derrière le véhicule précédent' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
       <div class="row2"><button class="btn sm ${G.ui.follow === v ? 'on' : ''}" data-act="follow">${icon('follow')} ${G.ui.follow === v ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="openLine" data-arg="${l.id}">Voir la ligne</button></div>`);
   },
   showStop(l, k) {
@@ -3784,7 +3828,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.4';
+const APP_VERSION = '1.4.1';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();

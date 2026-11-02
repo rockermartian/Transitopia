@@ -3808,303 +3808,6 @@ const Staff = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — ombres dynamiques (fond « Plan IGN » uniquement)
-   Position réelle du soleil (heure, date, ville) ; bâtiments IGN BD TOPO
-   (emprise + hauteur) ; ombres des bus, TER et navettes. Pas d'ombre la
-   nuit, ni pour le métro (souterrain), atténuées par temps couvert.
-   ===================================================================== */
-
-/* ---------- position du soleil ---------- */
-const Sun = {
-  /** décalage de l'heure de Paris sur UTC (heure d'été : du dernier dimanche de mars au dernier dimanche d'octobre) */
-  parisOffset(d) {
-    const y = d.getUTCFullYear();
-    const lastSun = (m) => { const x = new Date(Date.UTC(y, m + 1, 0)); return x.getUTCDate() - x.getUTCDay(); };
-    const start = Date.UTC(y, 2, lastSun(2), 1), end = Date.UTC(y, 9, lastSun(9), 1);
-    const t = d.getTime() - 3600e3; // heure murale -> UTC approximatif
-    return t >= start && t < end ? 2 : 1;
-  },
-  /** azimut (radians, depuis le nord, sens horaire) et hauteur (radians) ; formules simplifiées NOAA */
-  pos(min, lat, lon) {
-    const wall = Time.date(min);                         // heure de Paris codée en UTC
-    const utc = new Date(wall.getTime() - this.parisOffset(wall) * 3600e3);
-    const jd = utc.getTime() / 864e5 + 2440587.5, n = jd - 2451545.0;
-    const L = (280.46 + 0.9856474 * n) % 360, g = ((357.528 + 0.9856003 * n) % 360) * Math.PI / 180;
-    const lam = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * Math.PI / 180;
-    const eps = (23.439 - 0.0000004 * n) * Math.PI / 180;
-    const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
-    const ra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam));
-    const gmst = (18.697374558 + 24.06570982441908 * n) % 24;
-    const ha = ((gmst * 15 + lon) * Math.PI / 180) - ra;
-    const phi = lat * Math.PI / 180;
-    const el = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(ha));
-    const az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(phi) - Math.sin(phi) * Math.cos(ha));
-    return { az: (az + 2 * Math.PI) % (2 * Math.PI), el };
-  },
-};
-
-/** enveloppe convexe (chaîne monotone d'Andrew) d'une liste plate [x0,y0,x1,y1…], ajoutée au tracé */
-function hull(flat, path) {
-  const n = flat.length / 2, idx = new Array(n);
-  for (let i = 0; i < n; i++) idx[i] = i;
-  idx.sort((u, v) => flat[2 * u] - flat[2 * v] || flat[2 * u + 1] - flat[2 * v + 1]);
-  const cr = (o, a, b) => (flat[2 * a] - flat[2 * o]) * (flat[2 * b + 1] - flat[2 * o + 1]) - (flat[2 * a + 1] - flat[2 * o + 1]) * (flat[2 * b] - flat[2 * o]);
-  const lo = [], up = [];
-  for (const i of idx) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], i) <= 0) lo.pop(); lo.push(i); }
-  for (let t = n - 1; t >= 0; t--) { const i = idx[t]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], i) <= 0) up.pop(); up.push(i); }
-  lo.pop(); up.pop();
-  const h = lo.concat(up);
-  if (h.length < 3) return;
-  path.moveTo(flat[2 * h[0]], flat[2 * h[0] + 1]);
-  for (let t = 1; t < h.length; t++) path.lineTo(flat[2 * h[t]], flat[2 * h[t] + 1]);
-  path.closePath();
-}
-
-/* ---------- bâtiments (BD TOPO) et ombres : calcul dans un « worker », hors du fil principal ----------
-   Le worker télécharge et compacte les bâtiments, puis dessine les ombres dans une image (demi-résolution).
-   Le jeu se contente de coller cette image ; elle n'est recalculée que si le soleil a bougé (~2°),
-   si l'on change de zoom ou si l'on sort de la zone déjà dessinée. */
-const BT_LAT = 0.0075, BT_LON = 0.01; // tuiles de ≈ 830 m × 780 m
-const SHADOW_WORKER = `
-const lonToMx = (lon) => (lon + 180) / 360;
-const latToMy = (lat) => { const s = Math.sin(lat * Math.PI / 180); return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI); };
-const tiles = new Map();
-function compact(gj, minStep) {
-  const h = [], o = [0], p = [];
-  for (const f of gj.features || []) {
-    const g = f.geometry, pr = f.properties || {}; if (!g) continue;
-    let ht = +pr.hauteur || (+pr.nombre_d_etages ? +pr.nombre_d_etages * 3 + 1 : 0) || 6;
-    if (ht < 2.5) continue;
-    ht = Math.min(ht, 200);
-    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-    for (const poly of polys) {
-      const ring = poly[0]; if (!ring || ring.length < 4) continue;
-      const pts = [];
-      for (const c of ring) {
-        const x = lonToMx(c[0]), y = latToMy(c[1]), n = pts.length;
-        if (n && Math.abs(x - pts[n - 2]) + Math.abs(y - pts[n - 1]) < minStep) continue;
-        pts.push(x, y);
-      }
-      if (pts.length >= 2 && Math.abs(pts[0] - pts[pts.length - 2]) + Math.abs(pts[1] - pts[pts.length - 1]) < minStep) pts.length -= 2;
-      if (pts.length < 6) continue;
-      const nv = pts.length / 2, step = Math.ceil(nv / 24);
-      for (let v = 0; v < nv; v += step) p.push(pts[2 * v], pts[2 * v + 1]);
-      h.push(Math.round(ht * 10) / 10); o.push(p.length);
-    }
-  }
-  return { h, o, p };
-}
-function prepare(d) {
-  const n = d.h.length, bb = new Float64Array(4 * n), P = Float64Array.from(d.p);
-  for (let b = 0; b < n; b++) {
-    const a = d.o[b], z = d.o[b + 1];
-    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-    for (let i = a; i < z; i += 2) { if (P[i] < minx) minx = P[i]; if (P[i] > maxx) maxx = P[i]; if (P[i + 1] < miny) miny = P[i + 1]; if (P[i + 1] > maxy) maxy = P[i + 1]; }
-    bb[4 * b] = minx; bb[4 * b + 1] = miny; bb[4 * b + 2] = maxx; bb[4 * b + 3] = maxy;
-  }
-  return { h: Float32Array.from(d.h), o: Int32Array.from(d.o), p: P, bb, n };
-}
-async function fetchAll(b) {
-  const out = [];
-  let start = 0, props = true;
-  for (let page = 0; page < 20; page++) {
-    const u = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:batiment' +
-      '&OUTPUTFORMAT=application/json&COUNT=5000&STARTINDEX=' + start + (props ? '&PROPERTYNAME=geometrie,hauteur,nombre_d_etages' : '') +
-      '&BBOX=' + [b.w, b.s, b.e, b.n].map((x) => x.toFixed(5)).join(',') + ',EPSG:4326';
-    let j;
-    try { const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status); j = await r.json(); }
-    catch (e) { if (props && page === 0) { props = false; page--; continue; } throw e; }
-    const f = j.features || [];
-    for (const x of f) out.push(x);
-    const total = j.numberMatched ?? j.totalFeatures;
-    start += f.length;
-    if (!f.length || (typeof total === 'number' && start >= total) || (typeof total !== 'number' && f.length < 5000)) break;
-  }
-  return { features: out };
-}
-const buf = [];
-function hull(n) {
-  // enveloppe convexe des n points de buf (chaîne monotone) ; renvoie la liste d'indices
-  const idx = []; for (let i = 0; i < n; i++) idx.push(i);
-  idx.sort((u, v) => buf[2 * u] - buf[2 * v] || buf[2 * u + 1] - buf[2 * v + 1]);
-  const cr = (o, a, b) => (buf[2 * a] - buf[2 * o]) * (buf[2 * b + 1] - buf[2 * o + 1]) - (buf[2 * a + 1] - buf[2 * o + 1]) * (buf[2 * b] - buf[2 * o]);
-  const lo = [], up = [];
-  for (const i of idx) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], i) <= 0) lo.pop(); lo.push(i); }
-  for (let t = n - 1; t >= 0; t--) { const i = idx[t]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], i) <= 0) up.pop(); up.push(i); }
-  lo.pop(); up.pop();
-  return lo.concat(up);
-}
-function render(q) {
-  const W = Math.max(1, Math.round(q.w * q.res)), H = Math.max(1, Math.round(q.h * q.res));
-  const cv = new OffscreenCanvas(W, H), ctx = cv.getContext('2d');
-  ctx.setTransform(q.res, 0, 0, q.res, 0, 0);
-  const shadow = new Path2D(), roofs = new Path2D();
-  const k = q.k, ox = q.ox, oy = q.oy, sx = q.sx, sy = q.sy;
-  let count = 0;
-  for (const t of tiles.values()) {
-    const { h, o, p, bb, n } = t;
-    for (let b = 0; b < n; b++) {
-      if (bb[4 * b + 2] < q.minx || bb[4 * b] > q.maxx || bb[4 * b + 3] < q.miny || bb[4 * b + 1] > q.maxy) continue;
-      const a = o[b], e = o[b + 1], dx = sx * h[b], dy = sy * h[b];
-      // bâtiments minuscules à l'écran : on les ignore
-      if ((bb[4 * b + 2] - bb[4 * b]) * k < 1.2 && (bb[4 * b + 3] - bb[4 * b + 1]) * k < 1.2) continue;
-      let m = 0;
-      for (let i = a; i < e; i += 2) {
-        const x = p[i] * k - ox, y = p[i + 1] * k - oy;
-        buf[2 * m] = x; buf[2 * m + 1] = y; m++;
-        buf[2 * m] = x + dx; buf[2 * m + 1] = y + dy; m++;
-        if (i === a) roofs.moveTo(x, y); else roofs.lineTo(x, y);
-      }
-      roofs.closePath();
-      const hl = hull(m);
-      if (hl.length >= 3) { shadow.moveTo(buf[2 * hl[0]], buf[2 * hl[0] + 1]); for (let t2 = 1; t2 < hl.length; t2++) shadow.lineTo(buf[2 * hl[t2]], buf[2 * hl[t2] + 1]); shadow.closePath(); }
-      count++;
-    }
-  }
-  ctx.fillStyle = 'rgb(28,32,52)'; ctx.fill(shadow, 'nonzero');
-  ctx.globalCompositeOperation = 'destination-out'; ctx.fill(roofs, 'nonzero');
-  const bmp = cv.transferToImageBitmap();
-  postMessage({ t: 'img', id: q.id, bmp, count }, [bmp]);
-}
-let pending = null, busy = false;
-function pump() { if (busy || !pending) return; const q = pending; pending = null; busy = true; try { render(q); } finally { busy = false; } setTimeout(pump, 0); }
-onmessage = async (ev) => {
-  const m = ev.data;
-  if (m.t === 'tile') { tiles.set(m.k, prepare(m.d)); postMessage({ t: 'ready', k: m.k }); }
-  else if (m.t === 'load') {
-    try { const gj = await fetchAll(m.b); const d = compact(gj, m.minStep); tiles.set(m.k, prepare(d)); postMessage({ t: 'loaded', k: m.k, d }); }
-    catch (e) { postMessage({ t: 'fail', k: m.k, err: String(e) }); }
-  }
-  else if (m.t === 'render') { pending = m.q; pump(); } // seule la dernière demande compte
-  else if (m.t === 'clear') tiles.clear();
-};
-`;
-
-const Shadows = {
-  tiles: new Set(), loading: new Set(), failed: new Set(),
-  img: null, reqId: 0, inFlight: false, want: null, ver: 0,
-  enabled() { const s = G.s; return !!(s && s.settings.shadows !== false && s.settings.base === 'plan' && this.worker() !== false); },
-  key(i, j) { return i + ':' + j; },
-  /** worker créé à la demande ; false si le téléphone ne sait pas dessiner hors du fil principal */
-  worker() {
-    if (this.w !== undefined) return this.w;
-    try {
-      if (typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined') throw new Error('non pris en charge');
-      const url = URL.createObjectURL(new Blob([SHADOW_WORKER], { type: 'text/javascript' }));
-      this.w = new Worker(url);
-      this.w.onmessage = (ev) => this.onMsg(ev.data);
-    } catch (e) { console.warn('ombres indisponibles', e); this.w = false; }
-    return this.w;
-  },
-  onMsg(m) {
-    if (m.t === 'img') {
-      this.inFlight = false;
-      if (this.want && m.id === this.want.id) { if (this.img && this.img.bmp) this.img.bmp.close?.(); this.img = { ...this.want, bmp: m.bmp }; this.lastCount = m.count; Render.dirty = true; }
-      else m.bmp.close?.();
-      if (this.queued) { const q = this.queued; this.queued = null; this.send(q); }
-    } else if (m.t === 'loaded' || m.t === 'ready') {
-      this.loading.delete(m.k); this.tiles.add(m.k);
-      if (m.t === 'loaded') Cache.set('bat:' + m.k, m.d);
-      if (m.t === 'loaded') { Loader.busy--; Loader.status(Loader.busy > 0 ? 'Chargement…' : null); }
-      this.ver++; Render.dirty = true; // nouveaux bâtiments : l'image sera refaite
-    } else if (m.t === 'fail') {
-      this.loading.delete(m.k); this.failed.add(m.k);
-      Loader.busy--; Loader.status(Loader.busy > 0 ? 'Chargement…' : null);
-      setTimeout(() => this.failed.delete(m.k), 120000);
-    }
-  },
-  /** soleil du moment : direction de l'ombre (mètres d'ombre par mètre de hauteur) et intensité */
-  sun() {
-    const s = G.s, p = Sun.pos(s.min, s.city.lat, s.city.lon);
-    const el = p.el * 180 / Math.PI;
-    if (el < 1) return null;
-    const f = clamp((el - 1) / 7, 0, 1);                    // apparition progressive au lever, disparition au coucher
-    const w = Events.weather();
-    const cloud = w === 'rain' || w === 'storm' ? 0.3 : w === 'snow' ? 0.45 : 1;
-    const len = Math.min(6, 1 / Math.tan(p.el));             // ombre plafonnée à 6 fois la hauteur (soleil rasant)
-    return { dx: -Math.sin(p.az) * len, dy: Math.cos(p.az) * len, alpha: 0.24 * f * cloud, el, az: p.az, len };
-  },
-  /** charge les tuiles de bâtiments visibles */
-  ensure(vb) {
-    const i0 = Math.floor(myToLat(vb.maxy) / BT_LAT), i1 = Math.floor(myToLat(vb.miny) / BT_LAT);
-    const j0 = Math.floor(mxToLon(vb.minx) / BT_LON), j1 = Math.floor(mxToLon(vb.maxx) / BT_LON);
-    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 16) return;
-    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
-      const k = this.key(i, j);
-      if (this.tiles.has(k) || this.loading.has(k) || this.failed.has(k)) continue;
-      this.load(i, j);
-    }
-  },
-  async load(i, j) {
-    const k = this.key(i, j), w = this.worker(); if (!w) return;
-    this.loading.add(k);
-    const d = await Cache.get('bat:' + k);
-    if (d) { w.postMessage({ t: 'tile', k, d }); return; }
-    Loader.busy++; Loader.status('Bâtiments IGN…');
-    w.postMessage({ t: 'load', k, b: { s: i * BT_LAT, n: (i + 1) * BT_LAT, w: j * BT_LON, e: (j + 1) * BT_LON }, minStep: meters(0.8) });
-  },
-  send(q) { this.inFlight = true; this.worker().postMessage({ t: 'render', q }); },
-
-  /** ombres des bâtiments sur le calque statique : on colle la dernière image, on en redemande une si besoin */
-  draw(ctx, o, vb, z) {
-    if (!this.enabled() || z < 15.5) return;
-    this.ensure(vb);
-    const sun = this.sun(); if (!sun || sun.alpha < 0.01) return;
-    const R = Render, W = R.W, H = R.H, MX = R.MX, MY = R.MY;
-    // direction d'ombre arrondie (2° et 3 % de longueur) : en dessous, on réutilise l'image
-    const azq = Math.round(sun.az / (Math.PI / 90)), lq = Math.round(Math.log(sun.len) / 0.03);
-    const sunKey = azq + ':' + lq;
-    const im = this.img;
-    const covers = im && Math.abs(im.k - o.k) < 1e-6 && im.sunKey === sunKey && im.ver === this.ver &&
-      o.x - MX >= im.ox && o.y - MY >= im.oy && o.x + W + MX <= im.ox + im.w && o.y + H + MY <= im.oy + im.h;
-    if (!covers) {
-      // nouvelle image : zone visible + marges, un peu plus large pour absorber les petits déplacements
-      const ex = Math.round((W + 2 * MX) * 0.25), ey = Math.round((H + 2 * MY) * 0.25);
-      const ppm = o.k / G.mpu;
-      const q = { id: ++this.reqId, k: o.k, ox: o.x - MX - ex, oy: o.y - MY - ey, w: W + 2 * MX + 2 * ex, h: H + 2 * MY + 2 * ey, res: 0.5,
-        sx: -Math.sin(azq * Math.PI / 90) * Math.exp(lq * 0.03) * ppm,
-        sy: Math.cos(azq * Math.PI / 90) * Math.exp(lq * 0.03) * ppm, sunKey, ver: this.ver };
-      const mg = meters(150);
-      q.minx = q.ox / o.k - mg; q.maxx = (q.ox + q.w) / o.k + mg; q.miny = q.oy / o.k - mg; q.maxy = (q.oy + q.h) / o.k + mg;
-      const same = this.want && this.want.k === q.k && this.want.sunKey === q.sunKey && this.want.ver === this.ver &&
-        o.x - MX >= this.want.ox && o.y - MY >= this.want.oy && o.x + W + MX <= this.want.ox + this.want.w && o.y + H + MY <= this.want.oy + this.want.h;
-      if (!same) { this.want = q; if (this.inFlight) this.queued = q; else this.send(q); }
-    }
-    // l'image disponible (même zoom), recalée sur la vue actuelle
-    if (im && Math.abs(im.k - o.k) < 1e-6) {
-      ctx.save();
-      ctx.globalAlpha = sun.alpha;
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(im.bmp, im.ox - o.x, im.oy - o.y, im.w, im.h);
-      ctx.restore();
-    }
-  },
-
-  /** ombre d'un véhicule (calque dynamique), sous sa carrosserie ; à l'échelle du symbole dessiné */
-  vehicle(ctx, l, x, y, ang, L2, W2, lenM) {
-    if (l.mode === 'metro' || !this.enabled()) return;
-    if (this._sunMin !== G.s.min) { this._sunMin = G.s.min; this._sun = this.sun(); }
-    const sun = this._sun; if (!sun || sun.alpha < 0.01) return;
-    const hgt = { bus: 3.2, ter: 4.2, boat: 2.2 }[l.mode] || 3;
-    const pxm = (2 * L2) / (lenM || 12);                     // pixels par mètre du symbole
-    const lim = 1.6 * L2;
-    const dx = clamp(sun.dx * hgt * pxm, -lim, lim), dy = clamp(sun.dy * hgt * pxm, -lim, lim);
-    // ombre attachée au véhicule : enveloppe de la caisse au sol et de sa projection (comme un bâtiment)
-    const c = Math.cos(ang || 0), s = Math.sin(ang || 0), r = l.mode === 'boat' ? 0.85 : 1;
-    const corners = [[-L2, -W2 * r], [L2, -W2 * r], [L2, W2 * r], [-L2, W2 * r]];
-    const flat = [];
-    for (const [u, v] of corners) { const px = x + u * c - v * s, py = y + u * s + v * c; flat.push(px, py, px + dx, py + dy); }
-    const path = new Path2D();
-    hull(flat, path);
-    ctx.save();
-    ctx.fillStyle = `rgba(20,24,40,${Math.min(0.32, sun.alpha * 1.1).toFixed(3)})`;
-    ctx.fill(path);
-    ctx.restore();
-  },
-};
-
-'use strict';
-/* =====================================================================
    CORRESPONDANCE — lieux d'intérêt + construction ferroviaire
    (gares orientables, voies ferrées en longues courbes)
    ===================================================================== */
@@ -4781,8 +4484,6 @@ const Render = {
       this.oN = o;
     }
     const za = 1 - 0.7 * nf;
-    /* ombres portées des bâtiments (fond Plan IGN, de jour) */
-    Shadows.draw(ctx, o, vb, z);
 
     /* zones */
     if (s.settings.zones) {
@@ -5149,7 +4850,6 @@ const Render = {
         const L2 = dims[0] * zf / 2, W2 = dims[1] * zf / 2;
         const nl = this.nf > 0.15 && Night.lightsOn() ? clamp((this.nf - 0.15) / 0.45, 0, 1) : 0;
         if (nl > 0) Night.vehicle(ctx, l, x, y, p.ang, L2, W2, zf, nl);
-        else Shadows.vehicle(ctx, l, x, y, p.ang, L2, W2, md.len);
         ctx.save(); ctx.translate(x, y); ctx.rotate(p.ang || 0);
         this.rr(ctx, -L2, -W2, 2 * L2, 2 * W2, l.mode === 'boat' ? W2 : Math.min(3, W2));
         ctx.fillStyle = l.color; ctx.fill();
@@ -6334,7 +6034,6 @@ const SHEETS = {
       html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
       ${section('Affichage')}
       <div class="vrow stack"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
-      ${tg('shadows', 'Ombres du soleil (bâtiments et véhicules) · fond Plan IGN')}
       ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       <div class="vrow stack"><div><b>Carte de chaleur</b><small>Colore les arrêts ou les lignes selon un indicateur du jour</small></div><div class="seg">${[['', 'Aucune'], ['pax', 'Affluence'], ['mec', 'Mécontents'], ['profit', 'Rentabilité']].map(([v, l]) => `<button class="${(s.settings.heat || '') === v ? 'on' : ''}" data-act="heat" data-arg="${v}">${l}</button>`).join('')}</div></div>
       <div class="vrow stack"><div><b>Pause automatique</b><small>Le jeu s’arrête à l’arrivée d’une notification de ce niveau</small></div><div class="seg">${[['choices', 'Choix'], ['major', 'Importantes'], ['all', 'Toutes']].map(([v, l]) => `<button class="${(s.settings.notifPause || 'choices') === v ? 'on' : ''}" data-act="notifPause" data-arg="${v}">${l}</button>`).join('')}</div></div>
@@ -6803,7 +6502,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.12.3';
+const APP_VERSION = '1.13';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -7279,7 +6978,6 @@ const Game = {
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     if (!G.s.settings.notif) G.s.settings.notif = 'all';
-    if (G.s.settings.shadows === undefined) G.s.settings.shadows = true;
     if (!G.s.settings.notifPause) G.s.settings.notifPause = 'choices';
     if (!G.s.notifs) G.s.notifs = [];
     for (const e of G.s.events) Events.normalize(e);

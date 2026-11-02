@@ -101,8 +101,9 @@ small{font-size:12.5px;color:var(--muted)}
 
 #top{position:absolute;left:0;right:0;top:0;z-index:900;display:flex;align-items:stretch;gap:6px;padding:calc(8px + var(--sat)) max(10px,var(--sar)) 0 max(10px,var(--sal));pointer-events:none}
 #top>*{pointer-events:auto}
-#top .icon-b{width:44px;height:44px;background:var(--panel);box-shadow:var(--shadow)}
-.tplate{display:flex;flex-direction:column;justify-content:center;padding:3px 12px;border-radius:22px;background:var(--panel);box-shadow:var(--shadow);min-width:0}
+#top .icon-b{width:44px;height:44px;flex:none;background:var(--panel);box-shadow:var(--shadow)}
+#top .speed{flex:none}
+.tplate{display:flex;flex-direction:column;justify-content:center;padding:3px 10px;border-radius:22px;background:var(--panel);box-shadow:var(--shadow);min-width:0}
 .tplate b{font:600 18px/1.05 var(--f-display);white-space:nowrap}
 .tplate small{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #cash{flex:1}
@@ -118,7 +119,17 @@ small{font-size:12.5px;color:var(--muted)}
 .speed button{width:35px;display:grid;place-items:center;border-radius:19px;font:600 14px/1 var(--f-display)}
 .speed button .ic{width:18px;height:18px}
 #btnSpeed{background:var(--ink);color:#fff}
-#btnSpeed.rt{background:var(--bad);font-size:12px;width:40px}
+#btnSpeed.rt{background:var(--bad);font-size:12px}
+#btnSpeed{width:auto!important;padding:0 7px;display:flex!important;align-items:center;gap:3px}
+.caret{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;opacity:.8}
+#speedMenu{position:absolute;z-index:1100;top:calc(58px + var(--sat));right:max(10px,var(--sar));width:min(250px,calc(100% - 20px));background:var(--panel);border-radius:18px;box-shadow:0 10px 30px rgba(35,35,35,.22);padding:6px;animation:up .15s ease-out}
+.sm-it{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:center;column-gap:8px;width:100%;text-align:left;padding:8px 12px;border-radius:12px}
+.sm-it b{font:600 15px/1.1 var(--f-display)}
+.sm-it small{grid-column:1;font-size:12px}
+.sm-it .ic{grid-row:1/3;grid-column:2;width:18px;height:18px}
+.sm-it.on{background:var(--panel-2)}
+.sm-rt b{color:var(--bad)}
+.sm-wx{margin:4px 6px 2px;border-top:1px solid var(--line);border-bottom:0;padding-top:10px}
 
 #chip{position:absolute;z-index:880;top:calc(62px + var(--sat));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;background:var(--panel);box-shadow:var(--shadow);padding:6px 14px;border-radius:20px;font-size:13px;white-space:nowrap;color:var(--ink-2)}
 .spin{width:14px;height:14px;border:2.5px solid var(--panel-3);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}
@@ -268,6 +279,7 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
     <div class="tplate" id="clock"></div>
     <div id="wx"></div>
     <div class="speed"><button id="btnPlay" data-act="play" aria-label="Pause"></button><button id="btnSpeed" data-act="speed" aria-label="Vitesse">×1</button></div>
+  <div id="speedMenu" hidden></div>
   </header>
   <div id="chip" hidden></div>
   <div id="card" hidden></div>
@@ -481,7 +493,7 @@ const API = {
   },
   async bdtopo(b) {
     const [roads, rails, water, gares, pois] = await Promise.all([
-      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,nom_voie_ban_gauche,nom_collaboratif_gauche'),
+      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche'),
       this.wfsAll('BDTOPO_V3:troncon_de_voie_ferree', b, 'geometrie,nature,etat_de_l_objet,vitesse_maximale'),
       this.wfsAll('BDTOPO_V3:troncon_hydrographique', b, 'geometrie,navigabilite,classe_de_largeur,cpx_toponyme_de_cours_d_eau'),
       this.wfsAll('BDTOPO_V3:equipement_de_transport', b, 'geometrie,nature,toponyme'),
@@ -491,7 +503,7 @@ const API = {
   },
   async signals(s, w, n, e) {
     const bb = [s, w, n, e].map((x) => x.toFixed(5)).join(',');
-    const q = `[out:json][timeout:60][bbox:${bb}];(node[highway~"^(traffic_signals|stop|give_way)$"];node[crossing=traffic_signals];);out qt;`;
+    const q = `[out:json][timeout:60][bbox:${bb}];(node[highway~"^(traffic_signals|stop|give_way)$"];node[crossing=traffic_signals];);out qt;way[highway][maxspeed];out tags geom qt;`;
     let lastErr;
     for (let attempt = 0; attempt < 4; attempt++) {
       const ep = OVERPASS[(attempt + 1) % OVERPASS.length];
@@ -562,7 +574,7 @@ class Net {
     this.ea = []; this.eb = []; this.len = []; this.cls = []; this.spd = []; this.name = [];
     this.seen = new Set(); this.pair = new Map(); this.grid = new Map();
     this.dens = []; this.zone = []; this.noise = []; this.traffic = [];
-    this.ow = []; this.bl = [];
+    this.ow = []; this.bl = []; this.lim = []; this.limSrc = [];
     this.version = 0;
   }
   get nE() { return this.ea.length; }
@@ -576,7 +588,7 @@ class Net {
     return i;
   }
   /** ow = 1 : circulation autorisée seulement de a vers b ; bl = 1 : voie réservée aux bus */
-  edge(a, b, cls, kmh, name, key, ow = 0, bl = 0) {
+  edge(a, b, cls, kmh, name, key, ow = 0, bl = 0, lim = -1) {
     if (this.seen.has(key) || a === b) return;
     this.seen.add(key);
     const e = this.ea.length;
@@ -586,7 +598,7 @@ class Net {
     this.dens.push(-1); this.zone.push(null);
     this.noise.push(0.7 + 0.6 * rnd01(hashStr(key)));
     this.traffic.push(0.2);
-    this.ow.push(ow ? 1 : 0); this.bl.push(bl ? 1 : 0);
+    this.ow.push(ow ? 1 : 0); this.bl.push(bl ? 1 : 0); this.lim.push(lim); this.limSrc.push(lim > 0 ? 2 : 0);
     this.adj[a].push(e); this.adj[b].push(e);
     this.pair.set(this.ids[a] + '_' + this.ids[b], e);
     this.pair.set(this.ids[b] + '_' + this.ids[a], e);
@@ -855,8 +867,9 @@ class World {
           if (!nd) { prev = -1; continue; }
           const i = net.node(el.nodes[k], lonToMx(nd.lon), latToMy(nd.lat));
           if (prev >= 0) {
-            if (ow === -1) net.edge(i, prev, cls, kmh, name, el.id + ':' + k, 1, bl);
-            else net.edge(prev, i, cls, kmh, name, el.id + ':' + k, ow, bl);
+            const lim = net === this.road ? parseMaxspeed(t.maxspeed) || -1 : -1;
+            if (ow === -1) net.edge(i, prev, cls, kmh, name, el.id + ':' + k, 1, bl, lim);
+            else net.edge(prev, i, cls, kmh, name, el.id + ':' + k, ow, bl, lim);
           }
           prev = i;
         }
@@ -886,13 +899,13 @@ class World {
   ingestBDTopo(d) {
     const key = (c) => c[0].toFixed(7) + ',' + c[1].toFixed(7);
     const lines = (g) => !g ? [] : g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
-    const addLine = (net, fid, coords, cls, kmh, name, ow, bl) => {
+    const addLine = (net, fid, coords, cls, kmh, name, ow, bl, lim = -1) => {
       let prev = -1;
       coords.forEach((c, k) => {
         const i = net.node(key(c), lonToMx(c[0]), latToMy(c[1]));
         if (prev >= 0) {
-          if (ow === -1) net.edge(i, prev, cls, kmh, name, fid + ':' + k, 1, bl);
-          else net.edge(prev, i, cls, kmh, name, fid + ':' + k, ow ? 1 : 0, bl);
+          if (ow === -1) net.edge(i, prev, cls, kmh, name, fid + ':' + k, 1, bl, lim);
+          else net.edge(prev, i, cls, kmh, name, fid + ':' + k, ow ? 1 : 0, bl, lim);
         }
         prev = i;
       });
@@ -917,7 +930,12 @@ class World {
       let kmh = [110, 70, 50, 40, 30][cls];
       const v = +p.vitesse_moyenne_vl; if (v >= 5 && v <= 130) kmh = v;
       const name = p.nom_voie_ban_gauche || prettyName(p.nom_collaboratif_gauche);
-      for (const ln of lines(f.geometry)) addLine(this.road, f.id, ln, cls, kmh, name, ow, bus ? 1 : 0);
+      // limite légale déduite (règles françaises) ; précisée ensuite par les panneaux OpenStreetMap
+      let lim = -1;
+      if (/autoroutier/i.test(nat)) lim = p.urbain === true ? 90 : 130;
+      else if (p.urbain === true) lim = 50;
+      else if (p.urbain === false) lim = cls === 0 ? 110 : 80;
+      for (const ln of lines(f.geometry)) addLine(this.road, f.id, ln, cls, kmh, name, ow, bus ? 1 : 0, lim);
     }
     this.road.version++;
     /* voies ferrées (hors tram, métro, voies de service) */
@@ -979,6 +997,52 @@ class World {
     }
     return n;
   }
+  /* ---- panneaux de limitation de vitesse (OpenStreetMap) associés aux tronçons IGN ---- */
+  ingestMaxspeed(json) {
+    if (!this.msSeen) { this.msSeen = new Set(); this.msGrid = new Map(); }
+    let added = 0;
+    const C = GCELL * 2;
+    for (const el of json.elements || []) {
+      if (el.type !== 'way' || !el.geometry || this.msSeen.has(el.id)) continue;
+      const v = parseMaxspeed(el.tags && el.tags.maxspeed); if (!v) continue;
+      this.msSeen.add(el.id);
+      const g = el.geometry;
+      for (let k = 1; k < g.length; k++) {
+        const ax = lonToMx(g[k - 1].lon), ay = latToMy(g[k - 1].lat), bx = lonToMx(g[k].lon), by = latToMy(g[k].lat);
+        const sg = { ax, ay, bx, by, v };
+        const x0 = Math.floor(Math.min(ax, bx) / C), x1 = Math.floor(Math.max(ax, bx) / C), y0 = Math.floor(Math.min(ay, by) / C), y1 = Math.floor(Math.max(ay, by) / C);
+        for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const kk = x + ',' + y; let c = this.msGrid.get(kk); if (!c) { c = []; this.msGrid.set(kk, c); } c.push(sg); }
+        added++;
+      }
+    }
+    if (added) this.applyMaxspeed();
+    return added;
+  }
+  applyMaxspeed() {
+    if (!this.msGrid || !this.msGrid.size) return;
+    const n = this.road, C = GCELL * 2, tol = meters(12);
+    for (let e = 0; e < n.nE; e++) {
+      if (n.limSrc[e] === 1) continue;
+      const ax = n.x[n.ea[e]], ay = n.y[n.ea[e]], bx = n.x[n.eb[e]], by = n.y[n.eb[e]];
+      const mx = (ax + bx) / 2, my = (ay + by) / 2, ang = Math.atan2(by - ay, bx - ax);
+      const cx = Math.floor(mx / C), cy = Math.floor(my / C);
+      let best = null, bd = tol;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        const c = this.msGrid.get((cx + dx) + ',' + (cy + dy)); if (!c) continue;
+        for (const sg of c) {
+          const sx = sg.bx - sg.ax, sy = sg.by - sg.ay, L2 = sx * sx + sy * sy; if (L2 <= 0) continue;
+          const t = clamp(((mx - sg.ax) * sx + (my - sg.ay) * sy) / L2, 0, 1);
+          const d = Math.hypot(mx - (sg.ax + t * sx), my - (sg.ay + t * sy));
+          if (d >= bd) continue;
+          let da = Math.abs(Math.atan2(sy, sx) - ang) % Math.PI; if (da > Math.PI / 2) da = Math.PI - da;
+          if (da > 0.45) continue;   // ~25° : même rue, pas une rue qui croise
+          bd = d; best = sg;
+        }
+      }
+      if (best) { n.lim[e] = best.v; n.limSrc[e] = 1; }
+    }
+  }
+
   signalsNear(mx, my, rM) {
     const r = Math.ceil(meters(rM) / GCELL), cx = Math.floor(mx / GCELL), cy = Math.floor(my / GCELL);
     const lim = meters(rM) ** 2, out = [];
@@ -998,6 +1062,7 @@ class World {
       const z = this.zoneAt(mx, my);
       n.dens[e] = z ? z.density + z.jobDensity * 0.5 : 250;
       n.zone[e] = z ? z.code : null;
+      if (n.lim[e] <= 0) n.lim[e] = n.cls[e] === 0 ? (n.dens[e] > 600 ? 90 : 110) : n.dens[e] > 600 ? 50 : 80;
     }
   }
 
@@ -1021,6 +1086,15 @@ class World {
   }
 }
 
+/** valeur de l'étiquette OSM maxspeed -> km/h */
+function parseMaxspeed(v) {
+  if (!v) return null;
+  v = String(v).trim();
+  const named = { 'FR:urban': 50, 'FR:rural': 80, 'FR:zone30': 30, 'FR:zone20': 20, 'FR:motorway': 130, 'FR:walk': 6, walk: 6, 'FR:expressway': 110 };
+  if (named[v]) return named[v];
+  const nums = v.split(/[;|]/).map((x) => { const m = x.match(/(\d+(?:\.\d+)?)\s*(mph)?/); return m ? (m[2] ? +m[1] * 1.609 : +m[1]) : NaN; }).filter((x) => x > 2 && x < 200);
+  return nums.length ? Math.round(Math.min(...nums)) : null;
+}
 /** « R DE LA REPUBLIQUE » -> « Rue de la République »-ish (repli si le nom BAN manque) */
 const ABBR = { R: 'Rue', AV: 'Avenue', BD: 'Boulevard', PL: 'Place', QU: 'Quai', QUAI: 'Quai', CRS: 'Cours', CHE: 'Chemin', IMP: 'Impasse', ALL: 'Allée', RTE: 'Route', GAL: 'Galerie', PASS: 'Passage', SQ: 'Square', PROM: 'Promenade', MTE: 'Montée', RPT: 'Rond-point', ESPL: 'Esplanade', FG: 'Faubourg', SENT: 'Sentier', VC: 'Voie communale', RN: 'RN', RD: 'RD' };
 function prettyName(s) {
@@ -1152,6 +1226,7 @@ const Loader = {
           w.ingestOSM(js);
         }
         w.attachDensity(false);
+        w.applyMaxspeed();
         n++;
         Render.dirty = true;
         Sim.onNetworkGrow();
@@ -1184,9 +1259,12 @@ const Loader = {
     if (w.sigChunks.has(key)) return;
     w.sigChunks.add(key);
     try {
-      let js = await Cache.get('sig:' + key);
-      if (!js) { const b = chunkBox(i, j); js = await API.signals(b.s, b.w, b.n, b.e); await Cache.set('sig:' + key, js); }
-      if (w.ingestSignals(js)) { Sim.onSignals(); Render.dirty = true; }
+      let js = await Cache.get('sig2:' + key);
+      if (!js) { const b = chunkBox(i, j); js = await API.signals(b.s, b.w, b.n, b.e); await Cache.set('sig2:' + key, js); }
+      const n = w.ingestSignals(js);
+      w.ingestMaxspeed(js);
+      if (n) Sim.onSignals();
+      Render.dirty = true;
     } catch (e) {
       console.warn('signalisation', key, e);
       w.sigChunks.delete(key);
@@ -1237,27 +1315,27 @@ function runTime(d, vc, a, b) {
 
 const CATALOG = {
   bus: [
-    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 14, acc: 1.2 },
-    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 24, acc: 1.0 },
-    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 15, acc: 1.25 },
-    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 28, acc: 0.85 },
-    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 32, acc: 0.9 },
-    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 40, acc: 0.85 },
+    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 14, acc: 1.2 , len: 8 },
+    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 24, acc: 1.0 , len: 12 },
+    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 15, acc: 1.25 , len: 12 },
+    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 28, acc: 0.85 , len: 12 },
+    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 32, acc: 0.9 , len: 18 },
+    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 40, acc: 0.85 , len: 24 },
   ],
   metro: [
-    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 70, acc: 1.0 },
-    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 95, acc: 1.0 },
-    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 45, acc: 1.3 },
+    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 70, acc: 1.0 , len: 45 },
+    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 95, acc: 1.0 , len: 75 },
+    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 45, acc: 1.3 , len: 90 },
   ],
   ter: [
-    { id: 't1', name: 'Régio 1', desc: 'Autorail diesel 1 caisse', cap: 140, kmh: 100, price: 1.6e6, op: 90, acc: 0.5 },
-    { id: 't4', name: 'Régio 4', desc: 'Automotrice électrique 4 caisses', cap: 310, kmh: 100, price: 3.6e6, op: 140, acc: 0.75 },
-    { id: 'td', name: 'Régio Duplex', desc: 'Rame électrique à deux niveaux', cap: 560, kmh: 100, price: 5.8e6, op: 190, acc: 0.6 },
+    { id: 't1', name: 'Régio 1', desc: 'Autorail diesel 1 caisse', cap: 140, kmh: 100, price: 1.6e6, op: 90, acc: 0.5 , len: 27 },
+    { id: 't4', name: 'Régio 4', desc: 'Automotrice électrique 4 caisses', cap: 310, kmh: 100, price: 3.6e6, op: 140, acc: 0.75 , len: 72 },
+    { id: 'td', name: 'Régio Duplex', desc: 'Rame électrique à deux niveaux', cap: 560, kmh: 100, price: 5.8e6, op: 190, acc: 0.6 , len: 110 },
   ],
   boat: [
-    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 12, price: 320000, op: 22, acc: 0.3 },
-    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 14, price: 720000, op: 35, acc: 0.25 },
-    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 16, price: 1.3e6, op: 50, acc: 0.2 },
+    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 12, price: 320000, op: 22, acc: 0.3 , len: 16 },
+    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 14, price: 720000, op: 35, acc: 0.25 , len: 26 },
+    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 16, price: 1.3e6, op: 50, acc: 0.2 , len: 34 },
   ],
 };
 const MODEL = {};
@@ -1668,13 +1746,33 @@ const Lines = {
     if (G.ui && G.ui.follow && line.veh.includes(G.ui.follow)) G.ui.follow = null;
   },
 
-  posOf(line, v) {
+  /** position ; avec hd (demi-longueur en m), le cap suit la corde entre l'avant et l'arrière du véhicule */
+  posOf(line, v, hd) {
     const L = line.L0;
     const dir = line.loop || v.u <= L ? 0 : 1;
     const P = line.P[dir];
-    const p = pointAt(P, dir ? v.u - L : v.u);
-    const a = P.pts[p[2]], b = P.pts[Math.min(P.pts.length - 1, p[2] + 1)];
-    return { mx: p[0], my: p[1], seg: p[2], dir, ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+    const s = dir ? v.u - L : v.u;
+    const p = pointAt(P, s);
+    let ang;
+    if (hd) {
+      let s1 = s + hd, s0 = s - hd;
+      const f = line.loop ? pointAt(P, ((s1 % P.L) + P.L) % P.L) : pointAt(P, Math.min(P.L, s1));
+      const r = line.loop ? pointAt(P, ((s0 % P.L) + P.L) % P.L) : pointAt(P, Math.max(0, s0));
+      if (Math.hypot(f[0] - r[0], f[1] - r[1]) > 1e-12) ang = Math.atan2(f[1] - r[1], f[0] - r[0]);
+    }
+    if (ang === undefined) {
+      const a = P.pts[p[2]], b = P.pts[Math.min(P.pts.length - 1, p[2] + 1)];
+      ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    }
+    return { mx: p[0], my: p[1], seg: p[2], dir, ang };
+  },
+  /** limitation de vitesse au point où se trouve le véhicule (km/h) */
+  limitAt(line, v) {
+    if (line.mode !== 'bus') return null;
+    const p = this.posOf(line, v);
+    const segE = line.segEs ? line.segEs[p.dir] : line.segE;
+    const e = segE ? segE[p.seg] : -1;
+    return e >= 0 && G.w.road.lim[e] > 0 ? G.w.road.lim[e] : null;
   },
   label(line) {
     if (line.mode === 'metro') return String(line.num);
@@ -2074,7 +2172,7 @@ const Sim = {
         for (let i = 0; i < P.pts.length - 1; i++) {
           const segL = P.cum[i + 1] - P.cum[i];
           const e = segE ? segE[i] : -1;
-          const vmax = Math.min(e >= 0 ? net.spd[e] : 8.3, 13.9);
+          const vmax = Math.min((e >= 0 && net.lim[e] > 0 ? net.lim[e] : 50) / 3.6 * 0.95, 13.9);
           num += segL; den += segL / (vmax * Traffic.busFactor(e, l) * (l.signal ? 1.05 : 1) * Events.speedMult('bus'));
         }
       });
@@ -2118,8 +2216,8 @@ const Sim = {
     const segE = l.segEs ? l.segEs[p.dir || 0] : l.segE;
     const e = segE ? segE[p.seg] : -1;
     if (l.mode === 'bus') {
-      const lim = e >= 0 ? G.w.road.spd[e] : 8.3;
-      return Math.max(1.5, Math.min(vm, lim) * Traffic.busFactor(e, l) * sm);
+      const lim = (e >= 0 && G.w.road.lim[e] > 0 ? G.w.road.lim[e] : 50) / 3.6;  // limitation légale
+      return Math.max(1.5, Math.min(vm, lim * 0.95) * Traffic.busFactor(e, l) * sm);
     }
     if (l.mode === 'metro') return vm * 0.97;
     if (l.mode === 'ter') {
@@ -2127,6 +2225,24 @@ const Sim = {
       return Math.max(3, Math.min(vm, PHYS.ter.vmax, Math.max(lim, 60 / 3.6)) * sm);
     }
     return Math.max(0.5, vm * (sm || 0.01));
+  },
+
+  /** anticipation des panneaux : freine avant d'entrer dans une zone plus lente */
+  limitAhead(l, v, p, b) {
+    const P = l.P[p.dir], segE = l.segEs ? l.segEs[p.dir] : null;
+    if (!segE) return Infinity;
+    const net = G.w.road, sLoc = p.dir ? v.u - l.L0 : v.u;
+    const look = (v.v * v.v) / (2 * b) + 15;
+    let best = Infinity;
+    for (let i = p.seg + 1; i < P.pts.length - 1; i++) {
+      const d = P.cum[i] - sLoc;
+      if (d > look) break;
+      const e = segE[i]; if (e < 0) continue;
+      const lim = (net.lim[e] > 0 ? net.lim[e] : 50) / 3.6 * 0.95;
+      const vAllowed = Math.sqrt(lim * lim + 2 * b * 0.8 * Math.max(0, d - 8));
+      if (vAllowed < best) best = vAllowed;
+    }
+    return best;
   },
 
   /** attente à un feu / stop / cédez-le-passage (en secondes de jeu) */
@@ -2178,6 +2294,7 @@ const Sim = {
           const gap = Math.max(0, target - v.u);
           const p = Lines.posOf(l, v);
           let vt = Math.min(this.cruise(l, v, p), Math.sqrt(2 * b * gap));
+          if (l.mode === 'bus') vt = Math.min(vt, this.limitAhead(l, v, p, b));
           // distance de sécurité avec le véhicule de devant : jamais de dépassement ni de chevauchement
           const L = lead && lead.get(v);
           if (L && L !== v) {
@@ -3258,6 +3375,9 @@ const Render = {
 
   /* ---------- calque dynamique : véhicules, construction ---------- */
   drawDyn() {
+    const tn = performance.now();
+    this.fdt = this.lastDyn ? Math.min(0.1, (tn - this.lastDyn) / 1000) : 0.016;
+    this.lastDyn = tn;
     const o = this.origin();
     const ctx = this.ctxD, W = this.W, H = this.H, s = G.s, z = o.z;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -3294,10 +3414,19 @@ const Render = {
       if (l.mode === 'bus' && z < 11.5) continue;
       for (const v of l.veh) {
         if (v.hidden) continue;
-        const p = Lines.posOf(l, v);
+        const md = MODEL[v.model];
+        const p = Lines.posOf(l, v, (md.len || 12) / 2);
         const x = X(p.mx), y = Y(p.my);
         if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
-        const cap = MODEL[v.model].cap, f = v.load / cap;
+        // rotation lissée : la corde suit déjà les virages ; les demi-tours au terminus sont animés
+        if (v.angD === undefined) v.angD = p.ang;
+        let da = p.ang - v.angD; da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (Math.abs(da) > 1.0) {
+          const rate = 7 * Math.max(1, (G.speed === 'rt' ? 1 : 60 * G.speed) / 15) * this.fdt;
+          v.angD += clamp(da, -rate, rate);
+        } else v.angD += da * Math.min(1, this.fdt / 0.08); // lissage léger, sans retard visible
+        p.ang = v.angD;
+        const cap = md.cap, f = v.load / cap;
         this.vpos.push({ x, y, l, v });
         const dims = { bus: [13, 7], metro: [19, 8.5], ter: [22, 8.5], boat: [15, 8.5] }[l.mode];
         const L2 = dims[0] * zf / 2, W2 = dims[1] * zf / 2;
@@ -3459,6 +3588,7 @@ const $ = (sel) => document.querySelector(sel);
 const UI = {
   init() {
     document.addEventListener('click', (e) => {
+      if (!e.target.closest('#speedMenu, #btnSpeed')) { const sm = $('#speedMenu'); if (sm && !sm.hidden) sm.hidden = true; }
       const el = e.target.closest('[data-act]');
       if (!el) return;
       const fn = ACT[el.dataset.act];
@@ -3499,7 +3629,7 @@ const UI = {
     $('#wx').title = EV_INFO[Events.weather()].title;
     $('#btnPlay').innerHTML = G.paused ? icon('play') : icon('pause');
     $('#btnPlay').setAttribute('aria-label', G.paused ? 'Reprendre' : 'Pause');
-    $('#btnSpeed').textContent = G.speed === 'rt' ? 'Réel' : '×' + G.speed;
+    $('#btnSpeed').innerHTML = (G.speed === 'rt' ? 'Réel' : '×' + G.speed) + '<i class="caret"></i>';
     $('#btnSpeed').classList.toggle('rt', G.speed === 'rt');
   },
   refreshInfoBadge() {
@@ -3517,6 +3647,18 @@ const UI = {
     if (G.s.settings.base === 'pale') p.style.filter = `grayscale(1) sepia(.18) contrast(.62) brightness(${(1.28 * k).toFixed(2)})`;
     else p.style.filter = k < 1 ? `brightness(${k.toFixed(2)}) saturate(${(1 - 0.4 * nf).toFixed(2)})` : 'none';
     if (Math.abs(nf - (this.lastNf ?? -1)) > 0.01) { this.lastNf = nf; Render.dirty = true; }
+  },
+
+  /** menu déroulant des vitesses, du temps réel et de la météo */
+  speedMenu(open) {
+    const m = $('#speedMenu');
+    if (!open) { m.hidden = true; return; }
+    const s = G.s, cur = G.paused ? 'pause' : G.speed;
+    const items = [['pause', 'Pause', ''], [1, '×1', '1 min de jeu par seconde'], [5, '×5', '5 min par seconde'], [20, '×20', '20 min par seconde'], [60, '×60', '1 h de jeu par seconde'], ['rt', 'Temps réel', 'Heure de Paris, 1 min = 1 min']];
+    const wx = s.settings.realWeather && s.wxReal ? s.wxReal.label + ', ' + Math.round(s.wxReal.temp) + ' °C' : 'Météo-France, ville de départ';
+    m.innerHTML = items.map(([v, lab, sub]) => `<button class="sm-it ${String(cur) === String(v) ? 'on' : ''} ${v === 'rt' ? 'sm-rt' : ''}" data-act="setSpeed" data-arg="${v}"><b>${lab}</b>${sub ? `<small>${sub}</small>` : ''}${String(cur) === String(v) ? icon('check') : ''}</button>`).join('') +
+      `<label class="tgl sm-wx"><input type="checkbox" data-change="setting" data-arg="realWeather" ${s.settings.realWeather ? 'checked' : ''}><span><b>Météo réelle</b><br><small>${esc(wx)}</small></span></label>`;
+    m.hidden = false;
   },
 
   /* ---- notifications ---- */
@@ -3584,7 +3726,7 @@ const UI = {
       <div class="kv"><span>À bord</span><b>${fmtInt(v.load)} / ${md.cap} · ${fmtPct(f)}</b></div>
       <div class="kv"><span>Prochain arrêt</span><b>${esc(next)}</b></div>
       <div class="kv"><span>Direction</span><b>${esc(dir)}</b></div>
-      <div class="kv"><span>Vitesse</span><b>${v.hold === 'queue' ? 'derrière le véhicule précédent' : v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage', reg: 'régulation (garde l’écart)', queue: 'derrière le véhicule précédent' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
+      <div class="kv"><span>Vitesse${Lines.limitAt(l, v) ? ' · limitée à ' + Lines.limitAt(l, v) + ' km/h' : ''}</span><b>${v.hold === 'queue' ? 'derrière le véhicule précédent' : v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage', reg: 'régulation (garde l’écart)', queue: 'derrière le véhicule précédent' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
       <div class="row2"><button class="btn sm ${G.ui.follow === v ? 'on' : ''}" data-act="follow">${icon('follow')} ${G.ui.follow === v ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="openLine" data-arg="${l.id}">Voir la ligne</button></div>`);
   },
   showStop(l, k) {
@@ -3758,6 +3900,7 @@ const SHEETS = {
       ${statLine('Vitesse commerciale', Math.round(l.speedAvg || 0) + ' km/h')}
       ${statLine('Capacité totale', fmtInt(cap) + ' places')}
       ${statLine('Population desservie', fmtInt(l.catchPop || 0))}
+      ${l.mode === 'bus' ? statLine('Limitations sur le parcours', limRange(l)) : ''}
       ${l.mode === 'bus' ? statLine('Feux · stops · cédez-le-passage', ['sig', 'stop', 'yield'].map((t) => (l.ctl || []).filter((c) => c.t === t).length).join(' · ')) : ''}
       ${y ? statLine('Hier', fmtInt(y.pax) + ' voy. · ' + fmtEur(y.fares + y.ads - y.ops)) : ''}
       ${section('Véhicules')}${vrows}
@@ -3916,6 +4059,19 @@ function barChart(items, posOnly) {
   }).join('');
   const last = items[items.length - 1];
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Graphique"><line x1="0" x2="${W}" y1="${zero}" y2="${zero}" class="axis"/>${bars}</svg><small>Dernier jour : <b>${posOnly ? fmtInt(last.v) : fmtEur(last.v)}</b> · max ${posOnly ? fmtInt(max) : fmtEur(max)}</small></div>`;
+}
+
+/** plage des limitations de vitesse rencontrées par une ligne de bus, pondérée par la distance */
+function limRange(l) {
+  const net = G.w.road, by = {};
+  (l.P || [l.path]).forEach((P, dir) => {
+    if (!P) return;
+    const segE = l.segEs ? l.segEs[dir] : null; if (!segE) return;
+    for (let i = 0; i < P.pts.length - 1; i++) { const e = segE[i]; if (e < 0) continue; const v = net.lim[e] > 0 ? net.lim[e] : 50; by[v] = (by[v] || 0) + (P.cum[i + 1] - P.cum[i]); }
+  });
+  const tot = Object.values(by).reduce((a, b) => a + b, 0);
+  if (!tot) return '—';
+  return Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([v, d]) => `${v} km/h (${Math.round(d / tot * 100)} %)`).join(' · ');
 }
 
 /** secondes pour atteindre la vitesse maximale depuis l'arrêt */
@@ -4111,7 +4267,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.7';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -4124,20 +4280,20 @@ const ACT = {
   closeCard() { UI.closeCard(); },
   closeModal() { UI.closeModal(); },
   play() { G.paused = !G.paused; if (!G.paused && G.speed === 'rt') RealTime.sync(); UI.refreshTop(); },
-  speed() {
-    const v = [1, 5, 20, 60, 'rt'];
-    const next = v[(v.indexOf(G.speed) + 1) % v.length];
-    if (next === 'rt') {
-      const t = Time.label((RealTime.parisMs() - G.s.startMs) / 60000);
-      UI.modal(`<div class="plate big">${icon('target')} Temps réel</div>
-        <p>Le jeu avancera au rythme de la vraie vie : 1 minute de jeu = 1 minute réelle. L’horloge se cale sur l’heure de Paris : <b>${t.day}, ${t.time}</b>.</p>
-        <p class="sub">${G.s.min / 1440 > (RealTime.parisMs() - G.s.startMs) / 864e5 ? 'Votre partie est en avance sur le temps réel : l’horloge reviendra à la date du jour.' : 'Si le saut est long, vos véhicules repartent de leurs terminus.'} Appli fermée, le jeu continue au même rythme.</p>
-        <label class="tgl"><input type="checkbox" data-change="setting" data-arg="realWeather" ${G.s.settings.realWeather ? 'checked' : ''}><span>Météo réelle de ${esc(G.s.city.nom)} (Météo-France)</span></label>
-        <div class="row2"><button class="btn" data-act="rtCancel">Annuler</button><button class="btn primary" data-act="rtOn">Passer en temps réel</button></div>`);
-      return;
+  speed() { UI.speedMenu(!$('#speedMenu').hidden ? false : true); },
+  setSpeed(v) {
+    if (v === 'pause') { G.paused = true; }
+    else if (v === 'rt') {
+      if (G.speed !== 'rt') {
+        RealTime.enable();
+        const lab = Time.label(G.s.min);
+        UI.toast('Temps réel : horloge calée sur Paris, ' + lab.day + ' ' + lab.time + '.', 'ok');
+      } else { G.paused = false; RealTime.sync(); }
+    } else {
+      if (G.speed === 'rt') RealTime.disable();
+      G.speed = +v; G.paused = false;
     }
-    if (G.speed === 'rt') RealTime.disable();
-    G.speed = next; G.paused = false; UI.refreshTop();
+    UI.speedMenu(false); UI.refreshTop();
   },
   rtOn() { UI.closeModal(); RealTime.enable(); },
   rtCancel() { UI.closeModal(); G.speed = 1; G.paused = false; UI.refreshTop(); },

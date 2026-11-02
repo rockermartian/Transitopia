@@ -248,7 +248,7 @@ ul.fx li{margin:2px 0}
 .bb-tools{flex-basis:100%;margin-bottom:2px}
 #plan{position:absolute;inset:0;z-index:1400;background:var(--paper);display:flex;flex-direction:column;padding-top:var(--sat)}
 #plan[hidden]{display:none}
-body.plan-open #snacks,body.plan-open #toasts{display:none}
+body.plan-open #snacks,body.plan-open #toasts,#modal:not([hidden]) ~ #snacks,#modal:not([hidden]) ~ #toasts{display:none}
 .plan-h{display:flex;align-items:center;gap:8px;padding:8px 12px 6px max(10px,var(--sal))}
 .plan-h b{flex:1;font:600 19px/1.1 var(--f-display)}
 .plan-f{margin:0 12px 6px}
@@ -2860,6 +2860,26 @@ const Sim = {
     return ds.reduce((a, d) => a + Eco.dayProfit(d), 0) / ds.length;
   },
 
+  /** décale toutes les dates du jeu de d minutes (retour en arrière de l'horloge) */
+  shiftTime(d) {
+    const s = G.s;
+    for (const e of s.events) { e.start += d; e.end += d; }
+    for (const t of s.training || []) { t.start += d; t.end += d; }
+    for (const l of s.lines) {
+      if (l.buildEnd) l.buildEnd += d;
+      if (l.created !== undefined) l.created += d;
+      for (const v of l.veh) {
+        if (v.towAt) v.towAt += d;
+        if (v.brokenUntil) v.brokenUntil += d;
+        if (v.incUntil) v.incUntil += d * 60;
+      }
+    }
+    for (const ln of s.loans || []) if (ln.taken !== undefined) ln.taken += d;
+    for (const j of s.journal || []) j.t += d;
+    for (const n of s.notifs || []) n.t += d;
+    for (const x of s.days || []) if (x.date !== undefined) x.date += d;
+    if (s.evLast) for (const k in s.evLast) s.evLast[k] += d;
+  },
   /** progression pendant l'absence (mode « idle ») */
   offline(realSec, gameMinForced) {
     const s = G.s;
@@ -2908,7 +2928,11 @@ const RealTime = {
   jump(targetSec) {
     const s = G.s;
     const dayBefore = Math.floor(s.min / 1440);
-    s.sec = targetSec; s.min = Math.floor(targetSec / 60); s.nextMin = s.min + 1;
+    const newMin = Math.floor(targetSec / 60);
+    // l'horloge recule (le jeu avait pris de l'avance sur l'heure réelle) : tout ce qui est daté recule d'autant,
+    // pour que les événements en cours le restent avec la même durée restante
+    if (newMin < s.min) Sim.shiftTime(newMin - s.min);
+    s.sec = targetSec; s.min = newMin; s.nextMin = s.min + 1;
     if (Math.floor(s.min / 1440) !== dayBefore) Sim.newDay();
     s.events = s.events.filter((e) => e.end > s.min && e.start < s.min + 2880);
     for (const l of s.lines) {
@@ -3158,7 +3182,7 @@ const EVENTS = [
       return { start: st, dur: Rr(90, 180), mx: c.mx, my: c.my, announce: true, desc: 'Un ministre en visite demain : périmètre de sécurité et rues fermées en centre-ville.', traffic: { mx: c.mx, my: c.my, r: 650, mult: 2.6 } }; } },
   { id: 'departs', cat: 'trafic', tone: -1, title: 'Grands départs en vacances', w: 3, cd: 96, glyph: '!', when: (c) => (c.month === 6 || c.month === 7) && c.dow === 5 && c.h >= 10 && c.h <= 13,
     make() { const st = EvCtx.day0() + 15 * 60;
-      return { start: st, dur: 360, desc: 'Bison Futé voit rouge : la ville se vide en fin de journée, la circulation sature.', traffic: { all: 1.3 } }; } },
+      return { start: st, dur: 360, announce: true, desc: 'Bison Futé voit rouge : la ville se vide en fin de journée, la circulation sature.', traffic: { all: 1.3 } }; } },
   { id: 'sansvoiture', cat: 'fete', tone: 3, title: 'Journée sans voiture', w: 1, cd: 300, glyph: '★', when: (c) => c.dow === 5,
     make() { const st = EvCtx.day0() + 2 * 1440 + 600;
       return { start: st, dur: 480, announce: true, desc: 'Dimanche, le centre est réservé aux piétons, vélos et transports en commun : affluence record attendue.', traffic: { all: 0.55 }, demand: { all: true, mult: 1.45 } }; } },
@@ -3237,7 +3261,7 @@ const EVENTS = [
       return { dur: Rr(240, 420), mx: p.mx, my: p.my, demand: { mx: p.mx, my: p.my, r: 800, mult: 1.8 }, desc: `Des cars de touristes déposent leurs visiteurs près de ${p.name || 'du centre'} : beaucoup de monde aux arrêts.` }; } },
   { id: 'rentree', cat: 'culture', tone: 2, title: 'Rentrée universitaire', w: 3, cd: 600, glyph: '★', when: (c) => c.month === 8,
     make() { const p = EvCtx.poi(['university', 'college']) || EvCtx.center();
-      return { dur: 3 * 1440, mx: p.mx, my: p.my, demand: { mx: p.mx, my: p.my, r: 1200, mult: 1.5 }, desc: `Les étudiants reviennent${p.name ? ' à ' + p.name : ''} : fréquentation en forte hausse pendant trois jours.` }; } },
+      return { start: EvCtx.day0() + 1440 + 420, dur: 3 * 1440, mx: p.mx, my: p.my, announce: true, demand: { mx: p.mx, my: p.my, r: 1200, mult: 1.5 }, desc: `Demain, les étudiants reviennent${p.name ? ' à ' + p.name : ''} : fréquentation en forte hausse pendant trois jours.` }; } },
 
   { id: 'musicien', cat: 'usager', tone: 1, title: 'Musicien à bord', w: 3, cd: 24, glyph: '♪',
     make() { const l = EvCtx.line(); if (!l) return null;
@@ -3264,7 +3288,7 @@ const EVENTS = [
     make() { const p = EvCtx.poi(['mall', 'business']) || EvCtx.anyStop()?.st; if (!p) return null; const st = EvCtx.day0() + 1440 + 600;
       return { start: st, dur: 4 * 1440, mx: p.mx, my: p.my, announce: true, desc: `Ouverture demain d’un grand pôle commercial près de ${p.name} : la fréquentation des lignes voisines va bondir.`, demand: { mx: p.mx, my: p.my, r: 900, mult: 1.6 } }; } },
   { id: 'grosfroid', cat: 'meteo', tone: 0, title: 'Grand froid', w: 1.5, cd: 120, glyph: '≈', when: (c) => c.month === 11 || c.month <= 1,
-    make() { return { dur: 1440, demand: { all: true, mult: 1.15 }, speed: { mode: 'bus', mult: 0.9 }, desc: 'Températures négatives : plus de monde dans les transports, mais des bus prudents sur les chaussées glissantes.' }; } },
+    make() { return { start: EvCtx.day0() + 1440, dur: 1440, announce: true, demand: { all: true, mult: 1.15 }, speed: { mode: 'bus', mult: 0.9 }, desc: 'Météo-France annonce des températures négatives demain : plus de monde dans les transports, mais des bus prudents sur les chaussées glissantes.' }; } },
   { id: 'pont', cat: 'eco', tone: 0, title: 'Pont et vacances', w: 1.5, cd: 240, glyph: '≈', when: (c) => c.dow === 3,
     make() { const st = EvCtx.day0() + 1440 + 300;
       return { start: st, dur: 1140, announce: true, traffic: { all: 0.8 }, demand: { all: true, mult: 0.8 }, desc: 'Demain, beaucoup d’actifs font le pont : rues plus calmes mais transports moins remplis.' }; } },
@@ -3378,13 +3402,17 @@ Object.assign(Events, {
     if (e.tone === undefined) e.tone = this.tone(e);
     if (!e.cat) e.cat = (this.def(e) || {}).cat || (e.kind === 'strike' ? 'social' : 'reseau');
     if (e.applied === undefined) e.applied = e.start <= G.s.min;
+    // réparation des parties touchées par l'ancien retour en arrière de l'horloge :
+    // un événement déjà commencé mais daté dans le futur redémarre maintenant, même durée restante
+    if (e.applied && !e.announce && e.kind !== 'strike' && e.start > G.s.min) { const d = e.start - G.s.min; e.start -= d; e.end -= d; }
     e.dialogOpen = false;
     return e;
   },
 
   /* ---- effets agrégés ---- */
   active() { return this.live(); },
-  upcoming() { const m = G.s.min; return G.s.events.filter((e) => !e.void && e.start > m); },
+  /** événements à venir connus du public : seulement ceux qui sont annoncés (les imprévisibles ne le sont jamais) */
+  upcoming() { const m = G.s.min; return G.s.events.filter((e) => !e.void && e.start > m && (e.announce || e.kind === 'strike')); },
   live() { const m = G.s.min; return G.s.events.filter((e) => !e.void && e.start <= m && e.end > m); },
   trafficEvents() { return this.live().filter((e) => e.traffic).map((e) => e.traffic); },
   speedMult(mode) {
@@ -3832,12 +3860,159 @@ function hull(flat, path) {
   path.closePath();
 }
 
-/* ---------- bâtiments (BD TOPO), par petites tuiles chargées à la demande ---------- */
-const BT_LAT = 0.0075, BT_LON = 0.01; // ≈ 830 m × 780 m
+/* ---------- bâtiments (BD TOPO) et ombres : calcul dans un « worker », hors du fil principal ----------
+   Le worker télécharge et compacte les bâtiments, puis dessine les ombres dans une image (demi-résolution).
+   Le jeu se contente de coller cette image ; elle n'est recalculée que si le soleil a bougé (~2°),
+   si l'on change de zoom ou si l'on sort de la zone déjà dessinée. */
+const BT_LAT = 0.0075, BT_LON = 0.01; // tuiles de ≈ 830 m × 780 m
+const SHADOW_WORKER = `
+const lonToMx = (lon) => (lon + 180) / 360;
+const latToMy = (lat) => { const s = Math.sin(lat * Math.PI / 180); return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI); };
+const tiles = new Map();
+function compact(gj, minStep) {
+  const h = [], o = [0], p = [];
+  for (const f of gj.features || []) {
+    const g = f.geometry, pr = f.properties || {}; if (!g) continue;
+    let ht = +pr.hauteur || (+pr.nombre_d_etages ? +pr.nombre_d_etages * 3 + 1 : 0) || 6;
+    if (ht < 2.5) continue;
+    ht = Math.min(ht, 200);
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    for (const poly of polys) {
+      const ring = poly[0]; if (!ring || ring.length < 4) continue;
+      const pts = [];
+      for (const c of ring) {
+        const x = lonToMx(c[0]), y = latToMy(c[1]), n = pts.length;
+        if (n && Math.abs(x - pts[n - 2]) + Math.abs(y - pts[n - 1]) < minStep) continue;
+        pts.push(x, y);
+      }
+      if (pts.length >= 2 && Math.abs(pts[0] - pts[pts.length - 2]) + Math.abs(pts[1] - pts[pts.length - 1]) < minStep) pts.length -= 2;
+      if (pts.length < 6) continue;
+      const nv = pts.length / 2, step = Math.ceil(nv / 24);
+      for (let v = 0; v < nv; v += step) p.push(pts[2 * v], pts[2 * v + 1]);
+      h.push(Math.round(ht * 10) / 10); o.push(p.length);
+    }
+  }
+  return { h, o, p };
+}
+function prepare(d) {
+  const n = d.h.length, bb = new Float64Array(4 * n), P = Float64Array.from(d.p);
+  for (let b = 0; b < n; b++) {
+    const a = d.o[b], z = d.o[b + 1];
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (let i = a; i < z; i += 2) { if (P[i] < minx) minx = P[i]; if (P[i] > maxx) maxx = P[i]; if (P[i + 1] < miny) miny = P[i + 1]; if (P[i + 1] > maxy) maxy = P[i + 1]; }
+    bb[4 * b] = minx; bb[4 * b + 1] = miny; bb[4 * b + 2] = maxx; bb[4 * b + 3] = maxy;
+  }
+  return { h: Float32Array.from(d.h), o: Int32Array.from(d.o), p: P, bb, n };
+}
+async function fetchAll(b) {
+  const out = [];
+  let start = 0, props = true;
+  for (let page = 0; page < 20; page++) {
+    const u = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:batiment' +
+      '&OUTPUTFORMAT=application/json&COUNT=5000&STARTINDEX=' + start + (props ? '&PROPERTYNAME=geometrie,hauteur,nombre_d_etages' : '') +
+      '&BBOX=' + [b.w, b.s, b.e, b.n].map((x) => x.toFixed(5)).join(',') + ',EPSG:4326';
+    let j;
+    try { const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status); j = await r.json(); }
+    catch (e) { if (props && page === 0) { props = false; page--; continue; } throw e; }
+    const f = j.features || [];
+    for (const x of f) out.push(x);
+    const total = j.numberMatched ?? j.totalFeatures;
+    start += f.length;
+    if (!f.length || (typeof total === 'number' && start >= total) || (typeof total !== 'number' && f.length < 5000)) break;
+  }
+  return { features: out };
+}
+const buf = [];
+function hull(n) {
+  // enveloppe convexe des n points de buf (chaîne monotone) ; renvoie la liste d'indices
+  const idx = []; for (let i = 0; i < n; i++) idx.push(i);
+  idx.sort((u, v) => buf[2 * u] - buf[2 * v] || buf[2 * u + 1] - buf[2 * v + 1]);
+  const cr = (o, a, b) => (buf[2 * a] - buf[2 * o]) * (buf[2 * b + 1] - buf[2 * o + 1]) - (buf[2 * a + 1] - buf[2 * o + 1]) * (buf[2 * b] - buf[2 * o]);
+  const lo = [], up = [];
+  for (const i of idx) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], i) <= 0) lo.pop(); lo.push(i); }
+  for (let t = n - 1; t >= 0; t--) { const i = idx[t]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], i) <= 0) up.pop(); up.push(i); }
+  lo.pop(); up.pop();
+  return lo.concat(up);
+}
+function render(q) {
+  const W = Math.max(1, Math.round(q.w * q.res)), H = Math.max(1, Math.round(q.h * q.res));
+  const cv = new OffscreenCanvas(W, H), ctx = cv.getContext('2d');
+  ctx.setTransform(q.res, 0, 0, q.res, 0, 0);
+  const shadow = new Path2D(), roofs = new Path2D();
+  const k = q.k, ox = q.ox, oy = q.oy, sx = q.sx, sy = q.sy;
+  let count = 0;
+  for (const t of tiles.values()) {
+    const { h, o, p, bb, n } = t;
+    for (let b = 0; b < n; b++) {
+      if (bb[4 * b + 2] < q.minx || bb[4 * b] > q.maxx || bb[4 * b + 3] < q.miny || bb[4 * b + 1] > q.maxy) continue;
+      const a = o[b], e = o[b + 1], dx = sx * h[b], dy = sy * h[b];
+      // bâtiments minuscules à l'écran : on les ignore
+      if ((bb[4 * b + 2] - bb[4 * b]) * k < 1.2 && (bb[4 * b + 3] - bb[4 * b + 1]) * k < 1.2) continue;
+      let m = 0;
+      for (let i = a; i < e; i += 2) {
+        const x = p[i] * k - ox, y = p[i + 1] * k - oy;
+        buf[2 * m] = x; buf[2 * m + 1] = y; m++;
+        buf[2 * m] = x + dx; buf[2 * m + 1] = y + dy; m++;
+        if (i === a) roofs.moveTo(x, y); else roofs.lineTo(x, y);
+      }
+      roofs.closePath();
+      const hl = hull(m);
+      if (hl.length >= 3) { shadow.moveTo(buf[2 * hl[0]], buf[2 * hl[0] + 1]); for (let t2 = 1; t2 < hl.length; t2++) shadow.lineTo(buf[2 * hl[t2]], buf[2 * hl[t2] + 1]); shadow.closePath(); }
+      count++;
+    }
+  }
+  ctx.fillStyle = 'rgb(28,32,52)'; ctx.fill(shadow, 'nonzero');
+  ctx.globalCompositeOperation = 'destination-out'; ctx.fill(roofs, 'nonzero');
+  const bmp = cv.transferToImageBitmap();
+  postMessage({ t: 'img', id: q.id, bmp, count }, [bmp]);
+}
+let pending = null, busy = false;
+function pump() { if (busy || !pending) return; const q = pending; pending = null; busy = true; try { render(q); } finally { busy = false; } setTimeout(pump, 0); }
+onmessage = async (ev) => {
+  const m = ev.data;
+  if (m.t === 'tile') { tiles.set(m.k, prepare(m.d)); postMessage({ t: 'ready', k: m.k }); }
+  else if (m.t === 'load') {
+    try { const gj = await fetchAll(m.b); const d = compact(gj, m.minStep); tiles.set(m.k, prepare(d)); postMessage({ t: 'loaded', k: m.k, d }); }
+    catch (e) { postMessage({ t: 'fail', k: m.k, err: String(e) }); }
+  }
+  else if (m.t === 'render') { pending = m.q; pump(); } // seule la dernière demande compte
+  else if (m.t === 'clear') tiles.clear();
+};
+`;
+
 const Shadows = {
-  tiles: new Map(), loading: new Set(), failed: new Set(),
-  enabled() { const s = G.s; return !!(s && s.settings.shadows !== false && s.settings.base === 'plan'); },
+  tiles: new Set(), loading: new Set(), failed: new Set(),
+  img: null, reqId: 0, inFlight: false, want: null, ver: 0,
+  enabled() { const s = G.s; return !!(s && s.settings.shadows !== false && s.settings.base === 'plan' && this.worker() !== false); },
   key(i, j) { return i + ':' + j; },
+  /** worker créé à la demande ; false si le téléphone ne sait pas dessiner hors du fil principal */
+  worker() {
+    if (this.w !== undefined) return this.w;
+    try {
+      if (typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined') throw new Error('non pris en charge');
+      const url = URL.createObjectURL(new Blob([SHADOW_WORKER], { type: 'text/javascript' }));
+      this.w = new Worker(url);
+      this.w.onmessage = (ev) => this.onMsg(ev.data);
+    } catch (e) { console.warn('ombres indisponibles', e); this.w = false; }
+    return this.w;
+  },
+  onMsg(m) {
+    if (m.t === 'img') {
+      this.inFlight = false;
+      if (this.want && m.id === this.want.id) { if (this.img && this.img.bmp) this.img.bmp.close?.(); this.img = { ...this.want, bmp: m.bmp }; this.lastCount = m.count; Render.dirty = true; }
+      else m.bmp.close?.();
+      if (this.queued) { const q = this.queued; this.queued = null; this.send(q); }
+    } else if (m.t === 'loaded' || m.t === 'ready') {
+      this.loading.delete(m.k); this.tiles.add(m.k);
+      if (m.t === 'loaded') Cache.set('bat:' + m.k, m.d);
+      if (m.t === 'loaded') { Loader.busy--; Loader.status(Loader.busy > 0 ? 'Chargement…' : null); }
+      this.ver++; Render.dirty = true; // nouveaux bâtiments : l'image sera refaite
+    } else if (m.t === 'fail') {
+      this.loading.delete(m.k); this.failed.add(m.k);
+      Loader.busy--; Loader.status(Loader.busy > 0 ? 'Chargement…' : null);
+      setTimeout(() => this.failed.delete(m.k), 120000);
+    }
+  },
   /** soleil du moment : direction de l'ombre (mètres d'ombre par mètre de hauteur) et intensité */
   sun() {
     const s = G.s, p = Sun.pos(s.min, s.city.lat, s.city.lon);
@@ -3847,15 +4022,13 @@ const Shadows = {
     const w = Events.weather();
     const cloud = w === 'rain' || w === 'storm' ? 0.3 : w === 'snow' ? 0.45 : 1;
     const len = Math.min(6, 1 / Math.tan(p.el));             // ombre plafonnée à 6 fois la hauteur (soleil rasant)
-    // l'ombre part à l'opposé du soleil ; à l'écran, le nord est vers le haut
-    return { dx: -Math.sin(p.az) * len, dy: Math.cos(p.az) * len, alpha: 0.24 * f * cloud, el, az: p.az };
+    return { dx: -Math.sin(p.az) * len, dy: Math.cos(p.az) * len, alpha: 0.24 * f * cloud, el, az: p.az, len };
   },
-  /** charge les tuiles de bâtiments visibles (zoom de quartier) */
+  /** charge les tuiles de bâtiments visibles */
   ensure(vb) {
-    if (!this.enabled()) return;
     const i0 = Math.floor(myToLat(vb.maxy) / BT_LAT), i1 = Math.floor(myToLat(vb.miny) / BT_LAT);
     const j0 = Math.floor(mxToLon(vb.minx) / BT_LON), j1 = Math.floor(mxToLon(vb.maxx) / BT_LON);
-    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 16) return; // vue trop large
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 16) return;
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       const k = this.key(i, j);
       if (this.tiles.has(k) || this.loading.has(k) || this.failed.has(k)) continue;
@@ -3863,109 +4036,48 @@ const Shadows = {
     }
   },
   async load(i, j) {
-    const k = this.key(i, j);
+    const k = this.key(i, j), w = this.worker(); if (!w) return;
     this.loading.add(k);
+    const d = await Cache.get('bat:' + k);
+    if (d) { w.postMessage({ t: 'tile', k, d }); return; }
     Loader.busy++; Loader.status('Bâtiments IGN…');
-    try {
-      let d = await Cache.get('bat:' + k);
-      if (!d) {
-        const b = { s: i * BT_LAT, n: (i + 1) * BT_LAT, w: j * BT_LON, e: (j + 1) * BT_LON };
-        const gj = await API.wfsAll('BDTOPO_V3:batiment', b, 'geometrie,hauteur,nombre_d_etages');
-        d = this.compact(gj);
-        await Cache.set('bat:' + k, d);
-      }
-      this.tiles.set(k, this.prepare(d));
-      Render.dirty = true;
-    } catch (e) {
-      console.warn('bâtiments', k, e);
-      this.failed.add(k);
-      setTimeout(() => this.failed.delete(k), 120000);
-    } finally {
-      this.loading.delete(k); Loader.busy--; Loader.status(Loader.busy > 0 ? 'Chargement…' : null);
-    }
+    w.postMessage({ t: 'load', k, b: { s: i * BT_LAT, n: (i + 1) * BT_LAT, w: j * BT_LON, e: (j + 1) * BT_LON }, minStep: meters(0.8) });
   },
-  /** format compact : hauteur + contour simplifié en mercator (pour le cache) */
-  compact(gj) {
-    const h = [], o = [0], p = [];
-    const minStep = meters(0.8);
-    for (const f of gj.features || []) {
-      const g = f.geometry, pr = f.properties || {}; if (!g) continue;
-      let ht = +pr.hauteur || (+pr.nombre_d_etages ? +pr.nombre_d_etages * 3 + 1 : 0) || 6;
-      if (ht < 2.5) continue;
-      ht = Math.min(ht, 200);
-      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-      for (const poly of polys) {
-        const ring = poly[0]; if (!ring || ring.length < 4) continue;
-        const pts = [];
-        for (const c of ring) {
-          const x = lonToMx(c[0]), y = latToMy(c[1]);
-          const n = pts.length;
-          if (n && Math.abs(x - pts[n - 2]) + Math.abs(y - pts[n - 1]) < minStep) continue;
-          pts.push(x, y);
-        }
-        if (pts.length >= 2 && Math.abs(pts[0] - pts[pts.length - 2]) + Math.abs(pts[1] - pts[pts.length - 1]) < minStep) pts.length -= 2;
-        if (pts.length < 6) continue;
-        // contours très détaillés : on garde au plus 32 sommets
-        const nv = pts.length / 2, step = Math.ceil(nv / 32);
-        for (let v = 0; v < nv; v += step) p.push(Math.round(pts[2 * v] * 1e9) / 1e9, Math.round(pts[2 * v + 1] * 1e9) / 1e9);
-        h.push(Math.round(ht * 10) / 10); o.push(p.length);
-      }
-    }
-    return { h, o, p };
-  },
-  /** emprises orientées dans le même sens + boîtes englobantes (pour l'élagage) */
-  prepare(d) {
-    const n = d.h.length, bb = new Float64Array(4 * n), P = Float64Array.from(d.p);
-    for (let b = 0; b < n; b++) {
-      const a = d.o[b], z = d.o[b + 1];
-      let ar = 0, minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-      for (let i = a, j = z - 2; i < z; j = i, i += 2) {
-        ar += (P[j] - P[i]) * (P[j + 1] + P[i + 1]);
-        if (P[i] < minx) minx = P[i]; if (P[i] > maxx) maxx = P[i]; if (P[i + 1] < miny) miny = P[i + 1]; if (P[i + 1] > maxy) maxy = P[i + 1];
-      }
-      if (ar < 0) { // sens unique pour tous les contours (règle de remplissage « non nulle »)
-        for (let i = a, j = z - 2; i < j; i += 2, j -= 2) { const tx = P[i], ty = P[i + 1]; P[i] = P[j]; P[i + 1] = P[j + 1]; P[j] = tx; P[j + 1] = ty; }
-      }
-      bb[4 * b] = minx; bb[4 * b + 1] = miny; bb[4 * b + 2] = maxx; bb[4 * b + 3] = maxy;
-    }
-    return { h: Float32Array.from(d.h), o: Int32Array.from(d.o), p: P, bb, n };
-  },
+  send(q) { this.inFlight = true; this.worker().postMessage({ t: 'render', q }); },
 
-  /** ombres portées des bâtiments, sur le calque statique (avant tout le reste) */
+  /** ombres des bâtiments sur le calque statique : on colle la dernière image, on en redemande une si besoin */
   draw(ctx, o, vb, z) {
     if (!this.enabled() || z < 15.5) return;
     this.ensure(vb);
     const sun = this.sun(); if (!sun || sun.alpha < 0.01) return;
-    const k = o.k, ox = o.x, oy = o.y, ppm = k / G.mpu; // pixels par mètre
-    const sx = sun.dx * ppm, sy = sun.dy * ppm;          // décalage d'ombre en pixels par mètre de hauteur
-    const shadow = new Path2D(), roofs = new Path2D(), pts = [];
-    const mx0 = vb.minx - meters(250), mx1 = vb.maxx + meters(250), my0 = vb.miny - meters(250), my1 = vb.maxy + meters(250);
-    let count = 0;
-    for (const t of this.tiles.values()) {
-      const { h, o: off, p, bb, n } = t;
-      for (let b = 0; b < n; b++) {
-        if (bb[4 * b + 2] < mx0 || bb[4 * b] > mx1 || bb[4 * b + 3] < my0 || bb[4 * b + 1] > my1) continue;
-        const a = off[b], e = off[b + 1], H = h[b], dx = sx * H, dy = sy * H;
-        // ombre = enveloppe convexe de l'emprise et de sa projection au sol (une seule forme par bâtiment)
-        pts.length = 0;
-        for (let i = a; i < e; i += 2) {
-          const x = p[i] * k - ox, y = p[i + 1] * k - oy;
-          pts.push(x, y, x + dx, y + dy);
-          if (i === a) roofs.moveTo(x, y); else roofs.lineTo(x, y);
-        }
-        roofs.closePath();
-        hull(pts, shadow);
-        if (++count > 25000) break;
-      }
+    const R = Render, W = R.W, H = R.H, MX = R.MX, MY = R.MY;
+    // direction d'ombre arrondie (2° et 3 % de longueur) : en dessous, on réutilise l'image
+    const azq = Math.round(sun.az / (Math.PI / 90)), lq = Math.round(Math.log(sun.len) / 0.03);
+    const sunKey = azq + ':' + lq;
+    const im = this.img;
+    const covers = im && Math.abs(im.k - o.k) < 1e-6 && im.sunKey === sunKey && im.ver === this.ver &&
+      o.x - MX >= im.ox && o.y - MY >= im.oy && o.x + W + MX <= im.ox + im.w && o.y + H + MY <= im.oy + im.h;
+    if (!covers) {
+      // nouvelle image : zone visible + marges, un peu plus large pour absorber les petits déplacements
+      const ex = Math.round((W + 2 * MX) * 0.25), ey = Math.round((H + 2 * MY) * 0.25);
+      const ppm = o.k / G.mpu;
+      const q = { id: ++this.reqId, k: o.k, ox: o.x - MX - ex, oy: o.y - MY - ey, w: W + 2 * MX + 2 * ex, h: H + 2 * MY + 2 * ey, res: 0.5,
+        sx: -Math.sin(azq * Math.PI / 90) * Math.exp(lq * 0.03) * ppm,
+        sy: Math.cos(azq * Math.PI / 90) * Math.exp(lq * 0.03) * ppm, sunKey, ver: this.ver };
+      const mg = meters(150);
+      q.minx = q.ox / o.k - mg; q.maxx = (q.ox + q.w) / o.k + mg; q.miny = q.oy / o.k - mg; q.maxy = (q.oy + q.h) / o.k + mg;
+      const same = this.want && this.want.k === q.k && this.want.sunKey === q.sunKey && this.want.ver === this.ver &&
+        o.x - MX >= this.want.ox && o.y - MY >= this.want.oy && o.x + W + MX <= this.want.ox + this.want.w && o.y + H + MY <= this.want.oy + this.want.h;
+      if (!same) { this.want = q; if (this.inFlight) this.queued = q; else this.send(q); }
     }
-    if (!count) return;
-    ctx.save();
-    ctx.fillStyle = `rgba(28,32,52,${sun.alpha.toFixed(3)})`;
-    ctx.fill(shadow, 'nonzero');
-    ctx.globalCompositeOperation = 'destination-out'; // les toits restent éclairés
-    ctx.fillStyle = '#000'; ctx.fill(roofs, 'nonzero');
-    ctx.restore();
-    this.lastCount = count;
+    // l'image disponible (même zoom), recalée sur la vue actuelle
+    if (im && Math.abs(im.k - o.k) < 1e-6) {
+      ctx.save();
+      ctx.globalAlpha = sun.alpha;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(im.bmp, im.ox - o.x, im.oy - o.y, im.w, im.h);
+      ctx.restore();
+    }
   },
 
   /** ombre d'un véhicule (calque dynamique), sous sa carrosserie ; à l'échelle du symbole dessiné */
@@ -3975,12 +4087,18 @@ const Shadows = {
     const sun = this._sun; if (!sun || sun.alpha < 0.01) return;
     const hgt = { bus: 3.2, ter: 4.2, boat: 2.2 }[l.mode] || 3;
     const pxm = (2 * L2) / (lenM || 12);                     // pixels par mètre du symbole
-    const lim = 2.2 * W2;
+    const lim = 1.6 * L2;
     const dx = clamp(sun.dx * hgt * pxm, -lim, lim), dy = clamp(sun.dy * hgt * pxm, -lim, lim);
+    // ombre attachée au véhicule : enveloppe de la caisse au sol et de sa projection (comme un bâtiment)
+    const c = Math.cos(ang || 0), s = Math.sin(ang || 0), r = l.mode === 'boat' ? 0.85 : 1;
+    const corners = [[-L2, -W2 * r], [L2, -W2 * r], [L2, W2 * r], [-L2, W2 * r]];
+    const flat = [];
+    for (const [u, v] of corners) { const px = x + u * c - v * s, py = y + u * s + v * c; flat.push(px, py, px + dx, py + dy); }
+    const path = new Path2D();
+    hull(flat, path);
     ctx.save();
-    ctx.translate(x + dx, y + dy); ctx.rotate(ang || 0);
-    Render.rr(ctx, -L2, -W2, 2 * L2, 2 * W2, l.mode === 'boat' ? W2 : Math.min(3, W2));
-    ctx.fillStyle = `rgba(20,24,40,${Math.min(0.4, sun.alpha * 1.3).toFixed(3)})`; ctx.fill();
+    ctx.fillStyle = `rgba(20,24,40,${Math.min(0.32, sun.alpha * 1.1).toFixed(3)})`;
+    ctx.fill(path);
     ctx.restore();
   },
 };
@@ -6023,11 +6141,21 @@ const SHEETS = {
       <button class="btn wide" data-act="editLine" data-arg="${l.id}">${icon('plus')} Modifier les arrêts (ajouter, déplacer, retirer)</button>
       ${l.mode !== 'metro' ? `<button class="btn wide" data-act="reroute" data-arg="${l.id}">${icon('undo')} Recalculer l’itinéraire (sens de circulation)</button>` : ''}
       <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
-    else if (tab === 'veh') body = `
+    else if (tab === 'veh') {
+      const n = l.veh.length, key = Lines.serviceKey(G.s.min), per = SERVICE_KEYS.find((x) => x[0] === key)[1].toLowerCase();
+      const now = headwayWith(l, n, key), plus = headwayWith(l, n + 1, key), minus = headwayWith(l, n - 1, key), peak = headwayWith(l, n, 'peak');
+      body = `
+      <div class="kpis">
+        <div><small>Passage maintenant (${esc(per)})</small><b>${fmtHw(now)}</b></div>
+        <div><small>En heure de pointe</small><b>${fmtHw(peak)}</b></div>
+        <div><small>Avec 1 véhicule de plus</small><b class="pos">${fmtHw(plus)}</b></div>
+        <div><small>Avec 1 véhicule de moins</small><b class="${n > 1 ? 'neg' : ''}">${n > 1 ? fmtHw(minus) : 'ligne à l’arrêt'}</b></div>
+      </div>
       ${statLine('Capacité totale', fmtInt(cap) + ' places')}
       ${statLine('En service', l.active ? Lines.running(l) + ' / ' + l.veh.length + ' véhicules' : 'au dépôt')}
       ${section('Flotte')}${vrows}
       ${section('Acheter un véhicule')}${cat}`;
+    }
     else if (tab === 'tarif') body = `
       ${section('Tarifs par période')}${price('week', 'Semaine')}${price('weekend', 'Week-end et fériés')}${price('night', 'Nuit (22 h – 5 h)')}
       ${section('Horaires')}
@@ -6252,6 +6380,15 @@ function limRange(l) {
 }
 
 /** secondes pour atteindre la vitesse maximale depuis l'arrêt */
+/** intervalle de passage (min) avec n véhicules, selon la grille horaire de la période donnée */
+function headwayWith(l, n, key) {
+  if (!l.cycleMin || n <= 0) return null;
+  const f = l.svc ? (l.svc[key || Lines.serviceKey(G.s.min)] ?? 1) : 1;
+  const run = Math.max(1, Math.round(n * f));
+  return { hw: l.cycleMin / run, run };
+}
+const fmtMin = (m) => '~' + (m < 10 ? Math.max(0.5, Math.round(m * 2) / 2).toLocaleString('fr-FR') : Math.round(m)) + ' min';
+const fmtHw = (h) => (h ? fmtMin(h.hw) : '—');
 function accTime(md) { return Math.round(md.kmh / 3.6 / (md.acc || PHYS[md.mode].a)); }
 
 function laneLength(l) {
@@ -6531,26 +6668,55 @@ const Build = {
       b.stops.forEach((st, k) => { const n = bk.back[k]; st.bmx = net.x[n]; st.bmy = net.y[n]; st.bnid = net.ids[n]; });
     }
     const cost = this.editCost(path);
-    G.ui.editPend = { path, pathB, cost };
+    const groups = {}; for (const v of line.veh) groups[v.model] = (groups[v.model] || 0) + 1;
+    const model = Object.entries(groups).sort((x, y) => y[1] - x[1])[0]?.[0] || CATALOG[line.mode][line.mode === 'bus' ? 1 : 0].id;
+    G.ui.editPend = { path, pathB, cost, dv: 0, model };
+    this.editDialog();
+  },
+  /** fenêtre de validation d'une modification : récapitulatif, nombre de véhicules et passage estimé */
+  editDialog() {
+    const b = this.b, line = b.edit, q = G.ui.editPend, md = MODEL[q.model];
     const key = (st) => Math.round(st.mx * G.mpu) + ',' + Math.round(st.my * G.mpu);
     const now = new Set(b.stops.map(key));
     const added = b.stops.filter((st) => !b.orig.has(key(st))).length, removed = [...b.orig].filter((k) => !now.has(k)).length;
+    // durée d'un tour sur le nouveau tracé, à la vitesse commerciale actuelle de la ligne
+    const C = q.path.L + (q.pathB ? q.pathB.L : b.loop ? 0 : q.path.L);
+    const kmh = Math.max(5, line.speedAvg || MODES[line.mode].refKmh);
+    const cyc = C / 1000 / kmh * 60;
+    const n0 = line.veh.length, n1 = Math.max(1, n0 + q.dv);
+    const hw = (n) => fmtMin(cyc / Math.max(1, n));
+    const unit = Math.round(md.price * G.s.costMul);
+    const vehCost = q.dv > 0 ? q.dv * unit : 0, refund = q.dv < 0 ? Math.round(-q.dv * unit * 0.6) : 0;
+    const total = q.cost + vehCost;
     UI.modal(`<div class="plate big">${badgeFull(line)} Modifier la ligne</div>
       <p class="sub">${esc(b.stops[0].name)} → ${esc(b.loop ? b.stops[0].name : b.stops[b.stops.length - 1].name)}</p>
       <table class="tbl mini"><tbody>
         <tr><th>Arrêts</th><td>${b.oldN} → ${b.stops.length}</td></tr>
         <tr><th>Nouveaux · supprimés</th><td>${added} · ${removed}</td></tr>
-        <tr><th>Longueur</th><td>${fmtKm(b.oldL)} → ${fmtKm(path.L)}</td></tr>
-        <tr class="tot"><th>Travaux</th><td>${Eco.free() ? 'gratuit' : fmtEur(cost)}</td></tr>
+        <tr><th>Longueur</th><td>${fmtKm(b.oldL)} → ${fmtKm(q.path.L)}</td></tr>
+        <tr><th>Tour complet estimé</th><td>${line.cycleMin ? Math.round(line.cycleMin) + ' → ' : ''}${Math.round(cyc)} min</td></tr>
       </tbody></table>
-      <p class="note">Les véhicules, les tarifs, la grille horaire et l’historique de la ligne sont conservés.</p>
-      <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bEditApply" ${Eco.canAfford(cost) ? '' : 'disabled'}>Appliquer</button></div>`);
+      <h3 class="sec">Véhicules</h3>
+      <div class="vrow"><div><b>${esc(md.name)}</b><small>passage ${hw(n1)} en heure de pointe${q.dv ? ' (aujourd’hui ' + hw(n0) + ' sur ce tracé)' : ''}</small></div><div class="stepper"><button data-act="bEditVeh" data-arg="-1" ${n0 + q.dv <= 1 ? 'disabled' : ''} aria-label="Un véhicule de moins">−</button><b>${n1}</b><button data-act="bEditVeh" data-arg="1" aria-label="Un véhicule de plus">+</button></div></div>
+      <table class="tbl mini"><tbody>
+        <tr><th>Travaux</th><td>${fmtEur(q.cost)}</td></tr>
+        ${q.dv > 0 ? `<tr><th>${q.dv} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr>` : ''}
+        ${q.dv < 0 ? `<tr><th>Revente de ${-q.dv} véhicule${q.dv < -1 ? 's' : ''}</th><td class="pos">+${fmtEur(refund)}</td></tr>` : ''}
+        <tr class="tot"><th>Total</th><td>${Eco.free() ? 'gratuit' : fmtEur(total - refund)}</td></tr>
+      </tbody></table>
+      <p class="note">Les tarifs, la grille horaire et l’historique de la ligne sont conservés.</p>
+      <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bEditApply" ${Eco.canAfford(total) ? '' : 'disabled'}>Appliquer</button></div>`);
   },
   applyEdit() {
     const b = this.b, q = G.ui.editPend; if (!b || !q) return;
     const line = b.edit;
-    if (q.cost > 0 && !Eco.spend(q.cost, 'capex')) return;
+    const unit = Math.round(MODEL[q.model].price * G.s.costMul);
+    const total = q.cost + (q.dv > 0 ? q.dv * unit : 0);
+    if (total > 0 && !Eco.spend(total, 'capex')) return;
     Lines.applyEdit(line, b.stops, q.path, q.pathB);
+    for (let k = 0; k < q.dv; k++) Lines.addVehicle(line, q.model, true);
+    for (let k = 0; k < -q.dv; k++) Lines.sellVehicle(line, q.model);
+    if (line.active) Lines.adjustFleet(line, G.s.min);
     Transfers.rebuild();
     Render.lineBox(line); Sim.lineQuality(line);
     Events.log('Ligne ' + Lines.label(line) + ' modifiée : ' + line.name + '.', 'ok');
@@ -6637,7 +6803,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.12';
+const APP_VERSION = '1.12.3';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -6704,6 +6870,7 @@ const ACT = {
   bCount(d) { G.ui.bSel.count = clamp(G.ui.bSel.count + +d, 1, 40); Build.dialog(); },
   bBuild() { Build.build(); },
   bEditApply() { Build.applyEdit(); },
+  bEditVeh(d) { const q = G.ui.editPend, l = Build.b && Build.b.edit; if (!q || !l) return; q.dv = Math.max(1 - l.veh.length, q.dv + +d); Build.editDialog(); },
   buyVeh(arg) {
     const [id, m] = arg.split('|'); const l = findLine(id); if (!l) return;
     const price = Math.round(MODEL[m].price * G.s.costMul);

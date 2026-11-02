@@ -164,6 +164,21 @@ small{font-size:12.5px;color:var(--muted)}
 .nrow.unread{background:rgba(242,183,5,.12);border-radius:10px}
 .nrow .nb-t small{-webkit-line-clamp:3}
 .nrow .nr-t{color:var(--muted);font-size:11.5px}
+.staffc{background:var(--panel-2);border-radius:16px;padding:10px 12px;margin:8px 0}
+.staff-h{display:flex;align-items:center;gap:10px}
+.staff-h>div{flex:1;min-width:0}
+.staff-h b{font:600 15.5px/1.2 var(--f-display);display:block}
+.staff-h small{color:var(--ink-2);font-size:12.5px}
+.staff-h .evcard-ic{width:34px;height:34px;flex:none;background:var(--c);box-shadow:none}
+.staff-h .evcard-ic .ic{width:18px;height:18px;color:#fff}
+.lvdots{display:flex;gap:4px;flex:none}
+.lvdots i{width:11px;height:11px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--c);display:block}
+.lvdots i.on{background:var(--c)}
+.lvdots i.tr{background:repeating-linear-gradient(45deg,var(--c) 0 2px,transparent 2px 4px)}
+.staffc .nextlv{margin:4px 0 8px;font-size:12.5px}
+.staffc .btn{width:100%}
+.staffc small{display:block;margin-top:4px}
+.nb-pause{display:block;font-style:normal;font:600 10.5px/1.2 var(--f-display);color:var(--ink);letter-spacing:0;margin-bottom:2px}
 .nb-tone.tn{color:#D9433A}.nb-tone.tp{color:#3BA55C}.nb-tone.t0{color:#8a8a8a}
 .tone{display:inline-flex;gap:6px;align-items:center;font:600 12.5px/1 var(--f-display);padding:5px 10px;border-radius:12px;margin:2px 0 6px}
 .tone span{letter-spacing:0}.tone-neg{background:rgba(217,67,58,.12);color:#B8322A}.tone-pos{background:rgba(59,165,92,.14);color:#2D7E46}.tone-neu{background:rgba(35,35,35,.07);color:var(--ink-2)}
@@ -2028,7 +2043,15 @@ const Lines = {
 };
 
 /* ---------- correspondances entre lignes ---------- */
-const XFER = { walk: 250, pen: 0.45, maxHubs: 3 };
+const XFER = { walk: 150, pen: 0.45, maxHubs: 3 };
+/** distance de marche maximale pour une correspondance (m) : courte entre deux bus, plus longue vers une station ou une gare */
+function xferWalk(a, b) {
+  const rail = (m) => m === 'metro' || m === 'ter';
+  if (a === 'bus' && b === 'bus') return 70;
+  if (rail(a) && rail(b)) return 150;
+  if (rail(a) || rail(b)) return 120;
+  return 100; // navette fluviale
+}
 const Transfers = {
   hubs: [],
   /** repère les arrêts proches entre lignes et calcule les trajets avec un changement */
@@ -2039,10 +2062,10 @@ const Transfers = {
     const hubs = [];
     for (let a = 0; a < lines.length; a++) for (let b = a + 1; b < lines.length; b++) {
       const A = lines[a], B = lines[b];
-      const cand = [];
+      const cand = [], lim = xferWalk(A.mode, B.mode);
       A.stops.forEach((sa, ka) => B.stops.forEach((sb, kb) => {
         const d = dist(sa.mx, sa.my, sb.mx, sb.my);
-        if (d <= XFER.walk) cand.push({ ka, kb, walk: d });
+        if (d <= lim) cand.push({ ka, kb, walk: d });
       }));
       if (!cand.length) continue;
       cand.sort((x, y) => x.walk - y.walk);
@@ -2431,6 +2454,7 @@ const Sim = {
     for (const l of s.lines) this.lineMinute(l, m);
     Events.minute();
     if (mod % 10 === 0) {
+      Staff.tick();
       UI.updateTint();
       Traffic.update();
       for (const l of s.lines) this.lineQuality(l);
@@ -2460,7 +2484,7 @@ const Sim = {
     // coûts d'exploitation (véhicules en service uniquement)
     let op = 0, nRun = 0;
     for (const v of l.veh) if (!v.parked) { op += MODEL[v.model].op; nRun++; }
-    op = (op * s.costMul * Events.opsMult(l.mode)) / 60;
+    op = (op * s.costMul * Events.opsMult(l.mode) * Staff.opsMult()) / 60;
     Eco.charge(op, 'ops'); l.today.ops += op;
     const adLvl = s.ads[l.mode] || 0;
     const adH = (ADS.perHour[l.mode][adLvl] * nRun) / 60;
@@ -2538,7 +2562,7 @@ const Sim = {
     l.speedAvg = l.C / Math.max(1, cycle) * 3.6;
     const qWait = clamp(1.25 - l.headway / 40, 0.25, 1.15);
     const qSpeed = clamp(Math.pow(l.speedAvg / mode.refKmh, 0.6), 0.55, 1.35);
-    l.qual = l.veh.length ? qWait * qSpeed : 0;
+    l.qual = l.veh.length ? qWait * qSpeed * Staff.qualMult() : 0;
   },
 
   /** vitesse de croisière visée sur le tronçon courant (m/s) */
@@ -2766,8 +2790,8 @@ const Sim = {
     d.lines = {};
     for (const l of s.lines) {
       d.lines[l.id] = { pax: Math.round(l.today.pax), fares: Math.round(l.today.fares), ops: Math.round(l.today.ops), ads: Math.round(l.today.ads), mec: Math.round(l.today.mec), fill: l.today.loadN ? l.today.loadSum / l.today.loadN : 0, peak: l.today.loadMax || 0, xin: Math.round(l.today.xin || 0), xout: Math.round(l.today.xout || 0) };
-      const ratio = l.today.mec / Math.max(1, l.today.pax);
-      l.rep = clamp(l.rep + 0.02 - ratio * 0.6, 0.6, 1.05);
+      const ratio = l.today.mec / Math.max(1, l.today.pax) * Staff.mecRepMult();
+      l.rep = clamp(l.rep + 0.02 + (Staff.L('social') >= 3 ? 0.005 : 0) - ratio * 0.6, 0.6, 1.05);
       l.hist.unshift(d.lines[l.id]); if (l.hist.length > 30) l.hist.length = 30;
       l.today = Lines.blankStats();
     }
@@ -3002,6 +3026,7 @@ const EV_CAT = {
   eco: { col: '#2D7DD2', icon: 'euro', label: 'Finances' },
   image: { col: '#EC6FA8', icon: 'heart', label: 'Image' },
   social: { col: '#8E5BD6', icon: 'strike', label: 'Social' },
+  staff: { col: '#3BA55C', icon: 'user', label: 'Personnel' },
   meteo: { col: '#35B6D6', icon: 'rain', label: 'Météo' },
 };
 
@@ -3336,7 +3361,7 @@ Object.assign(Events, {
     return f;
   },
   fareMult(l) {
-    let f = 1;
+    let f = Staff.fareMult();
     for (const e of this.live()) { const x = e.fare; if (x && (x.all || x.mode === l.mode || x.lineId === l.id)) f *= x.mult; }
     return f;
   },
@@ -3478,14 +3503,16 @@ Object.assign(Events, {
       if (sub.length) { cands.length = 0; cands.push(...sub); }
     }
     for (let tries = 0; tries < 6 && cands.length; tries++) {
-      const tot = cands.reduce((a, d) => a + d.w, 0);
+      const wt = (x) => x.w * Math.max(0.05, Staff.weight(x.id));
+      const tot = cands.reduce((a, x) => a + wt(x), 0);
       let r = Math.random() * tot, d = cands[0];
-      for (const x of cands) { r -= x.w; if (r <= 0) { d = x; break; } }
+      for (const x of cands) { r -= wt(x); if (r <= 0) { d = x; break; } }
       const x = d.make(c);
       if (!x) { cands.splice(cands.indexOf(d), 1); continue; }
       const start = x.start ?? s.min;
       const e = { kind: d.id, cat: d.cat, tone: d.tone, title: d.title, glyph: d.glyph, ...x, start, end: start + Math.max(1, x.dur || 60) };
       delete e.dur;
+      Staff.adjust(e);
       s.evLast[d.id] = s.min;
       return this.add(e);
     }
@@ -3514,9 +3541,9 @@ Object.assign(Events, {
     const modes = new Set(s.lines.map((l) => l.mode));
     const day0 = m - Time.mod(m);
     // grève (annoncée la veille, avec négociation possible)
-    if (Math.random() < 0.03 && (modes.has('bus') || modes.has('metro'))) {
+    if (Math.random() < 0.03 * Staff.strikeMult() && (modes.has('bus') || modes.has('metro'))) {
       const mode = modes.has('metro') && Math.random() < 0.5 ? 'metro' : modes.has('bus') ? 'bus' : 'metro';
-      const cost = Math.round((40000 + s.lines.filter((l) => l.mode === mode).reduce((a, l) => a + l.veh.length, 0) * 6000) * s.costMul);
+      const cost = Math.round((40000 + s.lines.filter((l) => l.mode === mode).reduce((a, l) => a + l.veh.length, 0) * 6000) * s.costMul * Staff.negoMult());
       this.add({ kind: 'strike', cat: 'social', tone: -3, glyph: '⚑', mode, start: day0 + 1440 + 300, end: day0 + 2880, title: 'Préavis de grève', desc: 'les agents ' + (mode === 'bus' ? 'des bus' : 'du métro') + ' cesseront le travail demain.', cost, resolved: false, asked: false, announce: true });
     }
     // fêtes du calendrier (annoncées la veille)
@@ -3544,7 +3571,11 @@ const Notif = {
     s.notifs.unshift(n);
     if (s.notifs.length > 60) s.notifs.length = 60;
     const mode = s.settings.notif || 'all';
-    if (mode === 'all' || (mode === 'major' && Math.abs(tone) >= 2)) this.banner(n);
+    // pause automatique : par défaut seulement pour les choix (la fenêtre de choix met déjà le jeu en pause)
+    const pz = s.settings.notifPause || 'choices';
+    const pause = !e.q && G.ready && !G.paused && (pz === 'all' || (pz === 'major' && Math.abs(tone) >= 2));
+    if (pause) { G.paused = true; n.paused = true; UI.refreshTop(); }
+    if (mode === 'all' || (mode === 'major' && Math.abs(tone) >= 2) || pause) this.banner(n);
     UI.refreshInfoBadge();
   },
   unread() { return (G.s.notifs || []).filter((n) => !n.read).length; },
@@ -3552,18 +3583,154 @@ const Notif = {
   banner(n) {
     const box = document.getElementById('toasts'); if (!box || !G.ready) return;
     // panneau ou fenêtre ouverte : pas de bannière (la pastille Infos compte la notification)
-    if (UI.sheetOpen() || !document.getElementById('modal').hidden) return;
+    if ((UI.sheetOpen() || !document.getElementById('modal').hidden) && !n.paused) return;
     const el = document.createElement('button');
     const c = EV_CAT[n.cat] || EV_CAT.reseau;
     el.className = 'nban ' + (n.tone <= -2 ? 'n-bad' : n.tone < 0 ? 'n-warn' : n.tone >= 2 ? 'n-great' : n.tone > 0 ? 'n-good' : 'n-info');
     el.dataset.act = 'notifOpen'; el.dataset.arg = String(n.id);
-    el.innerHTML = `<span class="nb-ic" style="background:${c.col}">${esc(n.glyph)}</span><span class="nb-t"><b>${esc(n.title)}</b><small>${n.when ? '<em>' + esc(n.when) + '</em> · ' : ''}${esc(n.text)}</small></span><span class="nb-tone">${Notif.toneLabel(n.tone)}</span>`;
+    el.innerHTML = `<span class="nb-ic" style="background:${c.col}">${esc(n.glyph)}</span><span class="nb-t"><b>${esc(n.title)}</b><small>${n.when ? '<em>' + esc(n.when) + '</em> · ' : ''}${esc(n.text)}</small></span><span class="nb-tone">${n.paused ? '<i class="nb-pause"><svg viewBox="0 0 10 10" width="9" height="9"><rect x="1.5" y="1" width="2.4" height="8" fill="currentColor"/><rect x="6.1" y="1" width="2.4" height="8" fill="currentColor"/></svg> en pause</i>' : ''}${Notif.toneLabel(n.tone)}</span>`;
     box.appendChild(el);
     const bans = box.querySelectorAll('.nban');
     if (bans.length > 2) bans[0].remove();
-    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, Math.abs(n.tone) >= 2 ? 6500 : 5000);
+    // en pause, la bannière reste jusqu'à la reprise du jeu
+    const hide = () => { el.classList.add('out'); setTimeout(() => el.remove(), 400); };
+    if (n.paused) { const t = setInterval(() => { if (!G.paused || !el.isConnected) { clearInterval(t); setTimeout(hide, 1500); } }, 500); }
+    else setTimeout(hide, Math.abs(n.tone) >= 2 ? 6500 : 5000);
   },
   toneLabel(t) { return t <= -3 ? '▼▼▼' : t === -2 ? '▼▼' : t === -1 ? '▼' : t >= 3 ? '▲▲▲' : t === 2 ? '▲▲' : t === 1 ? '▲' : '●'; },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — personnel et formations
+   Huit filières, trois niveaux chacune. Une formation coûte de l'argent et
+   prend quelques jours ; un personnel mieux qualifié est un peu mieux payé
+   (coûts d'exploitation légèrement en hausse), mais il change le quotidien
+   du réseau : moins de fraude, moins de pannes, incidents plus courts...
+   ===================================================================== */
+
+const STAFF = [
+  { id: 'controle', icon: 'user', col: '#2D7DD2', name: 'Contrôle et sûreté', who: 'contrôleurs',
+    lv: ['Contrôle de base', 'Brigades mobiles', 'Médiateurs assermentés'],
+    fx: (n) => [`Fraude −${25 * n} % (moins fréquente et moins coûteuse)`, `Recettes billets +${2 * n} % au quotidien`, `Altercations −${20 * n} %, interventions plus courtes`] },
+  { id: 'conduite', icon: 'bus', col: '#3BA55C', name: 'Éco-conduite', who: 'conducteurs',
+    lv: ['Conduite souple', 'Éco-conduite certifiée', 'Conducteurs formateurs'],
+    fx: (n) => [`Pannes de véhicules −${22 * n} %`, `Énergie et carburant −${3 * n} % sur l’exploitation`, n >= 2 ? 'Les malaises à bord sont un peu moins fréquents (conduite plus douce)' : 'Démarrages et freinages plus doux'] },
+  { id: 'maintenance', icon: 'works', col: '#E08A12', name: 'Maintenance préventive', who: 'mécaniciens',
+    lv: ['Visites régulières', 'Diagnostic embarqué', 'Atelier d’excellence'],
+    fx: (n) => [`Véhicules réparés ${30 * n} % plus vite`, `Réparations et remises en état −${20 * n} %`, `Pannes de rames et de signalisation −${10 * n} %`] },
+  { id: 'secours', icon: 'heart', col: '#E5413A', name: 'Premiers secours', who: 'tous les agents',
+    lv: ['Gestes qui sauvent', 'Secouristes du travail', 'Référents santé'],
+    fx: (n) => [`Arrêts pour malaise ${25 * n} % plus courts`, `Actes héroïques et naissances à bord ×${1 + 0.5 * n} (image en hausse)`] },
+  { id: 'accueil', icon: 'info', col: '#EC6FA8', name: 'Accueil voyageurs', who: 'agents d’accueil',
+    lv: ['Information claire', 'Relation client', 'Ambassadeurs du réseau'],
+    fx: (n) => [`Les mécontents pèsent ${15 * n} % de moins sur l’image`, `Bonnes nouvelles (objets rendus, prix, presse) +${30 * n} %`, `Portes bloquées et incivilités −${15 * n} %`] },
+  { id: 'regulation', icon: 'target', col: '#8E5BD6', name: 'Régulation du trafic', who: 'régulateurs du PC',
+    lv: ['Poste de commande', 'Régulation en temps réel', 'Centre de pilotage'],
+    fx: (n) => [`Interruptions de ligne ${20 * n} % plus courtes`, `Qualité de service +${2 * n} % (passages plus réguliers)`, `Véhicules bloqués : la file repart ${15 * n} % plus vite`] },
+  { id: 'communication', icon: 'star', col: '#F2B705', name: 'Communication de crise', who: 'service communication',
+    lv: ['Réseaux sociaux', 'Cellule de crise', 'Porte-parole aguerri'],
+    fx: (n) => [`Baisses d’image −${25 * n} %`, `Bad buzz et articles critiques −${25 * n} %`, `Vidéos virales et articles élogieux +${25 * n} %`] },
+  { id: 'social', icon: 'strike', col: '#5B6770', name: 'Dialogue social', who: 'encadrement',
+    lv: ['Réunions d’équipe', 'Accords d’entreprise', 'Management participatif'],
+    fx: (n) => [`Préavis de grève −${30 * n} %`, `Négociations −${20 * n} % moins chères`, n >= 3 ? 'Les équipes proposent elles-mêmes des améliorations (petits bonus d’image)' : 'Climat social apaisé'] },
+];
+const STAFF_DAYS = [2, 4, 7];
+const STAFF_BASE = [40000, 90000, 180000];
+const STAFF_MAX_PARALLEL = 2;
+
+const Staff = {
+  st() { const s = G.s; if (!s.staff) s.staff = {}; if (!s.training) s.training = []; return s; },
+  L(id) { return (this.st().staff[id] || 0); },
+  total() { const s = this.st(); return STAFF.reduce((a, d) => a + (s.staff[d.id] || 0), 0); },
+  training(id) { return this.st().training.find((t) => t.id === id) || null; },
+  size() { return G.s.lines.reduce((a, l) => a + l.veh.length, 0); },
+  cost(id) {
+    const lv = this.L(id); if (lv >= 3) return 0;
+    return Math.round(STAFF_BASE[lv] * (1 + this.size() / 20) * G.s.costMul / 1000) * 1000;
+  },
+  canStart(id) {
+    const s = this.st();
+    if (this.L(id) >= 3 || this.training(id)) return false;
+    return s.training.length < STAFF_MAX_PARALLEL;
+  },
+  start(id) {
+    const d = STAFF.find((x) => x.id === id); if (!d || !this.canStart(id)) return false;
+    const cost = this.cost(id);
+    if (!Eco.spend(cost, 'capex')) return false;
+    const lv = this.L(id) + 1, days = STAFF_DAYS[lv - 1];
+    this.st().training.push({ id, level: lv, start: G.s.min, end: G.s.min + days * 1440 });
+    Events.log(`Formation lancée : ${d.name}, niveau ${lv} (${days} jours, ${fmtEur(cost)}).`, 'info');
+    return true;
+  },
+  /** toutes les 10 minutes de jeu : fin des formations */
+  tick() {
+    const s = this.st(), m = s.min;
+    const done = s.training.filter((t) => m >= t.end);
+    if (!done.length) return;
+    s.training = s.training.filter((t) => m < t.end);
+    for (const t of done) {
+      const d = STAFF.find((x) => x.id === t.id); if (!d) continue;
+      s.staff[t.id] = Math.max(s.staff[t.id] || 0, t.level);
+      Events.log(`Formation terminée : ${d.name} niveau ${t.level} (${d.lv[t.level - 1]}).`, 'ok');
+      Notif.push({ title: `${d.name} : niveau ${t.level}`, desc: `Vos ${d.who} sont formés (« ${d.lv[t.level - 1]} »). ${d.fx(t.level)[0]}.`, tone: 1, cat: 'staff', glyph: '★' }, 'now');
+    }
+    for (const l of s.lines) Sim.lineQuality(l);
+    if (UI.sheetOpen()) UI.refreshSheet();
+  },
+
+  /* ---- effets sur la simulation ---- */
+  /** salaires : +1 % d'exploitation par niveau acquis ; éco-conduite : −3 % par niveau */
+  opsMult() { return 1 + 0.01 * this.total() - 0.03 * this.L('conduite'); },
+  fareMult() { return 1 + 0.02 * this.L('controle'); },
+  qualMult() { return 1 + 0.02 * this.L('regulation'); },
+  mecRepMult() { return 1 - 0.15 * this.L('accueil'); },
+  strikeMult() { return 1 - 0.3 * this.L('social'); },
+  negoMult() { return 1 - 0.2 * this.L('social'); },
+  /** probabilité d'un événement selon les compétences du personnel */
+  weight(id) {
+    const L = (k) => this.L(k);
+    switch (id) {
+      case 'fraude': return 1 - 0.25 * L('controle');
+      case 'altercation': return (1 - 0.2 * L('controle')) * (1 - 0.1 * L('accueil'));
+      case 'portes': return 1 - 0.15 * L('accueil');
+      case 'vandalisme': case 'tags': return 1 - 0.12 * L('controle');
+      case 'panne_bus': return 1 - 0.22 * L('conduite');
+      case 'panne_rame': return (1 - 0.22 * L('conduite')) * (1 - 0.1 * L('maintenance'));
+      case 'failure': return 1 - 0.1 * L('maintenance');
+      case 'malaise': return 1 - 0.08 * L('conduite');
+      case 'heros': case 'naissance': return 1 + 0.5 * L('secours');
+      case 'portefeuille': case 'ponctuelle': case 'prix': return 1 + 0.3 * L('accueil');
+      case 'presse_plus': return (1 + 0.3 * L('accueil')) * (1 + 0.25 * L('communication'));
+      case 'viral_plus': return 1 + 0.25 * L('communication');
+      case 'presse_moins': case 'viral_moins': return 1 - 0.25 * L('communication');
+      default: return 1;
+    }
+  },
+  /** ajuste la gravité d'un événement au moment où il se produit */
+  adjust(e) {
+    const L = (k) => this.L(k);
+    const shorten = (f) => { const d = e.end - e.start; e.end = e.start + Math.max(5, Math.round(d * f)); };
+    if (e.kind === 'fraude' && e.fare) e.fare.mult = 1 - 0.25 * (1 - 0.25 * L('controle'));
+    if (e.kind === 'controle' && e.fare) e.fare.mult = 1.12 + 0.04 * L('controle');
+    if (e.veh && e.veh.type === 'hold') {
+      let f = 1;
+      if (e.kind === 'malaise') f *= 1 - 0.25 * L('secours');
+      if (e.kind === 'altercation') f *= 1 - 0.2 * L('controle');
+      f *= 1 - 0.15 * L('regulation');
+      e.veh.min = Math.max(2, Math.round(e.veh.min * f));
+    }
+    if (e.veh && e.veh.type === 'breakdown') {
+      shorten(1 - 0.3 * L('maintenance'));
+      e.veh.min = Math.max(2, Math.round(e.veh.min * (1 - 0.15 * L('regulation'))));
+    }
+    if (e.money < 0 && ['panne_bus', 'panne_rame', 'vandalisme', 'tags'].includes(e.kind)) e.money = Math.round(e.money * (1 - 0.2 * L('maintenance')) / 100) * 100;
+    if (e.halt && !e.halt.mode && ['failure', 'colis', 'animal'].includes(e.kind)) shorten(1 - 0.2 * L('regulation'));
+    if (e.halt && e.halt.mode && e.kind === 'courant') shorten(1 - 0.2 * L('regulation'));
+    if (e.rep && e.rep.delta < 0) e.rep.delta *= 1 - 0.25 * L('communication');
+    if (e.kind === 'strike') e.cost = Math.round(e.cost * this.negoMult());
+    return e;
+  },
 };
 
 'use strict';
@@ -3898,6 +4065,27 @@ const Night = {
       white: this.sprite(32, [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,255,240,.45)'], [1, 'rgba(255,255,240,0)']]),
     };
   },
+  /** petit canevas réutilisé (masque de lumière, teintes) */
+  buf(k, w, h) {
+    this.bufs = this.bufs || {};
+    let c = this.bufs[k];
+    if (!c) { c = document.createElement('canvas'); this.bufs[k] = c; }
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.filter = 'none'; g.clearRect(0, 0, w, h);
+    return [c, g];
+  },
+  /** applique un calque basse résolution, flouté, sur le voile de nuit (bords qui s'estompent) */
+  soft(ctx, src, W, H, blurPx, op, alpha) {
+    const [b, bg] = this.buf('blur', src.width, src.height);
+    if ('filter' in bg) bg.filter = `blur(${blurPx.toFixed(1)}px)`;
+    bg.drawImage(src, 0, 0);
+    bg.filter = 'none';
+    ctx.save();
+    ctx.globalCompositeOperation = op; ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low';
+    ctx.drawImage(b, 0, 0, W, H);
+    ctx.restore();
+  },
   /** obscurité + lampadaires + stations éclairées (calque statique, sous les lignes) */
   draw(ctx, o, nf, W, H) {
     this.init();
@@ -3910,11 +4098,17 @@ const Night = {
       const net = w.road;
       const mpp = G.mpu / o.k;                       // mètres par pixel
       const Rm = clamp(18 / mpp, 1.2, 16);           // rayon éclairé par un lampadaire (~18 m)
+      // masque de lumière en basse résolution, flouté à l'application :
+      // la lumière s'atténue progressivement en s'éloignant des rues et des lampadaires
+      const q = 0.3, mw = Math.max(2, Math.round(W * q)), mh = Math.max(2, Math.round(H * q));
+      const [mk, mg] = this.buf('mask', mw, mh);
+      mg.setTransform(q, 0, 0, q, 0, 0); mg.lineCap = 'round'; mg.lineJoin = 'round'; mg.strokeStyle = '#000';
+      let tk = null, paths = null;
+      const lamps = [];
       if (net.nE) {
         const maxCls = z < 12.5 ? 1 : z < 13.5 ? 2 : z < 14.5 ? 3 : 4;
         const nx = net.x, ny = net.y;
-        const paths = [new Path2D(), new Path2D()];  // 0 : grands axes (sodium), 1 : rues (LED)
-        const lamps = [];
+        paths = [new Path2D(), new Path2D()];  // 0 : grands axes (sodium), 1 : rues (LED)
         const stepM = 32;
         for (let e = 0; e < net.nE; e++) {
           const c = net.cls[e]; if (c > maxCls) continue;
@@ -3928,47 +4122,48 @@ const Night = {
             for (let k = 0; k < n; k++) { const t = (k + 0.5) / n; lamps.push(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, c <= 1 ? 1 : 0); }
           }
         }
-        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        // couloirs éclairés : on « perce » l'obscurité le long des rues
-        ctx.globalCompositeOperation = 'destination-out';
-        for (const [wMul, al] of [[2.8, 0.35], [1.5, 0.55], [0.7, 0.6]]) {
-          ctx.globalAlpha = al * ln;
-          ctx.lineWidth = Math.max(1.2, Rm * wMul);
-          ctx.stroke(paths[0]); ctx.stroke(paths[1]);
+        // couloirs dégressifs : larges et faibles, puis étroits et plus forts
+        for (const [wMul, al] of [[4.2, 0.16], [2.8, 0.24], [1.7, 0.34], [0.8, 0.45]]) {
+          mg.globalAlpha = al; mg.lineWidth = Math.max(1.4, Rm * wMul);
+          mg.stroke(paths[0]); mg.stroke(paths[1]);
         }
-        // teinte des éclairages : sodium orangé sur les grands axes, LED blanche ailleurs
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.lineWidth = Math.max(0.8, Rm * 1.1);
-        ctx.globalAlpha = 0.12 * ln; ctx.strokeStyle = '#FF9A3C'; ctx.stroke(paths[0]);
-        ctx.globalAlpha = 0.06 * ln; ctx.strokeStyle = '#FFE8C8'; ctx.stroke(paths[1]);
-        if (z < 15) { // vue d'avion : fil lumineux fin
-          ctx.lineWidth = 0.9; ctx.globalAlpha = 0.5 * ln;
-          ctx.strokeStyle = '#FFB866'; ctx.stroke(paths[0]);
-          ctx.globalAlpha = 0.3 * ln; ctx.strokeStyle = '#FFF0D8'; ctx.stroke(paths[1]);
-        }
-        // lampadaires individuels, de près
+        // lampadaires : un halo par point lumineux
         if (lamps.length) {
-          const r = Rm * 0.9;
-          ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.85 * ln;
-          for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(this.sp.hole, lamps[i] - r, lamps[i + 1] - r, 2 * r, 2 * r);
-          ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.18 * ln;
-          for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(lamps[i + 2] ? this.sp.warm : this.sp.led, lamps[i] - r * 0.6, lamps[i + 1] - r * 0.6, 1.2 * r, 1.2 * r);
-          ctx.globalAlpha = 0.95 * ln; ctx.fillStyle = '#FFE9C0';
-          for (let i = 0; i < lamps.length; i += 3) ctx.fillRect(lamps[i] - 0.9, lamps[i + 1] - 0.9, 1.8, 1.8);
+          const r = Rm * 1.3;
+          mg.globalAlpha = 0.75;
+          for (let i = 0; i < lamps.length; i += 3) mg.drawImage(this.sp.hole, lamps[i] - r, lamps[i + 1] - r, 2 * r, 2 * r);
         }
+        // teinte : sodium orangé sur les grands axes, LED blanche ailleurs (adoucie elle aussi)
+        let tg; [tk, tg] = this.buf('tint', mw, mh);
+        tg.setTransform(q, 0, 0, q, 0, 0); tg.lineCap = 'round'; tg.lineJoin = 'round';
+        tg.lineWidth = Math.max(1, Rm * 2);
+        tg.globalAlpha = 0.9; tg.strokeStyle = '#FF9A3C'; tg.stroke(paths[0]);
+        tg.globalAlpha = 0.5; tg.strokeStyle = '#FFE8C8'; tg.stroke(paths[1]);
       }
       // stations et arrêts éclairés
-      const SR = clamp(45 / mpp, 5, 26);
-      ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.95 * ln;
-      for (const l of s.lines) for (const st of l.stops) {
-        const x = X(st.mx), y = Y(st.my);
-        if (x > -SR && y > -SR && x < W + SR && y < H + SR) ctx.drawImage(this.sp.hole, x - SR, y - SR, 2 * SR, 2 * SR);
+      const SR = clamp(55 / mpp, 6, 32);
+      const vis = (x, y) => x > -SR && y > -SR && x < W + SR && y < H + SR;
+      mg.globalAlpha = 0.95;
+      for (const l of s.lines) for (const st of l.stops) { const x = X(st.mx), y = Y(st.my); if (vis(x, y)) mg.drawImage(this.sp.hole, x - SR, y - SR, 2 * SR, 2 * SR); }
+      // 1) on perce le voile avec le masque flouté (bords doux) ...
+      this.soft(ctx, mk, W, H, clamp(Rm * 0.9, 1.5, 12) * q, 'destination-out', ln);
+      // 2) ... puis on ajoute les teintes et les points lumineux par-dessus
+      if (tk) this.soft(ctx, tk, W, H, clamp(Rm * 1.1, 2, 14) * q, 'lighter', 0.13 * ln);
+      ctx.globalCompositeOperation = 'lighter';
+      if (paths && z < 15) { // vue d'avion : fil lumineux fin
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 0.9;
+        ctx.globalAlpha = 0.45 * ln; ctx.strokeStyle = '#FFB866'; ctx.stroke(paths[0]);
+        ctx.globalAlpha = 0.25 * ln; ctx.strokeStyle = '#FFF0D8'; ctx.stroke(paths[1]);
       }
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.15 * ln;
-      for (const l of s.lines) for (const st of l.stops) {
-        const x = X(st.mx), y = Y(st.my);
-        if (x > -SR && y > -SR && x < W + SR && y < H + SR) ctx.drawImage(this.sp.led, x - SR * 0.7, y - SR * 0.7, 1.4 * SR, 1.4 * SR);
+      if (lamps.length) {
+        const r = Rm * 1.15;
+        ctx.globalAlpha = 0.14 * ln;
+        for (let i = 0; i < lamps.length; i += 3) ctx.drawImage(lamps[i + 2] ? this.sp.warm : this.sp.led, lamps[i] - r * 0.6, lamps[i + 1] - r * 0.6, 1.2 * r, 1.2 * r);
+        ctx.globalAlpha = 0.9 * ln; ctx.fillStyle = '#FFE9C0';
+        for (let i = 0; i < lamps.length; i += 3) ctx.fillRect(lamps[i] - 1, lamps[i + 1] - 1, 2, 2);
       }
+      ctx.globalAlpha = 0.15 * ln;
+      for (const l of s.lines) for (const st of l.stops) { const x = X(st.mx), y = Y(st.my); if (vis(x, y)) ctx.drawImage(this.sp.led, x - SR * 0.7, y - SR * 0.7, 1.4 * SR, 1.4 * SR); }
     }
     ctx.restore();
   },
@@ -4167,8 +4362,9 @@ const Render = {
     this.cvS.width = Math.round(sw * this.dpr); this.cvS.height = Math.round(sh * this.dpr);
     this.cvS.style.width = sw + 'px'; this.cvS.style.height = sh + 'px';
     this.cvS.style.left = -this.MX + 'px'; this.cvS.style.top = -this.MY + 'px';
-    // nuit : lumière douce, résolution 1 suffit ; marge d'un demi-écran de chaque côté
-    this.cvN.width = this.W * 2; this.cvN.height = this.H * 2;
+    // nuit : lumière douce, une résolution réduite suffit (agrandie par le navigateur) ; marge d'un demi-écran de chaque côté
+    this.NQ = 0.6;
+    this.cvN.width = Math.round(this.W * 2 * this.NQ); this.cvN.height = Math.round(this.H * 2 * this.NQ);
     this.cvN.style.width = this.W * 2 + 'px'; this.cvN.style.height = this.H * 2 + 'px';
     this.cvN.style.left = -this.W / 2 + 'px'; this.cvN.style.top = -this.H / 2 + 'px';
     this.dirty = true;
@@ -4209,6 +4405,7 @@ const Render = {
       const cn = this.ctxN;
       cn.setTransform(1, 0, 0, 1, 0, 0);
       cn.clearRect(0, 0, this.cvN.width, this.cvN.height);
+      cn.setTransform(this.NQ, 0, 0, this.NQ, 0, 0);
       this.cvN.style.transform = 'translate(0px,0px)'; this.cvN.style.opacity = '1';
       if (nf > 0.02) Night.draw(cn, { x: o.x - W / 2, y: o.y - H / 2, k: o.k, z: o.z }, nf, W * 2, H * 2);
       this.oN = o;
@@ -5389,7 +5586,7 @@ const SHEETS = {
         return `<button class="lrow" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="lrow-t">${esc(l.name)}<small>${l.veh.length} véhicule${l.veh.length > 1 ? 's' : ''} · ${l.stops.length} arrêts · ${fmtKm(l.path.L)} ${st}</small></span><span class="lrow-v"><b>${fmtInt(t.pax)}</b> voy.<br><small>${fmtPct(t.fill)} rempli</small></span></button>`;
       }).join('');
     }).join('');
-    return { title: 'Réseau', html: `<button class="btn wide" data-act="openPlan">${icon('target')} Plan schématique du réseau</button>` + rows + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
+    return { title: 'Réseau', html: `<div class="row2"><button class="btn" data-act="openPlan">${icon('target')} Plan du réseau</button><button class="btn" data-act="nav" data-arg="staff">${icon('user')} Personnel</button></div>` + rows + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
   },
 
   line(id) {
@@ -5456,6 +5653,33 @@ const SHEETS = {
       ${l.mode !== 'metro' ? `<button class="btn wide" data-act="reroute" data-arg="${l.id}">${icon('undo')} Recalculer l’itinéraire (sens de circulation)</button>` : ''}
       <div class="row2"><button class="btn" data-act="centerLine" data-arg="${l.id}">${icon('target')} Voir sur la carte</button><button class="btn danger" data-act="delLine" data-arg="${l.id}">Supprimer</button></div>`;
     return { title: `${badgeFull(l)}<span>${esc(l.name)}</span>`, html };
+  },
+
+  staff() {
+    const s = Staff.st(), busy = s.training.length;
+    const cards = STAFF.map((d) => {
+      const lv = Staff.L(d.id), tr = Staff.training(d.id), cost = Staff.cost(d.id);
+      const dots = [1, 2, 3].map((k) => `<i class="${k <= lv ? 'on' : tr && tr.level === k ? 'tr' : ''}" style="--c:${d.col}"></i>`).join('');
+      const now = lv ? d.fx(lv) : [];
+      const next = lv < 3 ? d.fx(lv + 1) : null;
+      let act;
+      if (tr) {
+        const p = clamp((G.s.min - tr.start) / (tr.end - tr.start), 0, 1);
+        act = `<div class="timeline"><i style="width:${(p * 100).toFixed(0)}%;background:${d.col}"></i></div><small>En formation : niveau ${tr.level} · fin le ${Time.label(tr.end).day} à ${Time.label(tr.end).time}</small>`;
+      } else if (lv >= 3) act = '<em class="tag ok">Niveau maximal</em>';
+      else act = `<button class="btn sm ${Staff.canStart(d.id) ? 'primary' : ''}" data-act="staffTrain" data-arg="${d.id}" ${Staff.canStart(d.id) && Eco.canAfford(cost) ? '' : 'disabled'}>Former au niveau ${lv + 1} · ${Eco.free() ? 'gratuit' : fmtEur(cost)} · ${STAFF_DAYS[lv]} j</button>${!Staff.canStart(d.id) && busy >= STAFF_MAX_PARALLEL ? '<small>Le centre de formation est complet (2 promotions à la fois).</small>' : ''}`;
+      return `<div class="staffc"><div class="staff-h"><span class="evcard-ic" style="--c:${d.col}">${icon(d.icon)}</span><div><b>${esc(d.name)}</b><small>${esc(d.who)} · ${lv ? 'niveau ' + lv + ' : ' + esc(d.lv[lv - 1]) : 'non formés'}</small></div><span class="lvdots">${dots}</span></div>
+        ${now.length ? `<ul class="fx">${now.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+        ${next ? `<p class="sub nextlv">Niveau ${lv + 1} « ${esc(d.lv[lv])} » : ${esc(next.join(' · '))}</p>` : ''}
+        ${act}</div>`;
+    }).join('');
+    const tot = Staff.total(), wage = Math.round((Staff.opsMult() - 1) * 100);
+    return {
+      title: 'Personnel et formations',
+      html: `<p class="sub">Former vos équipes réduit la fraude, les pannes et la durée des incidents, et améliore l’image du réseau. Chaque niveau acquis augmente un peu les salaires (+1 % d’exploitation), l’éco-conduite fait économiser de l’énergie.</p>
+        <div class="kpis"><div><small>Niveaux acquis</small><b>${tot} / ${STAFF.length * 3}</b></div><div><small>Effet sur l’exploitation</small><b class="${wage > 0 ? 'neg' : 'pos'}">${wage > 0 ? '+' : ''}${wage} %</b></div><div><small>Formations en cours</small><b>${busy} / ${STAFF_MAX_PARALLEL}</b></div><div><small>Recettes billets</small><b class="pos">+${Math.round((Staff.fareMult() - 1) * 100)} %</b></div></div>
+        ${cards}`,
+    };
   },
 
   build() {
@@ -5579,6 +5803,7 @@ const SHEETS = {
       ${section('Affichage')}
       <div class="vrow"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
+      <div class="vrow"><div><b>Pause automatique</b><small>Le jeu s’arrête à l’arrivée d’une notification de ce niveau</small></div><div class="seg">${[['choices', 'Choix'], ['major', 'Importantes'], ['all', 'Toutes']].map(([v, l]) => `<button class="${(s.settings.notifPause || 'choices') === v ? 'on' : ''}" data-act="notifPause" data-arg="${v}">${l}</button>`).join('')}</div></div>
       <div class="vrow"><div><b>Bannières d’événements</b><small>Toujours consultables dans l’onglet Infos</small></div><div class="seg">${[['all', 'Toutes'], ['major', 'Importantes'], ['none', 'Aucune']].map(([v, l]) => `<button class="${nset === v ? 'on' : ''}" data-act="notifSet" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${section('Partie')}${tg('idle', 'Le jeu continue quand l’appli est fermée (jusqu’à 5 jours de jeu)')}
       ${tg('realWeather', 'Météo réelle (modèles Météo-France via Open-Meteo)')}
@@ -6002,7 +6227,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.9';
+const APP_VERSION = '1.10';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();
@@ -6117,7 +6342,12 @@ const ACT = {
     Sim.lineQuality(l); UI.refreshSheet();
   },
   openPlan() { Plan.open(); },
+  staffTrain(id) {
+    if (Staff.start(id)) { const d = STAFF.find((x) => x.id === id); UI.toast(`Formation lancée : ${d.name}.`, 'ok'); UI.refreshTop(); }
+    UI.refreshSheet();
+  },
   notifSet(v) { G.s.settings.notif = v; UI.refreshSheet(); },
+  notifPause(v) { G.s.settings.notifPause = v; UI.refreshSheet(); },
   notifOpen(id) {
     const n = (G.s.notifs || []).find((x) => x.id === +id); if (!n) return;
     n.read = true; UI.refreshInfoBadge();
@@ -6430,6 +6660,7 @@ const Game = {
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     if (!G.s.settings.notif) G.s.settings.notif = 'all';
+    if (!G.s.settings.notifPause) G.s.settings.notifPause = 'choices';
     if (!G.s.notifs) G.s.notifs = [];
     for (const e of G.s.events) Events.normalize(e);
     Rail.inject();

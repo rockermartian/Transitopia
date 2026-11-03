@@ -46,6 +46,10 @@ small{font-size:12.5px;color:var(--muted)}
 .pict-metro{border-radius:50%;width:24px;padding:0;font-size:13px}
 .pict-boat{border-radius:50%;width:24px;padding:0;font-size:15px}
 .pict-ter{font-size:10px}
+.pict-taxi{background:#F7C600;font-size:10px;font-weight:800;letter-spacing:.04em}
+.sheet-h h2 .pict-taxi{margin-right:8px;vertical-align:2px}
+.txst{display:flex;flex-wrap:wrap;gap:6px 12px;margin:10px 0 2px;font-size:13px;color:var(--ink-2)}.txst span{display:inline-flex;align-items:center;gap:5px}.txst i{width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 1.5px var(--ink)}
+.cnt{min-width:22px;text-align:center;align-self:center;font:600 15px/1 var(--f-display)}
 .pict-bus{font-size:9.5px;border-radius:12px}
 .lbadge{display:inline-grid;place-items:center;flex:none;font:600 14px/1 var(--f-display);height:26px;min-width:26px;padding:0 7px;border-radius:13px;margin-left:4px}
 .lb-metro{border-radius:50%;width:26px;padding:0}
@@ -2270,8 +2274,8 @@ const Eco = {
     UI.toast(on ? 'Argent illimité activé. Construisez librement !' : 'Retour à la gestion normale, trésorerie : ' + fmtEur(G.s.money) + '.', 'ok');
     UI.refreshTop();
   },
-  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, evIn: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0 }; },
-  dayProfit(d) { return d.fares + d.ads + (d.evIn || 0) - d.ops - d.maint - d.interest - d.events; },
+  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, evIn: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0, taxi: 0, taxiOps: 0 }; },
+  dayProfit(d) { return d.fares + d.ads + (d.evIn || 0) + (d.taxi || 0) - d.ops - d.maint - d.interest - d.events - (d.taxiOps || 0); },
   debt() { return G.s.loans.reduce((a, l) => a + l.amount, 0); },
   loanOffers() {
     const m = G.s.costMul;
@@ -2519,6 +2523,7 @@ const Sim = {
       rem -= step;
       s.sec += step;
       this.moveVehicles(step);
+      Taxi.move(step);
       while (s.sec >= s.nextMin * 60) { s.min = s.nextMin; this.minute(); s.nextMin++; }
     }
   },
@@ -2526,6 +2531,7 @@ const Sim = {
   minute() {
     const s = G.s, m = s.min, mod = Time.mod(m);
     for (const l of s.lines) this.lineMinute(l, m);
+    Taxi.minute(m);
     Events.minute();
     if (mod % 10 === 0) {
       Staff.tick();
@@ -2870,6 +2876,7 @@ const Sim = {
       l.today = Lines.blankStats();
       if (l.sb) { l.sb.fill(0); l.sm.fill(0); }
     }
+    Taxi.newDay();
     s.days.unshift(d); if (s.days.length > 60) s.days.length = 60;
     s.today = Eco.blankDay();
     const servedPop = this.servedPop();
@@ -2909,6 +2916,7 @@ const Sim = {
     for (const n of s.notifs || []) n.t += d;
     for (const x of s.days || []) if (x.date !== undefined) x.date += d;
     if (s.evLast) for (const k in s.evLast) s.evLast[k] += d;
+    Taxi.shiftTime(d);
   },
   /** progression pendant l'absence (mode « idle ») */
   offline(realSec, gameMinForced) {
@@ -2923,7 +2931,7 @@ const Sim = {
     for (let k = 0; k < days; k++) {
       const d = Eco.blankDay(); d.date = s.min + k * 1440;
       const ref = s.days[0];
-      if (ref) { d.fares = ref.fares; d.ads = ref.ads; d.ops = ref.ops; d.maint = ref.maint; d.interest = ref.interest; d.pax = ref.pax; d.mec = ref.mec; }
+      if (ref) { d.taxi = ref.taxi || 0; d.taxiOps = ref.taxiOps || 0; d.fares = ref.fares; d.ads = ref.ads; d.ops = ref.ops; d.maint = ref.maint; d.interest = ref.interest; d.pax = ref.pax; d.mec = ref.mec; }
       d.offline = true;
       s.days.unshift(d);
     }
@@ -3062,7 +3070,7 @@ const Save = {
     const owned = [...G.w.zones.values()].filter((z) => z.owned).map((z) => z.code);
     const c = G.map.getCenter();
     return JSON.stringify({
-      ...s, lines, owned, view: { lat: c.lat, lng: c.lng, z: G.map.getZoom() }, lastReal: Date.now(),
+      ...s, lines, owned, taxi: Taxi.toSave(), view: { lat: c.lat, lng: c.lng, z: G.map.getZoom() }, lastReal: Date.now(),
       zoneMode: G.w.mode,
     });
   },
@@ -3512,6 +3520,8 @@ Object.assign(Events, {
     if (e.ops) out.push(e.ops.all ? `Coûts d’exploitation du réseau ${pct(e.ops.mult)}` : `Coûts d’exploitation des ${MODES[e.ops.mode].label.toLowerCase()} ${pct(e.ops.mult)}`);
     if (e.social) out.push(`Climat social ${e.social > 0 ? 'en amélioration' : 'dégradé'} (${e.social > 0 ? '+' : '−'}${Math.round(Math.abs(e.social) * 100)} pts)`);
     if (e.mairie) out.push(`Relations avec la mairie ${e.mairie > 0 ? 'en amélioration' : 'dégradées'} (${e.mairie > 0 ? '+' : '−'}${Math.round(Math.abs(e.mairie) * 100)} pts)`);
+    if (e.taxi) out.push(`Demande de taxis ${e.taxi.mult >= 1 ? '+' : '−'}${Math.round(Math.abs(e.taxi.mult - 1) * 100)} %`);
+    if (e.taxiRep) out.push(`Image des taxis ${e.taxiRep > 0 ? '+' : '−'}${Math.round(Math.abs(e.taxiRep) * 100)} %`);
     if (e.addVeh) out.push(`${e.addVeh.n} véhicule${e.addVeh.n > 1 ? 's' : ''} ${(MODEL[e.addVeh.model] || {}).name || ''} ajouté${e.addVeh.n > 1 ? 's' : ''} à la flotte`);
     if (e.veh) out.push(e.veh.type === 'hold' ? `Un véhicule immobilisé ${e.veh.min} min (ceux qui suivent attendent derrière)` : `Un véhicule immobilisé ${e.veh.min} min puis indisponible jusqu’à la fin de l’événement`);
     if (e.rep) out.push(`Image ${e.rep.delta > 0 ? '+' : '−'}${Math.round(Math.abs(e.rep.delta) * 100)} % (${e.rep.all ? 'tout le réseau' : e.rep.mode ? MODES[e.rep.mode].label.toLowerCase() : L(e.rep.lineId)})`);
@@ -3544,6 +3554,7 @@ Object.assign(Events, {
     if (e.rep) for (const l of s.lines) if (e.rep.all || e.rep.mode === l.mode || e.rep.lineId === l.id) l.rep = clamp(l.rep + e.rep.delta, 0.6, 1.1);
     if (e.social) s.social = clamp((s.social || 0) + e.social, -1, 1);
     if (e.mairie) s.mairie = clamp((s.mairie || 0) + e.mairie, -1, 1);
+    if (e.taxiRep && s.taxi) s.taxi.rep = clamp((s.taxi.rep || 1) + e.taxiRep, 0.6, 1.1);
     if (e.addVeh) Gauges.addVehicles(e);
     if (e.veh) {
       const l = s.lines.find((x) => x.id === e.veh.lineId), v = l && l.veh.find((x) => x.id === e.veh.vehId);
@@ -3754,6 +3765,14 @@ const STAFF = [
   { id: 'social', icon: 'strike', col: '#5B6770', name: 'Dialogue social', who: 'encadrement',
     lv: ['Réunions d’équipe', 'Accords d’entreprise', 'Management participatif'],
     fx: (n) => [`Préavis de grève −${30 * n} %`, `Négociations −${20 * n} % moins chères`, n >= 3 ? 'Les équipes proposent elles-mêmes des améliorations (petits bonus d’image)' : 'Climat social apaisé'] },
+  { id: 'centrale', icon: 'target', col: '#E0B000', name: 'Centrale taxis', who: 'régulateurs du dépôt de taxis', needs: 'taxi',
+    lv: ['Standard téléphonique', 'Centrale de réservation', 'Régulation prédictive'],
+    fx: (n) => [
+      n === 1 ? 'Mode automatique : la part de taxis en maraude suit la demande de la dernière heure (avec du retard, assez approximatif)'
+        : n === 2 ? 'Mode automatique : suit l’heure, la météo, les événements et les lignes en panne, en temps réel (réglage toutes les 15 min)'
+          : 'Mode automatique : anticipe la demande 45 min à l’avance, les grèves et les événements annoncés (réglage toutes les 10 min, très précis)',
+      n >= 2 ? 'Les clients qui appellent patientent 3 min de plus (heure d’arrivée annoncée)' : 'Appels pris en charge par un standard',
+      n >= 3 ? 'Les taxis libres se positionnent d’eux-mêmes près des foules' : 'Les chauffeurs libres rejoignent parfois les foules d’eux-mêmes'] },
 ];
 const STAFF_DAYS = [2, 4, 7];
 const STAFF_BASE = [40000, 90000, 180000];
@@ -3771,6 +3790,7 @@ const Staff = {
   },
   canStart(id) {
     const s = this.st();
+    if (id === 'centrale' && !Taxi.st()) return false;
     if (this.L(id) >= 3 || this.training(id)) return false;
     return s.training.length < STAFF_MAX_PARALLEL;
   },
@@ -4454,6 +4474,38 @@ CH('c_cadeau_client', 'image', 'Millionième voyageur', 'none',
    ['Un cadeau symbolique', { m0: -0.5, ra: 0.01 }, 'Bouquet et abonnement offert.'],
    ['Non', {}, 'Un voyageur comme un autre.']]);
 
+/* ===================== TAXIS ===================== */
+CH('c_vtc', 'eco', 'Arrivée des VTC', 'taxi',
+  () => 'Une plateforme de VTC s’installe en ville avec des prix d’appel agressifs. Vos chauffeurs s’inquiètent.',
+  [['Lancer votre appli de réservation', { m: -35, tx: 1.05, d: 43200, txr: 0.03 }, 'Réservation en deux clics : la clientèle reste fidèle.'],
+   ['Campagne « Taxi officiel »', { m: -12, tx: 0.93, d: 10080 }, 'Vous limitez la casse.'],
+   ['Ne rien faire', { tx: 0.8, d: 10080, so: -0.03 }, 'Une partie de la clientèle part chez le concurrent.']]);
+CH('c_taxi_refus', 'usager', 'Course refusée', 'taxi',
+  () => 'Un de vos chauffeurs a refusé une course trop courte à une dame âgée. La scène, filmée, circule sur les réseaux sociaux.',
+  [['Sanction et rappel des règles', { so: -0.03, txr: 0.04 }, 'Message clair : aucune course ne se refuse.'],
+   ['Excuses publiques et course offerte', { m0: -0.1, txr: 0.02 }, 'La dame accepte vos excuses avec le sourire.'],
+   ['Défendre le chauffeur', { txr: -0.07, so: 0.03 }, 'Les chauffeurs apprécient, les clients beaucoup moins.']], { dflt: 1 });
+CH('c_taxi_gare', 'eco', 'Station de taxis à la gare', 'taxi',
+  () => 'La gare propose de réserver à vos taxis la station devant le parvis, contre une redevance mensuelle.',
+  [['Louer la station', { m: -10, tx: 1.12, d: 43200 }, 'Vos taxis cueillent les voyageurs à la sortie des trains.'],
+   ['Partager avec les autres compagnies', { m: -3, tx: 1.04, d: 43200 }, 'Une petite part du gâteau.'],
+   ['Refuser', {}, 'Les voyageurs des trains iront voir ailleurs.']]);
+CH('c_taxi_bijoux', 'image', 'Bijoux oubliés', 'taxi',
+  () => 'Une cliente a oublié une sacoche de bijoux de famille dans un de vos taxis. Le chauffeur l’a rapportée au dépôt.',
+  [['La lui rapporter en personne', { txr: 0.05 }, 'La cliente, émue, raconte l’histoire au journal local.'],
+   ['Objets trouvés de la mairie', { txr: 0.01, ma: 0.01 }, 'Procédure respectée.'],
+   ['Récompenser le chauffeur', { m0: -0.5, txr: 0.03, so: 0.04 }, 'Prime d’honnêteté : les collègues applaudissent.']]);
+CH('c_taxi_nuit', 'social', 'Chauffeurs de nuit inquiets', 'taxi',
+  () => 'Après l’agression d’un collègue, vos chauffeurs de nuit réclament plus de sécurité.',
+  [['Caméras et bouton d’alerte', { m: -10, so: 0.06, txr: 0.01 }, 'Les taxis sont équipés dans la semaine.'],
+   ['Prime de nuit', { m: -5, so: 0.04 }, 'Geste apprécié.'],
+   ['Rien pour l’instant', { so: -0.07 }, 'Certains chauffeurs refusent les services de nuit.']]);
+CH('c_taxi_salon', 'eco', 'Navettes du salon', 'taxi',
+  () => 'Les organisateurs d’un grand salon cherchent une compagnie de taxis officielle pour leurs exposants, trois jours durant.',
+  [['Devenir partenaire officiel', { m0: 3, tx: 1.3, d: 4320 }, 'Vos taxis enchaînent les courses d’exposants.'],
+   ['Tarif préférentiel seulement', { tx: 1.12, d: 4320 }, 'Quelques courses en plus.'],
+   ['Décliner', {}, 'Un concurrent récupère le contrat.']]);
+
 /* ---------- moteur des événements à choix ---------- */
 const ChoiceFX = {
   scale() { return EvCtx.scale(); },
@@ -4462,6 +4514,7 @@ const ChoiceFX = {
     const v = { C: G.s.city.nom };
     const pickLine = (pred) => { const l = EvCtx.line(pred); if (!l) return false; v.line = l; v.L = lab(l); return true; };
     if (kind === 'none') return v;
+    if (kind === 'taxi') return Taxi.st() && Taxi.st().fleet.length >= 2 ? v : null;
     if (kind === 'line' && !pickLine()) return null;
     if (kind === 'bus' && !pickLine((l) => l.mode === 'bus')) return null;
     if (kind === 'metro' && !pickLine((l) => l.mode === 'metro')) return null;
@@ -4482,7 +4535,8 @@ const ChoiceFX = {
   tone(fx, sc) {
     let t = ((fx.m || 0) * sc + (fx.m0 || 0)) / (25 * sc);
     t += ((fx.r || 0) + (fx.ra || 0) * 1.5 + (fx.rm ? fx.rm[1] : 0)) * 40;
-    t += ((fx.so || 0) + (fx.ma || 0)) * 12;
+    t += ((fx.so || 0) + (fx.ma || 0)) * 12 + (fx.txr || 0) * 25;
+    if (fx.tx) t += (fx.tx - 1) * 8;
     for (const k of ['dl', 'da', 'dz', 'dp']) if (fx[k]) t += (fx[k] - 1) * 8;
     if (fx.h) t -= 2;
     return t > 2.5 ? 2 : t > 0.3 ? 1 : t < -2.5 ? -2 : t < -0.3 ? -1 : 0;
@@ -4515,6 +4569,8 @@ const ChoiceFX = {
     else if (fx.h) e.halt = { mode: fx.h };
     if (fx.sp) e.speed = { mode: fx.sp[0], mult: fx.sp[1] };
     if (fx.so) e.social = fx.so;
+    if (fx.tx) e.taxi = { mult: fx.tx };
+    if (fx.txr) e.taxiRep = fx.txr;
     if (fx.ma) e.mairie = fx.ma;
     if (fx.add) e.addVeh = { model: fx.add[0], n: fx.add[1], lineId: lid };
     if (fx.lend && v.line) {
@@ -4523,7 +4579,7 @@ const ChoiceFX = {
     }
     if (v.mx !== undefined && e.mx === undefined && (e.demand || e.traffic)) { e.mx = v.mx; e.my = v.my; }
     // sans effet durable : l'événement ne reste pas « en cours »
-    if (!(e.demand || e.traffic || e.halt || e.speed || e.fare || e.ops || e.veh)) e.end = m + 1;
+    if (!(e.demand || e.traffic || e.halt || e.speed || e.fare || e.ops || e.veh || e.taxi)) e.end = m + 1;
   },
 };
 
@@ -4587,6 +4643,568 @@ const Gauges = {
     const row = (lab, x, help) => `<div class="gauge"><span>${lab}</span><i class="gbar"><b style="left:${50 + x * 50}%"></b></i><em class="${this.tone(x)}">${this.label(x)}</em><small>${help}</small></div>`;
     return row('Climat social', this.social(), 'Grèves plus ou moins probables, qualité de service')
       + row('Relations avec la mairie', this.mairie(), 'Prix des quartiers, subventions, pénalités, travaux');
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — taxis
+   Un seul dépôt (stockage illimité, atelier de réparation). Les taxis ne
+   suivent pas de ligne : ils prennent des courses partout dans les zones
+   d'exploitation, payées au kilomètre.
+   - En maraude (« libres »), ils captent les clients qui hèlent dans la rue
+     et répondent vite aux appels, mais roulent à vide (chauffeur + carburant).
+   - Au dépôt, ils ne coûtent presque rien mais ne prennent que les appels,
+     avec un long trajet d'approche.
+   La part de taxis en maraude est réglée par le joueur, ou automatiquement
+   par la centrale taxis (formation), plus ou moins finement selon son niveau.
+   ===================================================================== */
+
+const TAXI_MODELS = [
+  { id: 'tx_ber', name: 'Berline', desc: 'Thermique · 4 places', cap: 4, price: 28000, km: 0.16, wear: 1 },
+  { id: 'tx_hyb', name: 'Hybride', desc: 'Moins gourmande · 4 places', cap: 4, price: 36000, km: 0.10, wear: 0.85 },
+  { id: 'tx_ev', name: 'Électrique', desc: 'Très économe, appréciée des clients · 4 places', cap: 4, price: 45000, km: 0.05, wear: 0.7 },
+  { id: 'tx_van', name: 'Van', desc: 'Groupes et bagages · 7 places', cap: 7, price: 46000, km: 0.20, wear: 1.1 },
+];
+const TXM = {}; for (const m of TAXI_MODELS) TXM[m.id] = m;
+/** plages horaires : [début, fin] en heures (fin > 24 = lendemain) */
+const TAXI_HOURS = { jour: [6, 22, '6 h – 22 h'], etendu: [5, 25, '5 h – 1 h'], soir: [16, 30, '16 h – 6 h'], h24: [0, 24, '24 h/24'] };
+/** demande de taxis selon l'heure (plus forte le soir et la nuit que celle des bus) */
+const TAXI_PROF = [0.35, 0.3, 0.25, 0.15, 0.1, 0.15, 0.35, 0.7, 0.8, 0.55, 0.45, 0.5, 0.6, 0.5, 0.45, 0.5, 0.65, 0.85, 0.9, 0.8, 0.7, 0.65, 0.6, 0.5];
+const TAXI_CFG = {
+  depot: 180000, move: 60000,      // dépôt, déménagement
+  base: 4.5, refKm: 2.2, minFare: 8, // prise en charge, tarif de référence au km, course minimum
+  wage: 7, standby: 1.5, depotH: 6, insH: 0.5, // €/h : chauffeur hors dépôt, astreinte au dépôt, dépôt, assurance par taxi
+  repair: 250, repairMin: 240,      // réparation : coût, durée
+  hail: 700, hailWait: 3, out: 4,   // un client qui hèle voit un taxi libre à moins de 700 m et attend 3 min ; sortie du dépôt : 4 min
+  roamSpd: 0.72,                    // en maraude, on roule doucement
+};
+const TAXI_CLSW = [0.15, 1.2, 1.3, 1.1, 0.8, 0.5];
+
+const Taxi = {
+  sess: Math.random(),
+  st() { return G.s && G.s.taxi && G.s.taxi.depot ? G.s.taxi : null; },
+  blank() { return { n: 0, rev: 0, ops: 0, km: 0, calls: 0, hails: 0, lost: 0, missed: 0, wait: 0, waitN: 0, broke: 0 }; },
+  net() { return G.w.road; },
+  L() { return Staff.L('centrale'); },
+
+  /* ---------- dépôt ---------- */
+  depotCost(move) { return Math.round((move ? TAXI_CFG.move : TAXI_CFG.depot) * G.s.costMul / 1000) * 1000; },
+  canPlace(mx, my) {
+    const z = G.w.zoneAt(mx, my);
+    if (!z || !z.owned) return 'Le dépôt doit être dans une de vos zones.';
+    const net = this.net(), i = net.nE ? net.nearest(mx, my, 150, (n) => net.busNode(n)) : -1;
+    if (i < 0) return 'Placez le dépôt au bord d’une rue.';
+    return i;
+  },
+  placeDepot(mx, my) {
+    const r = this.canPlace(mx, my);
+    if (typeof r === 'string') { UI.toast(r, 'warn'); return false; }
+    const net = this.net(), move = !!this.st();
+    if (!Eco.spend(this.depotCost(move), 'capex')) return false;
+    const z = G.w.zoneAt(mx, my);
+    const nm = net.adj[r].map((e) => net.name[e]).find(Boolean);
+    const depot = { mx: net.x[r], my: net.y[r], name: 'Dépôt taxis ' + (nm ? nm.replace(/^(rue|avenue|boulevard|place|quai|chemin|route|allée|cours)\s+(de la |du |des |de l’|de l'|de |d’)?/i, '') : z.name) };
+    if (move) {
+      const T = G.s.taxi; T.depot = depot; this._dn = null;
+      for (const t of T.fleet) if (t.st === 'depot' || t.st === 'repair') { t.mx = depot.mx; t.my = depot.my; }
+      Events.log('Dépôt de taxis déplacé : ' + depot.name + '.', 'ok');
+      UI.toast('Dépôt déplacé.', 'ok');
+    } else {
+      G.s.taxi = { depot, fleet: [], roam: 0.5, auto: false, autoShare: 0.5, hours: 'etendu', perKm: TAXI_CFG.refKm, req: [], rep: 1, today: this.blank(), hist: [], rq: [], nextAuto: 0 };
+      Events.log('Dépôt de taxis ouvert : ' + depot.name + '.', 'ok');
+      UI.toast('Dépôt ouvert ! Achetez vos premiers taxis.', 'ok');
+    }
+    Render.dirty = true;
+    return true;
+  },
+  depotNode() {
+    const T = this.st(), net = this.net(); if (!T || !net.nE) return -1;
+    if (this._dn == null || this._dnV !== net.nE || this._dnS !== this.sess) {
+      this._dn = net.nearest(T.depot.mx, T.depot.my, 300, (n) => net.busNode(n)); this._dnV = net.nE; this._dnS = this.sess;
+    }
+    return this._dn;
+  },
+
+  /* ---------- flotte ---------- */
+  buy(model) {
+    const T = this.st(), md = TXM[model]; if (!T || !md) return false;
+    if (!Eco.spend(Math.round(md.price * G.s.costMul), 'capex')) return false;
+    T.fleet.push({ id: G.s.nextId++, model, st: 'depot', mx: T.depot.mx, my: T.depot.my, wear: 0, km: 0 });
+    return true;
+  },
+  sell(model) {
+    const T = this.st(); if (!T) return;
+    // de préférence un taxi au dépôt, sinon un taxi libre
+    let i = T.fleet.findIndex((t) => t.model === model && t.st === 'depot');
+    if (i < 0) i = T.fleet.findIndex((t) => t.model === model && (t.st === 'roam' || t.st === 'back'));
+    if (i < 0) { UI.toast('Tous les taxis de ce modèle sont en course ou en réparation.', 'warn'); return; }
+    const t = T.fleet[i];
+    T.fleet.splice(i, 1);
+    if (G.ui.selTaxi === t) UI.closeCard();
+    Eco.earn(Math.round(TXM[model].price * G.s.costMul * 0.55 * (1 - 0.4 * Math.min(1, t.wear))), 'sales');
+  },
+  count(pred) { const T = this.st(); return T ? T.fleet.filter(pred).length : 0; },
+
+  /* ---------- horaires, tarif ---------- */
+  open(m) {
+    const T = this.st(); if (!T) return false;
+    const [a, b] = TAXI_HOURS[T.hours] || TAXI_HOURS.etendu;
+    if (b - a >= 24) return true;
+    const h = Time.mod(m) / 60;
+    return (h >= a && h < b) || (h + 24 >= a && h + 24 < b);
+  },
+  priceFactor() { const T = this.st(); return clamp(Math.pow(TAXI_CFG.refKm / T.perKm, 1.2), 0.25, 2.5); },
+  fare(km, size) { const T = this.st(); return Math.max(TAXI_CFG.minFare, TAXI_CFG.base + T.perKm * km) * (size > 4 ? 1.2 : 1); },
+
+  /* ---------- demande ---------- */
+  /** facteur commun : heure, météo, image, prix, événements, lignes à l'arrêt */
+  demandMult(m) {
+    const T = this.st(), s = G.s, h = Time.hour(m), dow = Time.dow(m);
+    let f = TAXI_PROF[h];
+    // nuits du vendredi et du samedi
+    if ((h >= 22 && (dow === 5 || dow === 6)) || (h < 5 && (dow === 6 || dow === 0))) f *= 1.6;
+    f *= { rain: 1.35, snow: 1.6, storm: 1.4, heat: 1.1 }[Events.weather()] || 1;
+    f *= T.rep * this.priceFactor();
+    // transports en commun en panne ou en grève : les voyageurs se rabattent sur le taxi
+    const act = s.lines.filter((l) => l.status === 'active');
+    if (act.length) { const halted = act.filter((l) => Events.halted(l)).length; f *= 1 + 1.2 * halted / act.length; }
+    for (const e of Events.live()) {
+      if (e.demand && e.demand.all) f *= 1 + (e.demand.mult - 1) * 0.6;
+      if (e.taxi) f *= e.taxi.mult;
+    }
+    return f;
+  },
+  /** courses demandées par minute dans les zones (hors lieux d'événement) */
+  rate(m) { return Sim.servedPop() / 1000 * 0.02 * this.demandMult(m); },
+  /** points chauds : grands événements en cours */
+  hotspots() {
+    const out = [];
+    for (const e of Events.live()) if (e.demand && e.demand.mx !== undefined && e.demand.mult > 1.2) out.push({ mx: e.demand.mx, my: e.demand.my, r: e.demand.r || 700, w: 0.15 * (e.demand.mult - 1) * (e.demand.r || 700) / 700 });
+    return out;
+  },
+  /** arêtes de chaque zone possédée (pour placer les clients au bord des rues) */
+  zoneEdges() {
+    const net = this.net(), key = net.nE + ':' + G.s.owned.length + ':' + [...G.w.zones.values()].filter((z) => z.owned).length;
+    if (this._ze && this._zeK === key) return this._ze;
+    const m = new Map();
+    for (let e = 0; e < net.nE; e++) {
+      const z = net.zone[e]; if (!z || net.cls[e] === 0) continue;
+      const zz = G.w.zones.get(z); if (!zz || !zz.owned) continue;
+      let a = m.get(z); if (!a) { a = []; m.set(z, a); } a.push(e);
+    }
+    this._ze = m; this._zeK = key;
+    return m;
+  },
+  pickZone(weight) {
+    const ze = this.zoneEdges(); let tot = 0; const arr = [];
+    for (const [code, es] of ze) { const z = G.w.zones.get(code); const w = weight(z); if (w > 0) { arr.push([w, z, es]); tot += w; } }
+    if (!tot) return null;
+    let r = Math.random() * tot;
+    for (const x of arr) { r -= x[0]; if (r <= 0) return x; }
+    return arr[arr.length - 1];
+  },
+  pointIn(es) { const net = this.net(), e = pick(es), i = Math.random() < 0.5 ? net.ea[e] : net.eb[e]; return { mx: net.x[i], my: net.y[i], n: i }; },
+  nodeNear(mx, my) { const net = this.net(); return net.nearest(mx, my, 250, (n) => net.busNode(n)); },
+  /** nouvelle demande de course */
+  newRequest(o) {
+    const T = this.st();
+    // destination : plutôt proche, attirée par les habitants et les emplois
+    let d = null;
+    for (let k = 0; k < 4 && !d; k++) {
+      const x = this.pickZone((z) => (z.pop + z.jobs) * Math.exp(-dist(z.cx, z.cy, o.mx, o.my) / 5000));
+      if (!x) return null;
+      const p = this.pointIn(x[2]);
+      if (dist(p.mx, p.my, o.mx, o.my) > 900) d = p;
+    }
+    if (!d) return null;
+    const size = Math.random() < 0.12 ? 5 + Math.floor(Math.random() * 3) : 1 + Math.floor(Math.random() * Math.random() * 4);
+    return { id: G.s.nextId++, t0: G.s.min, mx: o.mx, my: o.my, n: o.n, dx: d.mx, dy: d.my, dn: d.n, size, sess: this.sess, pat: 10 + (this.L() >= 2 ? 3 : 0) };
+  },
+
+  /* ---------- simulation : chaque minute ---------- */
+  minute(m) {
+    const T = this.st(); if (!T) return;
+    const s = G.s, net = this.net(); if (!net.nE) return;
+    const open = this.open(m);
+    // coûts : chauffeurs des taxis sortis, kilomètres, dépôt et assurances
+    let cost = TAXI_CFG.depotH / 60 + T.fleet.length * TAXI_CFG.insH / 60;
+    const kmMul = 1 - 0.03 * Staff.L('conduite');
+    for (const t of T.fleet) {
+      if (t.st !== 'depot' && t.st !== 'repair') cost += TAXI_CFG.wage / 60; else if (t.st === 'depot' && open) cost += TAXI_CFG.standby / 60;
+      if (t.kmAcc) { cost += t.kmAcc / 1000 * TXM[t.model].km * kmMul; t.kmAcc = 0; }
+      if (t.st === 'depot' && t.wear > 0) t.wear = Math.max(0, t.wear - 0.0004); // entretien au dépôt
+      if (t.st === 'broken' && m >= t.until) this.tow(t, m);
+      if (t.st === 'repair' && m >= t.until) { t.st = 'depot'; t.wear = Math.min(t.wear, 0.15); }
+    }
+    cost *= s.costMul;
+    Eco.charge(cost, 'taxiOps'); T.today.ops += cost;
+    // demandes
+    let nNew = 0;
+    if (open) {
+      const r = this.rate(m);
+      const gen = (rate, origin) => { const n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0); for (let k = 0; k < n; k++) { const o = origin(); if (o) { this.request(o); nNew++; } } };
+      gen(r, () => { const x = this.pickZone((z) => z.pop + 0.7 * z.jobs); return x ? this.pointIn(x[2]) : null; });
+      for (const h of this.hotspots()) gen(h.w * this.demandMult(m) / Math.max(0.1, TAXI_PROF[Time.hour(m)]), () => {
+        const c = net.nearestList(h.mx + meters((Math.random() - 0.5) * h.r), h.my + meters((Math.random() - 0.5) * h.r), 250, (n) => net.busNode(n), 3);
+        return c.length ? { mx: net.x[c[0]], my: net.y[c[0]], n: c[0] } : null;
+      });
+    }
+    T.rq.push(nNew); if (T.rq.length > 60) T.rq.shift();
+    // clients au bord du trottoir : un taxi libre passe-t-il ?
+    if (T.hq && T.hq.length) T.hq = T.hq.filter((r) => { if (this.hailTaxi(r)) return false; if (m - r.t0 > TAXI_CFG.hailWait) { T.today.missed++; return false; } return true; });
+    // appels en attente : répartition
+    this.dispatch(m, open);
+    // part de taxis en maraude
+    if (T.auto && this.L() > 0 && m >= (T.nextAuto || 0)) this.autoTune(m);
+    if (Time.mod(m) % 5 === 0 || !open) this.balance(open);
+  },
+  request(o) {
+    const T = this.st(), r = this.newRequest(o); if (!r) return;
+    const hail = Math.random() < 0.5;
+    if (hail) {
+      // client dans la rue : seul un taxi libre qui passe tout près peut le prendre
+      T.today.hails++; r.hail = true;
+      if (!this.hailTaxi(r)) { T.hq = T.hq || []; T.hq.push(r); }
+    } else { T.today.calls++; T.req.push(r); }
+  },
+  hailTaxi(r) {
+    const T = this.st();
+    let best = null, bd = TAXI_CFG.hail;
+    for (const t of T.fleet) if (t.st === 'roam' && TXM[t.model].cap >= r.size) { const d = dist(t.mx, t.my, r.mx, r.my); if (d < bd) { bd = d; best = t; } }
+    if (best) { this.assign(best, r); return true; }
+    return false;
+  },
+  /** vitesse moyenne d'approche estimée (m/s) */
+  eta(t, r) {
+    let d = dist(t.mx, t.my, r.mx, r.my) * 1.35 / 6.5 / 60;
+    if (t.st === 'depot') d += TAXI_CFG.out; // le temps de sortir du dépôt
+    return d;
+  },
+  dispatch(m, open) {
+    const T = this.st();
+    const keep = [];
+    T.req.sort((a, b) => a.t0 - b.t0);
+    for (const r of T.req) {
+      const age = m - r.t0;
+      if (age > r.pat) { T.today.lost++; T.rep = clamp(T.rep - 0.002, 0.6, 1.1); continue; }
+      let best = null, be = Infinity;
+      for (const t of T.fleet) {
+        if (!(t.st === 'roam' || t.st === 'back' || (t.st === 'depot' && open))) continue;
+        if (TXM[t.model].cap < r.size) continue;
+        const e = this.eta(t, r); if (e < be) { be = e; best = t; }
+      }
+      if (best && be <= r.pat - age + 2) this.assign(best, r); else keep.push(r);
+    }
+    T.req = keep;
+  },
+  assign(t, r) {
+    if (r.sess !== this.sess) { r.n = this.nodeNear(r.mx, r.my); r.dn = this.nodeNear(r.dx, r.dy); r.sess = this.sess; }
+    if (r.n < 0 || r.dn < 0) return;
+    if (t.st === 'depot') { const dn = this.depotNode(); if (dn < 0) return; this.at(t, dn); }
+    t.job = r; t.st = 'pickup'; t.bias = null;
+    this.goTo(t, r.n);
+  },
+  /** répartition entre maraude et dépôt, toutes les 5 minutes */
+  balance(open) {
+    const T = this.st();
+    const ok = T.fleet.filter((t) => t.st !== 'broken' && t.st !== 'repair');
+    if (!open) { for (const t of ok) if (t.st === 'roam') this.sendBack(t); return; }
+    const share = T.auto && this.L() > 0 ? T.autoShare : T.roam;
+    const want = Math.round(share * ok.length);
+    const out = ok.filter((t) => t.st !== 'depot' && t.st !== 'back');
+    if (out.length < want) {
+      const dn = this.depotNode(); if (dn < 0) return;
+      // d'abord les taxis qui rentraient, puis ceux du dépôt
+      let need = want - out.length;
+      for (const t of ok) if (need > 0 && t.st === 'back') { t.st = 'roam'; need--; } // finit sa rue puis repart en maraude
+      for (const t of ok) if (need > 0 && t.st === 'depot') { this.at(t, dn); t.st = 'roam'; t.path = null; need--; }
+    } else if (out.length > want) {
+      let extra = out.length - want;
+      for (const t of out) if (extra > 0 && t.st === 'roam') { this.sendBack(t); extra--; }
+    }
+  },
+  sendBack(t) {
+    const dn = this.depotNode(); if (dn < 0) return;
+    t.st = 'back'; t.bias = null; this.goTo(t, dn);
+  },
+  /** mode automatique (centrale taxis) : plus le niveau est élevé, plus il voit juste et tôt */
+  autoTune(m) {
+    const T = this.st(), L = this.L();
+    let perH;
+    if (L === 1) perH = T.rq.reduce((a, b) => a + b, 0) * 60 / Math.max(10, T.rq.length); // ce qu'on a vu passer la dernière heure
+    else {
+      perH = this.rate(m) * 60 + this.hotspots().reduce((a, h) => a + h.w * 60, 0);
+      if (L >= 3) {
+        // anticipation : la demande dans 45 minutes, et les événements annoncés
+        perH = Math.max(perH, this.rate(m + 45) * 60);
+        for (const e of Events.upcoming()) if (e.start - m <= 60 && e.demand) perH *= e.demand.mx !== undefined ? 1.15 : e.demand.mult;
+        if (Events.upcoming().some((e) => e.kind === 'strike' && !e.resolved && e.start - m <= 60)) perH *= 1.8;
+      }
+    }
+    const ok = T.fleet.filter((t) => t.st !== 'broken' && t.st !== 'repair').length || 1;
+    const noise = [0, 0.3, 0.15, 0.05][L];
+    const need = perH * 0.55 / 2.4 * 1.15; // la maraude sert surtout les clients de la rue (≈ 45 %) et les appels pressés
+    T.autoShare = clamp(need / ok * (1 + (Math.random() * 2 - 1) * noise), 0, 1);
+    T.autoShare = Math.round(T.autoShare * 20) / 20;
+    T.nextAuto = m + [0, 30, 15, 10][L];
+  },
+  tow(t, m) {
+    const dn = this.depotNode();
+    if (dn >= 0) this.at(t, dn);
+    t.st = 'repair'; t.path = null;
+    t.until = m + Math.round(TAXI_CFG.repairMin * (1 - 0.3 * Staff.L('maintenance')));
+    const c = TAXI_CFG.repair * G.s.costMul * (1 - 0.2 * Staff.L('maintenance'));
+    Eco.charge(c, 'taxiOps'); this.st().today.ops += c;
+  },
+
+  /* ---------- déplacements ---------- */
+  /** pose le taxi sur un nœud du réseau */
+  at(t, n) { const net = this.net(); t.node = n; t.mx = net.x[n]; t.my = net.y[n]; t.path = null; t.sess = this.sess; },
+  /** itinéraire vers un nœud (A* sous budget de calcul ; au-delà, trajet direct approximatif) */
+  goTo(t, n) {
+    const net = this.net();
+    if (n == null || n < 0 || !net.adj[n]) return;
+    if (t.sess !== this.sess || t.node == null || t.node < 0) { const k = this.nodeNear(t.mx, t.my); if (k < 0) return; this.at(t, k); }
+    // en pleine rue : on la termine d'abord, puis on calcule l'itinéraire depuis le carrefour suivant
+    const P0 = t.path;
+    if (P0 && t.k < P0.eds.length && t.u > 0) {
+      const b = P0.nodes[t.k + 1], e0 = P0.eds[t.k], rest = Math.max(0.5, P0.len[t.k] - t.u);
+      const cur = [t.mx, t.my];
+      t.path = null; t.node = b;
+      this.goTo(t, n);
+      const P = t.path;
+      if (P && !(P.eds.length === 1 && P.eds[0] === -1 && b === n)) {
+        P.pts.unshift(cur); P.eds.unshift(e0); P.len.unshift(rest); P.nodes.unshift(b);
+        P.pts[1] = [net.x[b], net.y[b]];
+      } else t.path = { pts: [cur, [net.x[b], net.y[b]]], eds: [e0], len: [rest], nodes: [b, b] };
+      t.k = 0; t.u = 0;
+      return;
+    }
+    if (t.node === n) { t.path = { pts: [[net.x[n], net.y[n]], [net.x[n], net.y[n]]], eds: [-1], len: [1], nodes: [n, n] }; t.k = 0; t.u = 0; return; }
+    const now = performance.now();
+    if (now - (this.fT || 0) > 16) { this.fT = now; this.fMs = 0; }
+    let r = null;
+    if (this.fMs < 7) { r = route(net, t.node, n, { maxIter: 120000 }); this.fMs += performance.now() - now; }
+    if (r && r.edges.length) {
+      const pts = r.nodes.map((i) => [net.x[i], net.y[i]]);
+      t.path = { pts, eds: r.edges, len: r.edges.map((e) => Math.max(0.5, net.len[e])), nodes: r.nodes };
+    } else {
+      const d = Math.max(1, dist(t.mx, t.my, net.x[n], net.y[n]) * 1.3);
+      t.path = { pts: [[t.mx, t.my], [net.x[n], net.y[n]]], eds: [-1], len: [d], nodes: [t.node, n] };
+    }
+    t.k = 0; t.u = 0;
+  },
+  /** maraude : prochain tronçon au hasard, plutôt les rues animées de vos zones */
+  wander(t) {
+    const net = this.net();
+    if (t.node == null || !net.adj[t.node]) { const k = this.nodeNear(t.mx, t.my); if (k < 0) return; this.at(t, k); }
+    const u = t.node, prev = t.lastE;
+    const bias = t.bias || (this.L() >= 3 || Math.random() < 0.3 ? this.nearHot(t) : null);
+    if (bias !== t.bias) t.bias = bias;
+    let tot = 0; const c = [];
+    for (const e of net.adj[u]) {
+      if (net.ow[e] && net.ea[e] !== u) continue;
+      if (e === prev && net.adj[u].length > 1) continue;
+      const z = net.zone[e], zz = z && G.w.zones.get(z);
+      const v = net.other(e, u), d = net.dens[e] < 0 ? 250 : net.dens[e];
+      let w = (zz && zz.owned ? 1 : 0.03) * TAXI_CLSW[net.cls[e]] * (0.4 + Math.min(2, d / 6000));
+      if (bias) { const d0 = dist(net.x[u], net.y[u], bias.mx, bias.my), d1 = dist(net.x[v], net.y[v], bias.mx, bias.my); w *= d1 < d0 ? 2.5 : 0.6; }
+      c.push([w, e]); tot += w;
+    }
+    if (!c.length && prev != null && prev >= 0) { c.push([1, prev]); tot = 1; }
+    if (!c.length) { this.sendBack(t); return; }
+    let r = Math.random() * tot, e = c[0][1];
+    for (const x of c) { r -= x[0]; if (r <= 0) { e = x[1]; break; } }
+    const v = net.other(e, u);
+    t.path = { pts: [[net.x[u], net.y[u]], [net.x[v], net.y[v]]], eds: [e], len: [Math.max(0.5, net.len[e])], nodes: [u, v] };
+    t.k = 0; t.u = 0;
+  },
+  nearHot(t) {
+    const hs = this.hotspots(); if (!hs.length) return null;
+    let best = null, bd = 4000;
+    for (const h of hs) { const d = dist(t.mx, t.my, h.mx, h.my); if (d < bd && d > 150) { bd = d; best = h; } }
+    return best;
+  },
+  speed(t, e) {
+    const net = this.net();
+    let v = 8;
+    if (e >= 0) {
+      v = net.spd[e];
+      if (net.lim[e] > 0) v = Math.min(v, net.lim[e] / 3.6 * 0.95);
+      v *= Traffic.busFactor(e, this.lane) * 1.05; // les taxis empruntent les couloirs de bus
+    } else v *= 0.8;
+    v *= Events.speedMult('bus');
+    if (t.st === 'roam') v *= TAXI_CFG.roamSpd;
+    return Math.max(1.5, v);
+  },
+  lane: { busLane: false },
+  move(dt) {
+    const T = this.st(); if (!T) return;
+    const net = this.net(); if (!net.nE) return;
+    for (const t of T.fleet) {
+      if (t.st === 'depot' || t.st === 'repair' || t.st === 'broken') continue;
+      if (t.sess !== this.sess) { // après un chargement : on repart du nœud le plus proche (une fois les routes rechargées)
+        const k = this.nodeNear(t.mx, t.my); if (k < 0) continue;
+        if (t.job) {
+          const n = this.nodeNear(t.job.mx, t.job.my), dn = this.nodeNear(t.job.dx, t.job.dy);
+          if (n < 0 || dn < 0) continue;
+          t.job.n = n; t.job.dn = dn; t.job.sess = this.sess;
+        }
+        this.at(t, k);
+        if (t.st === 'pickup' && t.job) this.goTo(t, t.job.n);
+        else if (t.st === 'ride' && t.job) this.goTo(t, t.job.dn);
+        else if (t.st === 'back') this.sendBack(t);
+      }
+      let rem = dt, g = 0;
+      while (rem > 1e-6 && g++ < 200) {
+        if (!t.path) {
+          if ((t.st === 'pickup' || t.st === 'ride') && !t.job) t.st = 'roam';
+          if (t.st === 'roam') this.wander(t); else if (t.st === 'back') this.sendBack(t);
+          else if (t.st === 'pickup') this.goTo(t, t.job.n); else if (t.st === 'ride') this.goTo(t, t.job.dn);
+          if (!t.path) break;
+        }
+        const P = t.path, L = P.len[t.k], e = P.eds[t.k];
+        const v = this.speed(t, e);
+        const left = L - t.u;
+        if (v * rem < left) { t.u += v * rem; t.kmAcc = (t.kmAcc || 0) + v * rem; t.km += v * rem; this.wearOn(t, v * rem); rem = 0; }
+        else {
+          rem -= left / v; t.kmAcc = (t.kmAcc || 0) + left; t.km += left; this.wearOn(t, left);
+          t.k++; t.u = 0; t.node = P.nodes[t.k]; t.lastE = e;
+          if (t.k >= P.eds.length) { t.path = null; t.mx = P.pts[P.pts.length - 1][0]; t.my = P.pts[P.pts.length - 1][1]; this.arrive(t); }
+        }
+        if (t.st === 'broken' || t.st === 'depot') break;
+      }
+      if (t.path) {
+        const P = t.path, a = P.pts[t.k], b = P.pts[t.k + 1], f = clamp(t.u / P.len[t.k], 0, 1);
+        t.mx = a[0] + (b[0] - a[0]) * f; t.my = a[1] + (b[1] - a[1]) * f;
+        if (b[0] !== a[0] || b[1] !== a[1]) t.ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      }
+    }
+  },
+  /** usure et pannes (au kilomètre) */
+  wearOn(t, m) {
+    const md = TXM[t.model];
+    t.wear = Math.min(1.5, (t.wear || 0) + m / 1000 * 0.0006 * md.wear);
+    if (t.st === 'broken') return;
+    const p = m / 1000 * 0.00018 * (1 + 3 * t.wear) * (1 - 0.22 * Staff.L('conduite'));
+    if (Math.random() < p) this.breakDown(t);
+  },
+  breakDown(t) {
+    const T = this.st();
+    if (t.job && t.st === 'ride') { T.rep = clamp(T.rep - 0.01, 0.6, 1.1); T.today.lost++; }
+    else if (t.job && t.st === 'pickup') { t.job.t0 = Math.max(t.job.t0, G.s.min - 4); T.req.push(t.job); }
+    t.job = null; t.st = 'broken'; t.path = null; t.until = G.s.min + 25; T.today.broke++;
+    Events.log('Un taxi ' + TXM[t.model].name.toLowerCase() + ' est tombé en panne : dépannage vers le dépôt.', 'warn');
+  },
+  arrive(t) {
+    const T = this.st(), s = G.s, m = s.min;
+    if (t.st === 'pickup' && t.job) {
+      const w = m - t.job.t0; T.today.wait += w; T.today.waitN++;
+      if (w <= 6) T.rep = clamp(T.rep + 0.0015, 0.6, 1.1);
+      t.st = 'ride'; t.job.pick = m;
+      this.goTo(t, t.job.dn);
+      const P = t.path; t.job.km = P ? P.len.reduce((a, b) => a + b, 0) / 1000 : 3;
+      return;
+    }
+    if (t.st === 'ride' && t.job) {
+      const fare = this.fare(t.job.km, t.job.size);
+      if (!s.unlimited) { s.money += fare; s.today.taxi = (s.today.taxi || 0) + fare; }
+      T.today.rev += fare; T.today.n++; T.today.km += t.job.km;
+      t.job = null;
+      if (this.open(m)) {
+        const ok = T.fleet.filter((x) => x.st !== 'broken' && x.st !== 'repair');
+        const share = T.auto && this.L() > 0 ? T.autoShare : T.roam;
+        const out = ok.filter((x) => x.st !== 'depot' && x.st !== 'back').length;
+        if (out <= Math.round(share * ok.length) && share > 0) { t.st = 'roam'; return; }
+      }
+      this.sendBack(t);
+      return;
+    }
+    if (t.st === 'back') { t.st = 'depot'; t.path = null; const T2 = this.st(); t.mx = T2.depot.mx; t.my = T2.depot.my; return; }
+    // maraude : on continue au carrefour suivant (wander au prochain tour)
+  },
+
+  /* ---------- journée ---------- */
+  newDay() {
+    const T = this.st(); if (!T) return;
+    const d = T.today;
+    T.hist.unshift({ ...d, date: G.s.min - 1440, fleet: T.fleet.length }); if (T.hist.length > 30) T.hist.length = 30;
+    const demand = d.calls + d.hails;
+    if (demand > 5) T.rep = clamp(T.rep + 0.015 - (d.lost + d.missed * 0.3) / demand * 0.25, 0.6, 1.1);
+    T.today = this.blank();
+  },
+  shiftTime(d) {
+    const T = this.st(); if (!T) return;
+    for (const t of T.fleet) { if (t.until) t.until += d; if (t.job) { t.job.t0 += d; if (t.job.pick) t.job.pick += d; } }
+    for (const r of T.req) r.t0 += d;
+    for (const r of T.hq || []) r.t0 += d;
+    if (T.nextAuto) T.nextAuto += d;
+  },
+  /** sauvegarde : pas d'indices de nœuds (le réseau est reconstruit au chargement) */
+  toSave() {
+    const T = G.s.taxi; if (!T) return null;
+    const job = (j) => j && { id: j.id, t0: j.t0, mx: j.mx, my: j.my, dx: j.dx, dy: j.dy, size: j.size, pat: j.pat, km: j.km, pick: j.pick };
+    return { ...T, hq: [], fleet: T.fleet.map((t) => ({ id: t.id, model: t.model, st: t.st, mx: t.mx, my: t.my, ang: t.ang, wear: t.wear, km: t.km, until: t.until, job: job(t.job) })), req: T.req.map(job) };
+  },
+
+  /* ---------- affichage ---------- */
+  label(t) {
+    if (t.st === 'roam') return t.bias ? 'Libre · se dirige vers la foule' : 'Libre · en maraude';
+    if (t.st === 'pickup') return 'En route vers un client';
+    if (t.st === 'ride') return 'En course' + (t.job ? ' · ' + fmtEur(this.fare(t.job.km || 0, t.job.size), true) : '');
+    if (t.st === 'back') return 'Retour au dépôt';
+    if (t.st === 'broken') return 'En panne · dépanneuse en route';
+    if (t.st === 'repair') return 'À l’atelier jusqu’à ' + Time.label(t.until).time;
+    return 'Au dépôt';
+  },
+  draw(ctx, X, Y, zf, z, W, H, nl) {
+    Render.tpos = []; Render.dpos = null;
+    const T = this.st(); if (!T || z < 11) return;
+    const d = T.depot, dx = X(d.mx), dy = Y(d.my);
+    if (dx > -40 && dy > -40 && dx < W + 40 && dy < H + 40) {
+      const w = 34, h = 18;
+      Render.rr(ctx, dx - w / 2, dy - h / 2, w, h, 5);
+      ctx.fillStyle = INK; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#F7C600'; ctx.stroke();
+      ctx.fillStyle = '#F7C600'; ctx.font = '800 10px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('TAXI', dx, dy + 0.5);
+      const n = T.fleet.filter((t) => t.st === 'depot' || t.st === 'repair').length;
+      if (n) {
+        ctx.beginPath(); ctx.arc(dx + w / 2, dy - h / 2, 8, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
+        ctx.fillStyle = INK; ctx.font = '700 9px ' + FONT; ctx.fillText(String(n), dx + w / 2, dy - h / 2 + 0.5);
+      }
+      Render.dpos = { x: dx, y: dy };
+    }
+    // clients qui attendent un taxi (appels)
+    if (z >= 14) for (const r of T.req) {
+      const x = X(r.mx), y = Y(r.my); if (x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
+      ctx.beginPath(); ctx.arc(x, y, 6, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#F7C600'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y - 1.5, 1.6, 0, 7); ctx.moveTo(x - 2.6, y + 3); ctx.arc(x, y + 3, 2.6, Math.PI, 0); ctx.fillStyle = INK; ctx.fill();
+    }
+    if (z < 12.5) return;
+    const L2 = 5.2 * zf, W2 = 2.8 * zf;
+    for (const t of T.fleet) {
+      if (t.st === 'depot' || t.st === 'repair') continue;
+      const x = X(t.mx), y = Y(t.my); if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+      if (t.angD === undefined) t.angD = t.ang || 0;
+      let da = (t.ang || 0) - t.angD; da = Math.atan2(Math.sin(da), Math.cos(da)); t.angD += da * Math.min(1, Render.fdt / 0.1);
+      if (nl > 0 && t.st !== 'broken') Night.vehicle(ctx, { mode: 'bus' }, x, y, t.angD, L2, W2, zf * 0.55, nl);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(t.angD);
+      Render.rr(ctx, -L2, -W2, 2 * L2, 2 * W2, Math.min(2.2, W2));
+      ctx.fillStyle = '#F7C600'; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = INK; ctx.stroke();
+      // lumineux : vert = libre, rouge = occupé
+      const busy = t.st === 'pickup' || t.st === 'ride';
+      ctx.fillStyle = t.st === 'roam' ? '#2ECC71' : busy ? '#E2563F' : '#FFFFFF';
+      ctx.fillRect(-1.3 * zf, -W2 * 0.55, 2.6 * zf, W2 * 1.1);
+      ctx.restore();
+      if (t.st === 'broken') {
+        const bx = x + L2 + 5, by = y - L2 - 5;
+        ctx.beginPath(); ctx.arc(bx, by, 7, 0, 7); ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#D9433A'; ctx.stroke();
+        ctx.fillStyle = INK; ctx.font = '700 9px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', bx, by + 0.5);
+      }
+      if (G.ui.selTaxi === t) { ctx.beginPath(); ctx.arc(x, y, L2 + 7, 0, 7); ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.stroke(); }
+      Render.tpos.push({ x, y, t });
+    }
   },
 };
 
@@ -5666,6 +6284,8 @@ const Render = {
         }
       }
     }
+    /* taxis et dépôt */
+    Taxi.draw(ctx, X, Y, zf, z, W, H, this.nf > 0.15 && Night.lightsOn() ? clamp((this.nf - 0.15) / 0.45, 0, 1) : 0);
     /* aperçu : gare ou voie ferrée */
     const rb = RailBuild.b;
     if (rb && rb.kind === 'gare' && rb.pos) {
@@ -5746,6 +6366,9 @@ const Render = {
   hit(px, py) {
     for (const it of (this.evposD || []).concat(this.evpos || [])) if ((it.x - px) ** 2 + (it.y - py) ** 2 < 22 * 22) return it.cluster ? { type: 'cluster', x: it.x, y: it.y, items: it.cluster } : { type: 'event', e: it.e };
     let best = null, bd = 24 * 24;
+    for (const it of this.tpos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bd) { bd = d; best = { type: 'taxi', t: it.t }; } }
+    if (best) return best;
+    if (this.dpos && (this.dpos.x - px) ** 2 + (this.dpos.y - py) ** 2 < 24 * 24) return { type: 'depot' };
     for (const it of this.vpos || []) { const d = (it.x - px) ** 2 + (it.y - py) ** 2; if (d < bd) { bd = d; best = { type: 'veh', ...it }; } }
     if (best) return best;
     const o = this.origin();
@@ -6462,7 +7085,7 @@ const UI = {
     this.closeCard();
     const sh = $('#sheet');
     sh.hidden = false;
-    document.querySelectorAll('.nav-b').forEach((b) => b.classList.toggle('on', b.dataset.arg === name || (name === 'line' && b.dataset.arg === 'lines')));
+    document.querySelectorAll('.nav-b').forEach((b) => b.classList.toggle('on', b.dataset.arg === name || ((name === 'line' || name === 'taxi') && b.dataset.arg === 'lines')));
     $('#cash').classList.toggle('on', name === 'finance');
     this.speedMenu(false);
     this.refreshSheet(true);
@@ -6492,8 +7115,8 @@ const UI = {
   card(html) { if (this.sheetOpen()) { const keep = [G.ui.selVeh, G.ui.selZone, G.ui.cardType]; this.close(); [G.ui.selVeh, G.ui.selZone, G.ui.cardType] = keep; } const c = $('#card'); c.innerHTML = html; c.hidden = false; },
   closeCard() {
     $('#card').hidden = true;
-    const changed = G.ui.selZone || G.ui.selVeh;
-    G.ui.selZone = null; G.ui.selVeh = null; G.ui.follow = null; G.ui.cardType = null;
+    const changed = G.ui.selZone || G.ui.selVeh || G.ui.selTaxi;
+    G.ui.selZone = null; G.ui.selVeh = null; G.ui.selTaxi = null; G.ui.follow = null; G.ui.cardType = null;
     if (changed) Render.dirty = true;
   },
   showVehicle(l, v) {
@@ -6515,6 +7138,21 @@ const UI = {
       <div class="kv"><span>Direction</span><b>${esc(dir)}</b></div>
       <div class="kv"><span>Vitesse${Lines.limitAt(l, v) ? ' · limitée à ' + Lines.limitAt(l, v) + ' km/h' : ''}</span><b>${v.incUntil > G.s.sec ? 'immobilisé (incident)' : v.hold === 'queue' ? 'derrière le véhicule précédent' : v.dwell > 0 ? ({ sig: 'au feu rouge', stop: 'au stop', yield: 'cède le passage', reg: 'régulation (garde l’écart)', queue: 'derrière le véhicule précédent', incident: 'immobilisé (incident)' }[v.hold] || 'à quai') : Math.round((v.spd || 0) * 3.6) + ' km/h'}</b></div>
       <div class="row2"><button class="btn sm ${G.ui.follow === v ? 'on' : ''}" data-act="follow">${icon('follow')} ${G.ui.follow === v ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="openLine" data-arg="${l.id}">Voir la ligne</button></div>`);
+  },
+  showTaxi(t) {
+    G.ui.selTaxi = t; G.ui.selVeh = null; G.ui.selZone = null; G.ui.cardType = 'taxi';
+    this.renderTaxiCard(); Render.dirty = true;
+  },
+  renderTaxiCard() {
+    const t = G.ui.selTaxi, T = Taxi.st();
+    if (!t || !T || !T.fleet.includes(t)) { this.closeCard(); return; }
+    const md = TXM[t.model];
+    this.card(`<div class="card-h"><span class="pict pict-taxi">TAXI</span><div class="card-t"><b>Taxi ${esc(md.name.toLowerCase())}</b><small>${esc(md.desc)}</small></div><button class="icon-b" data-act="closeCard" aria-label="Fermer">${icon('close')}</button></div>
+      <div class="kv"><span>État</span><b>${esc(Taxi.label(t))}</b></div>
+      <div class="kv"><span>Clients à bord</span><b>${t.st === 'ride' && t.job ? t.job.size : 0}</b></div>
+      ${t.st === 'ride' && t.job ? `<div class="kv"><span>Course</span><b>${(t.job.km || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km</b></div>` : ''}
+      <div class="kv"><span>Usure</span><b>${Math.round(Math.min(1, t.wear || 0) * 100)} %</b></div>
+      <div class="row2"><button class="btn sm ${G.ui.follow === t ? 'on' : ''}" data-act="taxiFollow">${icon('follow')} ${G.ui.follow === t ? 'Suivi actif' : 'Suivre'}</button><button class="btn sm" data-act="nav" data-arg="taxi">Gérer les taxis</button></div>`);
   },
   showStop(l, k) {
     G.ui.cardType = 'stop'; G.ui.selVeh = null;
@@ -6655,6 +7293,9 @@ function lineAgg(l, period) {
 const SHEETS = {
   lines() {
     const s = G.s;
+    const T = Taxi.st();
+    const taxiRow = T ? section('Taxis') + `<button class="lrow" data-act="nav" data-arg="taxi"><span class="pict pict-taxi">TAXI</span><span class="lrow-t">${esc(T.depot.name)}<small>${T.fleet.length} taxi${T.fleet.length > 1 ? 's' : ''} · ${Taxi.open(s.min) ? Taxi.count((t) => t.st !== 'depot' && t.st !== 'repair') + ' en circulation' : 'fermé (' + TAXI_HOURS[T.hours][2] + ')'}</small></span><span class="lrow-v"><b>${fmtInt(T.today.n)}</b> courses<br><small>${fmtEur(T.today.rev - T.today.ops)}</small></span></button>` : '';
+    if (!s.lines.length && T) return { title: 'Réseau', html: taxiRow + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
     if (!s.lines.length) return { title: 'Réseau', html: `<div class="empty">${pict('metro')}${pict('bus')}<p>Aucune ligne pour l’instant.</p><button class="btn primary" data-act="nav" data-arg="build">${icon('plus')} Créer une première ligne</button></div>` };
     const rows = MODE_ORDER.map((m) => {
       const ls = s.lines.filter((l) => l.mode === m).sort((a, b) => a.num - b.num);
@@ -6665,7 +7306,7 @@ const SHEETS = {
         return `<button class="lrow" data-act="openLine" data-arg="${l.id}">${badgeFull(l)}<span class="lrow-t">${esc(l.name)}<small>${l.veh.length} véhicule${l.veh.length > 1 ? 's' : ''} · ${l.stops.length} arrêts · ${fmtKm(l.path.L)} ${st}</small></span><span class="lrow-v"><b>${fmtInt(t.pax)}</b> voy.<br><small>${fmtPct(t.fill)} rempli</small></span></button>`;
       }).join('');
     }).join('');
-    return { title: 'Réseau', html: `<div class="row2"><button class="btn" data-act="openPlan">${icon('target')} Plan du réseau</button><button class="btn" data-act="nav" data-arg="staff">${icon('user')} Personnel</button></div>` + rows + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
+    return { title: 'Réseau', html: `<div class="row2"><button class="btn" data-act="openPlan">${icon('target')} Plan du réseau</button><button class="btn" data-act="nav" data-arg="staff">${icon('user')} Personnel</button></div>` + rows + taxiRow + `<button class="btn wide" data-act="nav" data-arg="build">${icon('plus')} Nouvelle ligne</button>` };
   },
 
   line(id) {
@@ -6766,6 +7407,7 @@ const SHEETS = {
         const p = clamp((G.s.min - tr.start) / (tr.end - tr.start), 0, 1);
         act = `<div class="timeline"><i style="width:${(p * 100).toFixed(0)}%;background:${d.col}"></i></div><small>En formation : niveau ${tr.level} · fin le ${Time.label(tr.end).day} à ${Time.label(tr.end).time}</small>`;
       } else if (lv >= 3) act = '<em class="tag ok">Niveau maximal</em>';
+      else if (d.needs === 'taxi' && !Taxi.st()) act = '<small>Nécessite un dépôt de taxis (menu Construire).</small>';
       else act = `<button class="btn sm ${Staff.canStart(d.id) ? 'primary' : ''}" data-act="staffTrain" data-arg="${d.id}" ${Staff.canStart(d.id) && Eco.canAfford(cost) ? '' : 'disabled'}>Former au niveau ${lv + 1} · ${Eco.free() ? 'gratuit' : fmtEur(cost)} · ${STAFF_DAYS[lv]} j</button>${!Staff.canStart(d.id) && busy >= STAFF_MAX_PARALLEL ? '<small>Le centre de formation est complet (2 promotions à la fois).</small>' : ''}`;
       return `<div class="staffc"><div class="staff-h"><span class="evcard-ic" style="--c:${d.col}">${icon(d.icon)}</span><div><b>${esc(d.name)}</b><small>${esc(d.who)} · ${lv ? 'niveau ' + lv + ' : ' + esc(d.lv[lv - 1]) : 'non formés'}</small></div><span class="lvdots">${dots}</span></div>
         ${now.length ? `<ul class="fx">${now.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
@@ -6782,6 +7424,47 @@ const SHEETS = {
     };
   },
 
+  taxi() {
+    const T = Taxi.st(), s = G.s;
+    if (!T) return { title: 'Taxis', html: `<div class="empty"><span class="pict pict-taxi">TAXI</span><p>Pas encore de dépôt de taxis.</p><p class="sub">Placez un dépôt dans une de vos zones : il stocke les taxis qui ne circulent pas et les répare.</p><button class="btn primary" data-act="taxiPlace">${icon('plus')} Placer le dépôt · ${fmtEur(Taxi.depotCost())}</button></div>` };
+    const d = T.today, res = d.rev - d.ops, demand = d.calls + d.hails;
+    const c = (sts) => T.fleet.filter((t) => sts.includes(t.st)).length;
+    const L = Taxi.L(), auto = T.auto && L > 0, open = Taxi.open(s.min);
+    const share = auto ? T.autoShare : T.roam;
+    const chip = (col, n, lab) => n ? `<span><i style="background:${col}"></i>${n} ${lab}</span>` : '';
+    const roamSeg = [0, 0.25, 0.5, 0.75, 1].map((v) => `<button class="${!auto && T.roam === v ? 'on' : ''}" data-act="taxiRoam" data-arg="${v}">${Math.round(v * 100)} %</button>`).join('')
+      + (L > 0 ? `<button class="${auto ? 'on' : ''}" data-act="taxiRoam" data-arg="auto">Auto</button>` : '');
+    const hours = Object.entries(TAXI_HOURS).map(([k, h]) => `<button class="${T.hours === k ? 'on' : ''}" data-act="taxiHours" data-arg="${k}">${h[2]}</button>`).join('');
+    const pf = Taxi.priceFactor();
+    const fleet = TAXI_MODELS.map((md) => {
+      const n = T.fleet.filter((t) => t.model === md.id).length;
+      return `<div class="vrow"><div><b>${esc(md.name)}</b><small>${esc(md.desc)} · ${md.km.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € de frais/km</small></div><div class="row2 tight"><button class="btn sm" data-act="taxiSell" data-arg="${md.id}" ${n ? '' : 'disabled'} aria-label="Vendre">−</button><b class="cnt">${n}</b><button class="btn sm primary" data-act="taxiBuy" data-arg="${md.id}">+ ${Eco.free() ? 'gratuit' : fmtEur(md.price * s.costMul)}</button></div></div>`;
+    }).join('');
+    const hist = T.hist.slice(0, 14).reverse().map((x) => ({ v: x.rev - x.ops, l: Time.dayLabel(x.date) }));
+    return {
+      title: '<span class="pict pict-taxi">TAXI</span><span>Taxis</span>',
+      html: `<p class="sub">${esc(T.depot.name)} · ${open ? 'en service' : 'fermé'} (${TAXI_HOURS[T.hours][2]})</p>
+      <div class="kpis"><div><small>Courses aujourd’hui</small><b>${fmtInt(d.n)}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div>
+      <div><small>Recettes</small><b>${fmtEur(d.rev)}</b></div><div><small>Coûts</small><b class="neg">${fmtEur(d.ops)}</b></div>
+      <div><small>Attente moyenne</small><b>${d.waitN ? Math.round(d.wait / d.waitN) + ' min' : '—'}</b></div><div><small>Clients perdus</small><b>${fmtInt(d.lost + d.missed)} / ${fmtInt(demand)}</b></div>
+      <div><small>Image des taxis</small><b>${Math.round(T.rep * 100)} %</b></div><div><small>Demandes en attente</small><b>${T.req.length}</b></div></div>
+      <div class="txst">${chip('#2ECC71', c(['roam']), 'libres')}${chip('#E2563F', c(['pickup', 'ride']), 'en course')}${chip('#FFFFFF', c(['back']), 'rentrent')}${chip('#232323', c(['depot']), 'au dépôt')}${chip('#D9433A', c(['broken', 'repair']), 'en panne ou à l’atelier')}${T.fleet.length ? '' : '<span>Aucun taxi : achetez-en ci-dessous.</span>'}</div>
+      ${section('Taxis en maraude')}
+      <p class="sub">En maraude, les taxis prennent les clients qui hèlent dans la rue et arrivent vite aux appels, mais roulent à vide (chauffeur et carburant). Au dépôt, ils ne coûtent presque rien mais ne prennent que les appels, avec un long trajet d’approche. Augmentez la maraude pendant les grands événements, les grèves ou la pluie.</p>
+      <div class="seg wrap">${roamSeg}</div>
+      ${auto ? `<p class="note ok">Centrale taxis niveau ${L} : ${Math.round(share * 100)} % des taxis en maraude en ce moment.</p>` : L > 0 ? '' : `<p class="note">Formez la <b>Centrale taxis</b> (Personnel) pour régler ce paramètre automatiquement.</p>`}
+      ${section('Horaires de service')}<div class="seg wrap">${hours}</div>
+      <p class="sub">Hors horaires, les taxis terminent leur course puis rentrent au dépôt.</p>
+      ${section('Tarif')}
+      <div class="vrow"><div><b>${T.perKm.toFixed(2).replace('.', ',')} € / km</b><small>+ ${TAXI_CFG.base.toFixed(2).replace('.', ',')} € de prise en charge · course de 5 km : ${fmtEur(Taxi.fare(5, 1), true)} · demande ${pf >= 1 ? '+' : '−'}${Math.round(Math.abs(pf - 1) * 100)} %</small></div><div class="row2 tight"><button class="btn sm" data-act="taxiPrice" data-arg="-0.1" aria-label="Baisser">−</button><button class="btn sm" data-act="taxiPrice" data-arg="0.1" aria-label="Augmenter">+</button></div></div>
+      ${section('Flotte · ' + T.fleet.length + ' taxi' + (T.fleet.length > 1 ? 's' : ''))}${fleet}
+      <p class="sub">Les vans prennent les groupes de 5 à 7 personnes (+20 % sur la course). Les taxis s’usent en roulant : plus ils sont usés, plus ils tombent en panne. Au dépôt, ils sont entretenus.</p>
+      ${hist.length ? section('Résultat des taxis, 14 derniers jours') + barChart(hist) : ''}
+      ${section('Dépôt')}<div class="row2"><button class="btn" data-act="taxiGoto">${icon('target')} Voir le dépôt</button><button class="btn" data-act="taxiPlace">Déplacer · ${fmtEur(Taxi.depotCost(true))}</button></div>
+      <button class="btn wide" data-act="nav" data-arg="staff">${icon('user')} Centrale taxis : ${L ? 'niveau ' + L : 'non formée'}</button>`,
+    };
+  },
+
   build() {
     const cards = MODE_ORDER.map((m) => {
       const hint = { bus: 'Suit les vraies routes, subit le trafic. ≈ 15-20 km/h. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. ≈ 30-35 km/h. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'De gare en gare sur les voies ferrées. Le plus rapide : jusqu’à 100 km/h, ≈ 40-75 km/h de moyenne selon l’écart entre gares.', boat: 'Sur les fleuves et canaux. Le plus lent : ≈ 10 km/h, mais apprécié des touristes. 60 k€ par ponton.' }[m];
@@ -6791,7 +7474,11 @@ const SHEETS = {
     const infra = `<h3 class="sec">Infrastructures ferroviaires</h3>
       <button class="modecard" data-act="railMode" data-arg="gare"><span class="pict pict-ter">GARE</span><span><b>Nouvelle gare</b><small>Posée sur une voie existante ou en pleine ville, orientable. ${fmtEur(Rail.stationCost())}.</small></span></button>
       <button class="modecard" data-act="railMode" data-arg="track"><span class="pict pict-ter">═</span><span><b>Nouvelle voie ferrée</b><small>Tracée en longues courbes, de gare en gare ou en se branchant sur les voies existantes. ${fmtEur(Rail.KM * G.s.costMul)}/km.</small></span></button>`;
-    return { title: 'Construire', html: `<p class="sub">Choisissez un mode, puis touchez la carte pour placer les arrêts dans vos zones.</p>${cards}${infra}` };
+    const T = Taxi.st();
+    const taxi = `<h3 class="sec">Taxis</h3>` + (T
+      ? `<button class="modecard" data-act="nav" data-arg="taxi"><span class="pict pict-taxi">TAXI</span><span><b>Gérer les taxis</b><small>${esc(T.depot.name)} · ${T.fleet.length} taxi${T.fleet.length > 1 ? 's' : ''}. Flotte, maraude, horaires et tarif au kilomètre.</small></span></button>`
+      : `<button class="modecard" data-act="taxiPlace"><span class="pict pict-taxi">TAXI</span><span><b>Dépôt de taxis</b><small>Un seul dépôt pour toute la ville. Les taxis prennent des courses partout dans vos zones, payées au kilomètre. ${fmtEur(Taxi.depotCost())}, taxis dès ${fmtEur(TAXI_MODELS[0].price * G.s.costMul)}.</small></span></button>`);
+    return { title: 'Construire', html: `<p class="sub">Choisissez un mode, puis touchez la carte pour placer les arrêts dans vos zones.</p>${cards}${taxi}${infra}` };
   },
 
   zones() {
@@ -6828,7 +7515,7 @@ const SHEETS = {
       html: `${toggle}<div class="kpis"><div><small>Trésorerie</small><b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b></div><div><small>Dette</small><b>${fmtEur(Eco.debt())}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div><div><small>Moy. 3 jours</small><b class="${Sim.avgDailyProfit() < 0 ? 'neg' : 'pos'}">${fmtEur(Sim.avgDailyProfit())}</b></div></div>
       ${section('Compte d’exploitation')}
       <div class="tblw"><table class="tbl"><thead><tr><th></th><th>Aujourd’hui</th><th>Hier</th></tr></thead><tbody>
-      ${row('Billets', d.fares, y && y.fares)}${row('Publicité', d.ads, y && y.ads)}
+      ${row('Billets', d.fares, y && y.fares)}${row('Publicité', d.ads, y && y.ads)}${s.taxi || d.taxi || (y && y.taxi) ? row('Courses de taxi', d.taxi || 0, y && (y.taxi || 0)) + row('Taxis : chauffeurs, carburant, dépôt', d.taxiOps || 0, y && (y.taxiOps || 0), true) : ''}
       ${row('Exploitation véhicules', d.ops, y && y.ops, true)}${row('Maintenance', d.maint, y && y.maint, true)}${row('Intérêts', d.interest, y && y.interest, true)}${row('Événements (recettes)', d.evIn || 0, y && (y.evIn || 0))}${row('Événements et négociations', d.events, y && y.events, true)}
       <tr class="tot"><th>Résultat</th><td class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</td><td class="${resY < 0 ? 'neg' : 'pos'}">${col(resY)}</td></tr>
       ${row('Investissements', d.capex + d.zones, y && y.capex + y.zones, true)}${row('Ventes de véhicules', d.sales, y && y.sales)}
@@ -6859,6 +7546,7 @@ const SHEETS = {
       <div><small>Recette / voyageur</small><b>${t.pax ? (t.fares / t.pax).toFixed(2).replace('.', ',') + ' €' : '—'}</b></div>
       <div><small>Correspondances aujourd’hui</small><b>${fmtInt(t.xfer || 0)}</b></div>
       <div><small>Pôles d’échange</small><b>${Transfers.hubs.length}</b></div>
+      ${Taxi.st() ? `<div><small>Courses de taxi aujourd’hui</small><b>${fmtInt(Taxi.st().today.n)}</b></div><div><small>Taxis en circulation</small><b>${Taxi.count((t) => t.st !== 'depot' && t.st !== 'repair')} / ${Taxi.st().fleet.length}</b></div>` : ''}
     </div>
     ${section('Relations')}${Gauges.html()}
     ${section('Voyageurs des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: x.pax, l: Time.dayLabel(x.date) })), true)}
@@ -7384,9 +8072,10 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.16.0';
 const ACT = {
   nav(k) {
+    if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
     if (Build.b) Build.cancel();
     if (RailBuild.b) RailBuild.cancel();
     if (G.ui.sheet === k && UI.sheetOpen()) { UI.close(); return; }
@@ -7416,6 +8105,28 @@ const ACT = {
   rtCancel() { UI.closeModal(); G.speed = 1; G.paused = false; UI.refreshTop(); },
   openLine(id) { if (String(G.ui.sheetArg) !== String(id) || G.ui.sheet !== 'line') G.ui.lineTab = 'sum'; UI.open('line', id); Render.dirty = true; },
   follow() { G.ui.follow = G.ui.follow === G.ui.selVeh ? null : G.ui.selVeh; UI.renderVehCard(); },
+  taxiFollow() { G.ui.follow = G.ui.follow === G.ui.selTaxi ? null : G.ui.selTaxi; UI.renderTaxiCard(); },
+  taxiPlace() {
+    if (Build.b) Build.cancel();
+    if (RailBuild.b) RailBuild.cancel();
+    UI.close(); UI.closeCard();
+    G.ui.taxiPlace = true;
+    const move = !!Taxi.st();
+    const bb = $('#buildbar'); bb.hidden = false;
+    bb.innerHTML = `<div class="bb-t"><span class="pict pict-taxi">TAXI</span><div><b>${move ? 'Déplacer le dépôt' : 'Dépôt de taxis'}</b><small>Touchez une rue dans vos zones · ${fmtEur(Taxi.depotCost(move))}</small></div></div><div class="bb-a"><button class="icon-b" data-act="taxiPlaceCancel" aria-label="Annuler">${icon('close')}</button></div>`;
+  },
+  taxiPlaceCancel() { G.ui.taxiPlace = false; const bb = $('#buildbar'); bb.hidden = true; bb.innerHTML = ''; },
+  taxiRoam(v) {
+    const T = Taxi.st(); if (!T) return;
+    if (v === 'auto') { T.auto = true; T.nextAuto = 0; Taxi.autoTune(G.s.min); }
+    else { T.auto = false; T.roam = +v; }
+    Taxi.balance(Taxi.open(G.s.min)); UI.refreshSheet();
+  },
+  taxiHours(k) { const T = Taxi.st(); if (T && TAXI_HOURS[k]) { T.hours = k; Taxi.balance(Taxi.open(G.s.min)); UI.refreshSheet(); } },
+  taxiPrice(dv) { const T = Taxi.st(); if (!T) return; T.perKm = Math.round(clamp(T.perKm + +dv, 1, 4.5) * 10) / 10; UI.refreshSheet(); },
+  taxiBuy(id) { if (Taxi.buy(id)) { Taxi.balance(Taxi.open(G.s.min)); UI.refreshSheet(); } },
+  taxiSell(id) { Taxi.sell(id); UI.refreshSheet(); },
+  taxiGoto() { const T = Taxi.st(); if (!T) return; UI.close(); G.map.setView([myToLat(T.depot.my), mxToLon(T.depot.mx)], 16.5); },
   buildMode(m) { if (RailBuild.b) RailBuild.cancel(); Build.start(m); },
   railMode(k) { RailBuild.start(k); },
   rbRot(d) { RailBuild.rotate(+d); },
@@ -7751,11 +8462,14 @@ const Game = {
     const mx = lonToMx(e.latlng.lng), my = latToMy(e.latlng.lat);
     if (RailBuild.b) { RailBuild.tap(mx, my); return; }
     if (Build.b) { Build.tap(mx, my); return; }
+    if (G.ui.taxiPlace) { if (Taxi.placeDepot(mx, my)) { ACT.taxiPlaceCancel(); UI.open('taxi'); } return; }
     const h = Render.hit(e.containerPoint.x, e.containerPoint.y);
     if (h && h.type === 'event') { UI.showEvent(h.e); return; }
     if (h && h.type === 'cluster') { G.map.setView(G.map.containerPointToLatLng([h.x, h.y]), Math.min(18, G.map.getZoom() + 2)); return; }
     if (h && h.type === 'station') { UI.showStation(h.g); return; }
     if (h && h.type === 'poi') { UI.showPoi(h.p); return; }
+    if (h && h.type === 'taxi') { UI.showTaxi(h.t); return; }
+    if (h && h.type === 'depot') { UI.open('taxi'); return; }
     if (h && h.type === 'veh') { UI.showVehicle(h.l, h.v); return; }
     if (h && h.type === 'stop') { UI.showStop(h.l, h.k); return; }
     const z = G.w.zoneAt(mx, my);
@@ -7907,7 +8621,11 @@ function frame(now) {
     if (now - lastCard > 400) {
       lastCard = now;
       if (G.ui.cardType === 'veh') UI.renderVehCard();
-      if (G.ui.follow) {
+      if (G.ui.cardType === 'taxi') UI.renderTaxiCard();
+      if (G.ui.follow && G.ui.follow === G.ui.selTaxi) {
+        const t = G.ui.follow, pt = G.map.latLngToContainerPoint([myToLat(t.my), mxToLon(t.mx)]), c = G.map.getSize();
+        if (Math.abs(pt.x - c.x / 2) > 40 || Math.abs(pt.y - c.y * 0.4) > 40) G.map.panTo([myToLat(t.my), mxToLon(t.mx)], { animate: true, duration: 0.35 });
+      } else if (G.ui.follow) {
         const l = G.ui.cardLine, v = G.ui.follow;
         if (l && l.veh.includes(v)) {
           const p = Lines.posOf(l, v);
@@ -7987,10 +8705,11 @@ const UX = {
     const plan = document.getElementById('plan'); if (plan && !plan.hidden) { Plan.close(); return true; }
     if (RailBuild.b) { RailBuild.cancel(); return true; }
     if (Build.b) { Build.cancel(); return true; }
+    if (G.ui.taxiPlace) { ACT.taxiPlaceCancel(); return true; }
     const sm = $('#speedMenu'); if (sm && !sm.hidden) { UI.speedMenu(false); return true; }
     if (!$('#card').hidden) { UI.closeCard(); return true; }
     if (UI.sheetOpen()) {
-      if (G.ui.sheet === 'line' || G.ui.sheet === 'staff') UI.open('lines'); else UI.close();
+      if (G.ui.sheet === 'line' || G.ui.sheet === 'staff' || G.ui.sheet === 'taxi') UI.open('lines'); else UI.close();
       return true;
     }
     return false;

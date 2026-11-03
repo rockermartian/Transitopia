@@ -84,6 +84,11 @@ small{font-size:12.5px;color:var(--muted)}
 .btn .ic{width:18px;height:18px}
 .icon-b{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;color:var(--ink)}
 .row2{display:flex;gap:8px;margin-top:10px}.row2>*{flex:1}
+.chcol{display:flex;flex-direction:column;gap:8px;margin-top:12px}.chcol .btn{text-align:left;justify-content:flex-start;white-space:normal;line-height:1.3;padding:11px 14px;min-height:44px}
+.chnote{margin:10px 0 0;font-size:12px}
+.gauge{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;margin:8px 0 12px}.gauge>span{font-weight:600;font-size:14px}.gauge>em{font-style:normal;font-weight:700;font-size:13px;grid-column:2;grid-row:1}.gauge>em.good{color:var(--ok,#2E9E5B)}.gauge>em.bad{color:var(--bad,#D9433A)}
+.gauge .gbar{grid-column:1/3;position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg,#D9433A,#E9B949 50%,#2E9E5B)}.gauge .gbar b{position:absolute;top:-4px;width:6px;height:16px;margin-left:-3px;border-radius:3px;background:var(--ink);box-shadow:0 0 0 2px var(--paper)}
+.gauge small{grid-column:1/3;color:var(--muted);font-size:12px}
 .row2.tight{margin:0;flex:none;gap:6px}.row2.tight>*{flex:none}
 .seg{display:flex;gap:3px;background:var(--panel-2);padding:3px;border-radius:20px;flex-wrap:nowrap}
 .seg.wrap{flex-wrap:wrap;margin:6px 0}
@@ -252,7 +257,7 @@ body.plan-open #snacks,body.plan-open #toasts,#modal:not([hidden]) ~ #snacks,#mo
 .plan-h{display:flex;align-items:center;gap:8px;padding:8px 12px 6px max(10px,var(--sal))}
 .plan-h b{flex:1;font:600 19px/1.1 var(--f-display)}
 .plan-f{margin:0 12px 6px}
-.plan-c{flex:1;min-height:0;position:relative;padding-bottom:var(--sab)}
+.plan-c{flex:1;min-height:0;position:relative;padding-bottom:var(--sab);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .plan-c canvas{display:block}
 
 #modal{position:fixed;inset:0;z-index:1200;background:rgba(35,35,35,.35);display:flex;align-items:flex-end;justify-content:center;padding:calc(20px + var(--sat)) 0 0}
@@ -860,7 +865,7 @@ class World {
     z.density = z.pop / z.areaKm2;
     z.jobDensity = z.jobs / z.areaKm2;
     const raw = 110000 + z.density * 32 + z.jobDensity * 14 + Math.min(z.pop, 30000) * 18;
-    z.price = Math.round(clamp(raw, 90000, 6e6) * (G.s ? G.s.costMul : 1) / 10000) * 10000;
+    z.price = Math.round(clamp(raw, 90000, 6e6) * (G.s ? G.s.costMul * (1 - 0.15 * (G.s.mairie || 0)) : 1) / 10000) * 10000;
   }
 
   zoneAt(mx, my) {
@@ -2602,7 +2607,7 @@ const Sim = {
     l.speedAvg = l.C / Math.max(1, cycle) * 3.6;
     const qWait = clamp(1.25 - l.headway / 40, 0.25, 1.15);
     const qSpeed = clamp(Math.pow(l.speedAvg / mode.refKmh, 0.6), 0.55, 1.35);
-    l.qual = l.veh.length ? qWait * qSpeed * Staff.qualMult() : 0;
+    l.qual = l.veh.length ? qWait * qSpeed * Staff.qualMult() * (1 + 0.03 * (G.s.social || 0)) : 0;
   },
 
   /** vitesse de croisière visée sur le tronçon courant (m/s) */
@@ -3436,14 +3441,14 @@ Object.assign(Events, {
   },
   opsMult(mode) {
     let f = 1;
-    for (const e of this.live()) if (e.ops && e.ops.mode === mode) f *= e.ops.mult;
+    for (const e of this.live()) if (e.ops && (e.ops.all || e.ops.mode === mode)) f *= e.ops.mult;
     return f;
   },
   halted(line) {
     for (const e of this.live()) {
       if (e.kind === 'strike' && !e.resolved && e.mode === line.mode) return true;
       const h = e.halt;
-      if (h && (h.lineId === line.id || h.mode === line.mode)) return true;
+      if (h && (h.all || h.lineId === line.id || h.mode === line.mode)) return true;
     }
     if (line.mode === 'boat' && this.weather() === 'storm') return true;
     return false;
@@ -3471,11 +3476,14 @@ Object.assign(Events, {
     const pct = (m) => (m >= 1 ? '+' : '−') + Math.round(Math.abs(m - 1) * 100) + ' %';
     if (e.traffic) out.push(e.traffic.all ? `Circulation ${e.traffic.all < 1 ? 'fluidifiée' : 'chargée'} dans toute la ville (${pct(e.traffic.all)})` : e.traffic.zone ? `Circulation difficile dans le quartier (${pct(e.traffic.mult)} de trafic)` : `Bouchons dans un rayon de ${Math.round(e.traffic.r / 50) * 50} m (trafic ×${e.traffic.mult.toLocaleString('fr-FR', { maximumFractionDigits: 1 })})`);
     if (e.demand) out.push(e.demand.mx !== undefined ? `Affluence jusqu’à ×${e.demand.mult.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} aux arrêts à moins de ${Math.round(e.demand.r / 50) * 50} m` : `Fréquentation ${pct(e.demand.mult)} (${e.demand.all ? 'tout le réseau' : e.demand.mode ? MODES[e.demand.mode].label.toLowerCase() : L(e.demand.lineId)})`);
-    if (e.halt) out.push(e.halt.mode ? `Toutes les lignes ${MODES[e.halt.mode].label.toLowerCase()} à l’arrêt` : `${L(e.halt.lineId)} interrompue`);
+    if (e.halt) out.push(e.halt.all ? 'Tout le réseau à l’arrêt' : e.halt.mode ? `Toutes les lignes ${MODES[e.halt.mode].label.toLowerCase()} à l’arrêt` : `${L(e.halt.lineId)} interrompue`);
     if (e.kind === 'strike' && !e.resolved) out.push('Toutes les lignes du mode concerné restent au dépôt');
     if (e.speed) out.push(`Vitesse des ${MODES[e.speed.mode].label.toLowerCase()} ${pct(e.speed.mult)}`);
     if (e.fare) out.push(e.fare.mult === 0 ? `Aucune recette billets (${e.fare.all ? 'tout le réseau' : e.fare.mode ? MODES[e.fare.mode].label.toLowerCase() : L(e.fare.lineId)})` : `Recettes billets ${pct(e.fare.mult)} (${e.fare.all ? 'tout le réseau' : e.fare.mode ? MODES[e.fare.mode].label.toLowerCase() : L(e.fare.lineId)})`);
-    if (e.ops) out.push(`Coûts d’exploitation des ${MODES[e.ops.mode].label.toLowerCase()} ${pct(e.ops.mult)}`);
+    if (e.ops) out.push(e.ops.all ? `Coûts d’exploitation du réseau ${pct(e.ops.mult)}` : `Coûts d’exploitation des ${MODES[e.ops.mode].label.toLowerCase()} ${pct(e.ops.mult)}`);
+    if (e.social) out.push(`Climat social ${e.social > 0 ? 'en amélioration' : 'dégradé'} (${e.social > 0 ? '+' : '−'}${Math.round(Math.abs(e.social) * 100)} pts)`);
+    if (e.mairie) out.push(`Relations avec la mairie ${e.mairie > 0 ? 'en amélioration' : 'dégradées'} (${e.mairie > 0 ? '+' : '−'}${Math.round(Math.abs(e.mairie) * 100)} pts)`);
+    if (e.addVeh) out.push(`${e.addVeh.n} véhicule${e.addVeh.n > 1 ? 's' : ''} ${(MODEL[e.addVeh.model] || {}).name || ''} ajouté${e.addVeh.n > 1 ? 's' : ''} à la flotte`);
     if (e.veh) out.push(e.veh.type === 'hold' ? `Un véhicule immobilisé ${e.veh.min} min (ceux qui suivent attendent derrière)` : `Un véhicule immobilisé ${e.veh.min} min puis indisponible jusqu’à la fin de l’événement`);
     if (e.rep) out.push(`Image ${e.rep.delta > 0 ? '+' : '−'}${Math.round(Math.abs(e.rep.delta) * 100)} % (${e.rep.all ? 'tout le réseau' : e.rep.mode ? MODES[e.rep.mode].label.toLowerCase() : L(e.rep.lineId)})`);
     if (e.money) out.push(`${e.money > 0 ? 'Recette' : 'Dépense'} de ${fmtEur(Math.abs(e.money))}`);
@@ -3492,7 +3500,7 @@ Object.assign(Events, {
     G.s.events.push(e);
     this.log(e.title + ' — ' + e.desc, e.kind);
     if (e.start <= G.s.min) this.apply(e);
-    Notif.push(e, e.start > G.s.min ? 'announce' : 'now');
+    Notif.push(e, e.start > G.s.min && !e.v ? 'announce' : 'now'); // une question n'est pas un événement annoncé
     if (e.q && !e.decided) UI.choiceDialog(e);
     Render.dirty = true;
     UI.refreshInfoBadge();
@@ -3505,6 +3513,9 @@ Object.assign(Events, {
     const s = G.s;
     if (e.money && !e.moneyDone) { e.moneyDone = true; if (e.money > 0) Eco.earn(e.money, 'evIn'); else Eco.charge(-e.money, 'events'); }
     if (e.rep) for (const l of s.lines) if (e.rep.all || e.rep.mode === l.mode || e.rep.lineId === l.id) l.rep = clamp(l.rep + e.rep.delta, 0.6, 1.1);
+    if (e.social) s.social = clamp((s.social || 0) + e.social, -1, 1);
+    if (e.mairie) s.mairie = clamp((s.mairie || 0) + e.mairie, -1, 1);
+    if (e.addVeh) Gauges.addVehicles(e);
     if (e.veh) {
       const l = s.lines.find((x) => x.id === e.veh.lineId), v = l && l.veh.find((x) => x.id === e.veh.vehId);
       if (v && !v.hidden && !v.parked) {
@@ -3518,7 +3529,11 @@ Object.assign(Events, {
   minute() {
     const s = G.s, m = s.min;
     for (const e of s.events) if (!e.applied && !e.void && e.start <= m) {
-      if (e.q && !e.decided) { e.decided = true; const d = this.def(e); if (d && d.choose) d.choose(e, 1); } // sans réponse : option prudente
+      if (e.q && !e.decided) { // sans réponse : option prudente
+        e.decided = true; const d = this.def(e);
+        if (d && d.choose) { d.choose(e, e.dflt ?? 1); e.auto = true; Events.log(e.title + ' (sans réponse) — ' + e.desc, e.kind); }
+        if (e.applied) continue;
+      }
       this.apply(e);
     }
     for (const l of s.lines) for (const v of l.veh) {
@@ -3566,13 +3581,20 @@ Object.assign(Events, {
       return !s.events.some((e) => e.kind === d.id && e.end > s.min);
     });
     if (!forceId) {
-      // d'abord la tonalité (≈ 50 % négatifs, 40 % positifs, 10 % mitigés), puis l'événement
-      const r = Math.random(), want = r < 0.5 ? -1 : r < 0.9 ? 1 : 0;
-      const sub = cands.filter((d) => Math.sign(d.tone) === want);
-      if (sub.length) { cands.length = 0; cands.push(...sub); }
+      // 80 % d'événements à choix (une décision en attente à la fois au plus), 20 % d'événements simples
+      const pending = s.events.some((e) => e.q && !e.decided);
+      const choice = cands.filter((d) => d.choice), simple = cands.filter((d) => !d.choice);
+      let pool = !pending && choice.length && (Math.random() < 0.8 || !simple.length) ? choice : simple;
+      if (pool === simple) {
+        // puis la tonalité (≈ 50 % négatifs, 40 % positifs, 10 % mitigés)
+        const r = Math.random(), want = r < 0.5 ? -1 : r < 0.9 ? 1 : 0;
+        const sub = simple.filter((d) => Math.sign(d.tone) === want);
+        if (sub.length) pool = sub;
+      }
+      cands.length = 0; cands.push(...pool);
     }
     for (let tries = 0; tries < 6 && cands.length; tries++) {
-      const wt = (x) => x.w * Math.max(0.05, Staff.weight(x.id));
+      const wt = (x) => x.w * Math.max(0.05, Staff.weight(x.id)) * Gauges.weight(x.id);
       const tot = cands.reduce((a, x) => a + wt(x), 0);
       let r = Math.random() * tot, d = cands[0];
       for (const x of cands) { r -= wt(x); if (r <= 0) { d = x; break; } }
@@ -3610,7 +3632,7 @@ Object.assign(Events, {
     const modes = new Set(s.lines.map((l) => l.mode));
     const day0 = m - Time.mod(m);
     // grève (annoncée la veille, avec négociation possible)
-    if (Math.random() < 0.03 * Staff.strikeMult() && (modes.has('bus') || modes.has('metro'))) {
+    if (Math.random() < 0.03 * Staff.strikeMult() * Gauges.strikeMult() && (modes.has('bus') || modes.has('metro'))) {
       const mode = modes.has('metro') && Math.random() < 0.5 ? 'metro' : modes.has('bus') ? 'bus' : 'metro';
       const cost = Math.round((40000 + s.lines.filter((l) => l.mode === mode).reduce((a, l) => a + l.veh.length, 0) * 6000) * s.costMul * Staff.negoMult());
       this.add({ kind: 'strike', cat: 'social', tone: -3, glyph: '⚑', mode, start: day0 + 1440 + 300, end: day0 + 2880, title: 'Préavis de grève', desc: 'les agents ' + (mode === 'bus' ? 'des bus' : 'du métro') + ' cesseront le travail demain.', cost, resolved: false, asked: false, announce: true });
@@ -3799,6 +3821,743 @@ const Staff = {
     if (e.rep && e.rep.delta < 0) e.rep.delta *= 1 - 0.25 * L('communication');
     if (e.kind === 'strike') e.cost = Math.round(e.cost * this.negoMult());
     return e;
+  },
+};
+
+'use strict';
+/* =====================================================================
+   CORRESPONDANCE — événements à choix (questions, dilemmes)
+   Chaque événement : une question, 2 à 4 options. Les conséquences sont
+   décrites en abrégé (voir FX ci-dessous) ; certaines options ont un
+   risque tiré au sort au moment du choix : [probabilité, effets, texte].
+   Deux jauges durables : climat social (personnel) et relations avec la mairie.
+
+   Abréviations d'effets (montants en k€, multipliés par la taille du réseau sauf m0) :
+     m / m0 argent · so climat social · ma relations mairie · d durée (min, défaut 60)
+     r image de la ligne · ra image du réseau · rm [mode, delta]
+     dl / da / dz / dp / dm fréquentation : ligne, tout le réseau, quartier, autour du lieu, [mode, x]
+     fl / fa / fm recettes billets : ligne, réseau, [mode, x]
+     oa / om coûts d'exploitation : réseau, [mode, x]
+     tz / ta / ts / tc circulation : quartier, ville, autour du lieu, centre-ville
+     h arrêt : 'line' | 'all' | mode · sp [mode, x] vitesse · add [modèle, n] véhicules · lend minutes (un véhicule prêté)
+   ===================================================================== */
+
+const CHOICE_SPECS = [];
+/** ajoute un événement à choix ; ctx : 'line' 'bus' 'metro' 'rail' 'boat' 'stop' 'zone' 'poi:k1,k2' 'none' */
+function CH(id, cat, title, ctx, q, opts, o = {}) { CHOICE_SPECS.push({ id, cat, title, ctx, q, opts, ...o }); }
+const chHot = () => Events.weather() === 'heat';
+const chMonth = () => Time.month(G.s.min);
+
+/* ===================== PERSONNEL ===================== */
+CH('c_prime_chaleur', 'social', 'Prime de chaleur', 'none',
+  () => 'Avec la chaleur, les conducteurs réclament une prime exceptionnelle. Les cabines dépassent 35 °C.',
+  [['Accorder la prime', { m: -15, so: 0.15 }, 'Les équipes apprécient le geste.'],
+   ['Climatiser les cabines', { m: -60, so: 0.1, ra: 0.02 }, 'Chantier lancé : les cabines seront au frais.'],
+   ['Refuser', { so: -0.15, risk: [0.3, { h: 'bus', d: 180, so: -0.05 }, 'Débrayage surprise : les bus restent au dépôt 3 h.'] }, 'Les conducteurs grognent.']],
+  { when: () => chHot() || (chMonth() >= 5 && chMonth() <= 7) });
+CH('c_alcool', 'social', 'Conducteur en état d’ébriété', 'bus',
+  (v) => `Un conducteur de la ligne ${v.L} s’est présenté au dépôt en état d’ébriété. Il a 25 ans de maison et traverse un divorce difficile.`,
+  [['Licenciement immédiat', { so: -0.08, ra: 0.01 }, 'Sanction exemplaire, mais les collègues sont choqués.'],
+   ['Mise à pied et accompagnement', { m: -5, so: 0.08 }, 'Il entame une cure, soutenu par l’entreprise.'],
+   ['Fermer les yeux', { risk: [0.25, { ra: -0.08, m: -40 }, 'Accident quelques jours plus tard : scandale et indemnités.'] }, 'Personne n’en saura rien… espérons.']], { dflt: 1 });
+CH('c_alerte_freins', 'social', 'Lanceur d’alerte', 'bus',
+  (v) => `Un mécanicien affirme que des bus de la ligne ${v.L} roulent avec des freins usés, ce que sa hiérarchie aurait ignoré.`,
+  [['Contrôler toute la flotte', { m: -40, so: 0.1, ra: 0.03, lend: 240 }, 'Contrôle général : quelques bus immobilisés, la sécurité avant tout.'],
+   ['Contrôle progressif', { m: -15, so: 0.03 }, 'Les bus seront vérifiés au fil des révisions.'],
+   ['Sanctionner l’agent', { so: -0.25, risk: [0.45, { ra: -0.08 }, 'L’affaire fuite dans la presse : tollé.'] }, 'L’agent est mis à pied pour insubordination.']], { dflt: 1 });
+CH('c_teletravail', 'social', 'Télétravail', 'none',
+  () => 'Les services administratifs demandent deux jours de télétravail par semaine.',
+  [['Accepter', { so: 0.08, oa: 0.98, d: 10080 }, 'Bureaux plus calmes et petites économies.'],
+   ['Tester un jour par semaine', { so: 0.04 }, 'Expérimentation lancée.'],
+   ['Refuser', { so: -0.06 }, 'Déception dans les bureaux.']]);
+CH('c_apprentis', 'social', 'Apprentis du quartier', 'zone',
+  (v) => `La mairie propose d’embaucher des jeunes de ${v.Z} en apprentissage dans vos ateliers.`,
+  [['Vingt apprentis', { m: -25, ma: 0.1, ra: 0.03, so: 0.03 }, 'Une promotion entière rejoint les ateliers.'],
+   ['Cinq apprentis', { m: -6, ma: 0.03 }, 'Un premier groupe est accueilli.'],
+   ['Pas pour l’instant', { ma: -0.05 }, 'La mairie regrette votre réponse.']]);
+CH('c_uniformes', 'social', 'Nouveaux uniformes', 'none',
+  () => 'Les uniformes sont usés. Une école de mode locale propose de dessiner la nouvelle tenue.',
+  [['L’école de mode', { m: -18, ra: 0.03, so: 0.05 }, 'Tenues élégantes et fierté retrouvée.'],
+   ['Fournisseur bon marché', { m: -6, so: -0.03 }, 'Tissu qui gratte : les agents râlent.'],
+   ['Garder les anciens', {}, 'On fera avec.']]);
+CH('c_harcelement', 'social', 'Signalement de harcèlement', 'none',
+  () => 'Une conductrice dénonce le harcèlement de son chef d’équipe. Plusieurs collègues confirment à demi-mot.',
+  [['Enquête interne et suspension', { m: -5, so: 0.12 }, 'Le chef est suspendu pendant l’enquête. Les équipes saluent la fermeté.'],
+   ['Muter discrètement le chef', { so: -0.05, risk: [0.35, { ra: -0.06, so: -0.1 }, 'Un média révèle l’affaire étouffée.'] }, 'Le chef change de dépôt sans bruit.'],
+   ['Classer l’affaire', { so: -0.2, ra: -0.04 }, 'Le malaise s’installe au dépôt.']], { dflt: 0 });
+CH('c_cantine', 'social', 'Fermeture de la cantine', 'none',
+  () => 'Le restaurant du dépôt ferme. Les agents qui travaillent en horaires décalés n’ont plus où manger.',
+  [['Un traiteur local', { m: -30, so: 0.1 }, 'Repas chauds à toute heure : succès.'],
+   ['Des titres-restaurant', { m: -12, so: 0.05 }, 'Solution pratique, apprécié.'],
+   ['Rien', { so: -0.08 }, 'Sandwichs froids pour tout le monde.']]);
+CH('c_retraite', 'social', 'Départ du doyen', 'line',
+  (v) => `Le doyen des conducteurs de la ligne ${v.L} part à la retraite après 40 ans de service. Les collègues aimeraient marquer le coup.`,
+  [['Grande fête au dépôt', { m: -8, so: 0.1, r: 0.02 }, 'Discours émouvants, ligne décorée pour son dernier service.'],
+   ['Médaille et discours', { m: -1, so: 0.03 }, 'Moment simple et sincère.'],
+   ['Rien de spécial', { so: -0.05 }, 'Il part sans un mot de la direction.']]);
+CH('c_chien_guide', 'usager', 'Chien guide refusé', 'line',
+  (v) => `Un conducteur de la ligne ${v.L} a refusé de prendre une personne aveugle accompagnée de son chien guide. La vidéo circule.`,
+  [['Excuses et formation de tous', { m: -6, r: 0.03, so: -0.03 }, 'Formation accessibilité pour toutes les équipes.'],
+   ['Excuses publiques', { r: 0.01 }, 'Le réseau présente ses excuses.'],
+   ['Soutenir le conducteur', { r: -0.08, risk: [0.4, { m: -10 }, 'L’association obtient réparation en justice.'] }, 'Le réseau défend son agent.']], { dflt: 1 });
+CH('c_planning', 'social', 'Plannings contestés', 'none',
+  () => 'Le syndicat conteste les nouveaux plannings : trop de coupures dans la journée.',
+  [['Revenir aux anciens', { so: 0.1, oa: 1.05, d: 10080 }, 'Paix sociale, mais exploitation un peu plus chère.'],
+   ['Concertation', { m: -4, so: 0.05 }, 'Groupes de travail mixtes : compromis en vue.'],
+   ['Imposer', { so: -0.15, risk: [0.3, { h: 'all', d: 240 }, 'Arrêt de travail : tout le réseau à l’arrêt 4 h.'] }, 'Les plannings s’appliquent dès lundi.']], { dflt: 1 });
+CH('c_vol', 'social', 'Soupçon de vol', 'none',
+  () => 'Un agent de station est soupçonné d’avoir détourné 2 000 € de recettes. Il nie.',
+  [['Porter plainte', { so: -0.05, ra: 0.01 }, 'La police enquête.'],
+   ['Entretien et remboursement', { so: 0.03 }, 'Il rembourse et reste en poste sous surveillance.'],
+   ['Laisser couler', { m0: -2, risk: [0.5, { fa: 0.97, d: 4320 }, 'Les détournements continuent quelques jours.'] }, 'Affaire enterrée.']], { dflt: 1 });
+CH('c_velos_agents', 'social', 'Vélos pour les agents', 'none',
+  () => 'Les agents qui prennent leur service à 4 h du matin n’ont aucun transport. Leur prêter des vélos électriques ?',
+  [['Oui, une flotte de vélos', { m: -10, so: 0.06, ra: 0.01 }, 'Les agents arrivent en pédalant, ravis.'],
+   ['Un taxi partagé à prix réduit', { m: -6, so: 0.04 }, 'Navette de taxis aux aurores.'],
+   ['Non', { so: -0.03 }, 'Chacun se débrouille.']]);
+CH('c_creche', 'social', 'Crèche d’entreprise', 'none',
+  () => 'Avec la mairie, ouvrir une crèche pour les enfants des agents aux horaires décalés ?',
+  [['Financer la moitié', { m: -60, so: 0.15, ma: 0.08 }, 'La crèche ouvrira au printemps.'],
+   ['Réserver des places municipales', { m: -20, so: 0.06, ma: 0.03 }, 'Quelques berceaux pour vos agents.'],
+   ['Non', { so: -0.04 }, 'Projet abandonné.']]);
+CH('c_debrayage', 'social', 'Débrayage de solidarité', 'none',
+  () => 'Un collègue a été agressé hier soir. Les agents veulent arrêter le travail deux heures en signe de solidarité.',
+  [['Autoriser', { h: 'all', d: 120, so: 0.12, ra: 0.02 }, 'Réseau à l’arrêt 2 h, les voyageurs comprennent.'],
+   ['Minute de silence', { so: 0.03 }, 'Recueillement à midi sur tout le réseau.'],
+   ['Interdire', { so: -0.15, risk: [0.4, { h: 'all', d: 180 }, 'Ils arrêtent quand même, et plus longtemps.'] }, 'Le service est maintenu.']], { dflt: 1 });
+CH('c_surete', 'social', 'Sûreté de nuit', 'none',
+  () => 'Après une série d’agressions, les contrôleurs réclament plus de protection sur les services de nuit.',
+  [['Agents de sûreté', { m: -30, so: 0.1, ra: 0.02 }, 'Binômes de sûreté sur les lignes de nuit.'],
+   ['Caméras-piétons', { m: -15, so: 0.05 }, 'Les contrôleurs seront équipés.'],
+   ['Rien pour l’instant', { so: -0.12 }, 'Les agents se sentent abandonnés.']]);
+CH('c_nao', 'social', 'Négociation des salaires', 'none',
+  () => 'Négociation annuelle : les syndicats demandent 3 % d’augmentation, l’inflation est à 2 %.',
+  [['+3 %', { m: -40, so: 0.12 }, 'Accord signé dans la bonne humeur.'],
+   ['+1,5 % et une prime', { m: -22, so: 0.03 }, 'Accord a minima.'],
+   ['Gel des salaires', { so: -0.18, risk: [0.35, { h: 'all', d: 360 }, 'Grève de 6 h dans la foulée.'] }, 'Pas d’augmentation cette année.']], { dflt: 1 });
+CH('c_malaise_volant', 'social', 'Conducteur fragile', 'bus',
+  (v) => `Un conducteur de la ligne ${v.L} a eu deux malaises au volant ce mois-ci. Il refuse d’arrêter : il a besoin de son salaire.`,
+  [['Poste au bureau, salaire maintenu', { m: -4, so: 0.04 }, 'Il rejoint la régulation, soulagé.'],
+   ['Arrêt maladie payé', { m: -6, so: 0.05 }, 'Il prend soin de lui.'],
+   ['Le laisser rouler', { risk: [0.3, { r: -0.1, m: -30 }, 'Nouveau malaise, le bus finit dans un abri. Heureusement sans blessé grave.'] }, 'Il reprend son service.']], { dflt: 0 });
+CH('c_tenue_religieuse', 'social', 'Signe religieux', 'none',
+  () => 'Une agente d’accueil souhaite porter un foulard. Le règlement intérieur n’en dit rien.',
+  [['Préciser le règlement : neutralité au contact du public', { so: -0.04, ma: 0.02 }, 'Règle claire pour tous, quelques mécontents.'],
+   ['L’autoriser', { so: 0.03, ra: -0.01 }, 'Elle garde son foulard, débat dans la presse locale.'],
+   ['Lui proposer un poste sans contact public', { so: -0.02 }, 'Elle accepte, à contrecœur.']], { dflt: 0 });
+CH('c_interim', 'social', 'Intérimaires', 'none',
+  () => 'Il manque des conducteurs. Recourir à l’intérim coûte cher, mais les plannings craquent.',
+  [['Embaucher en CDI', { m: -35, so: 0.08 }, 'Dix recrues formées en interne.'],
+   ['Intérimaires', { m: -20, so: -0.03 }, 'Renfort immédiat, collègues méfiants.'],
+   ['Heures supplémentaires', { so: -0.1, risk: [0.25, { ra: -0.03 }, 'La fatigue provoque des retards remarqués.'] }, 'Les équipes enchaînent les services.']], { dflt: 0 });
+
+/* ===================== MAIRIE ===================== */
+CH('c_maire_ligne', 'eco', 'Le maire et son quartier', 'zone',
+  (v) => `Le maire souhaite que ${v.Z} soit mieux desservi avant les élections. Il laisse entendre qu’une subvention suivrait.`,
+  [['Promettre une desserte', { m: 30, ma: 0.15 }, 'Subvention versée : à vous de tenir parole.'],
+   ['Proposer une étude', { m: -5, ma: 0.03 }, 'Étude de desserte commandée.'],
+   ['Refuser poliment', { ma: -0.06 }, 'Le maire n’oubliera pas.']]);
+CH('c_pietonnisation', 'eco', 'Piétonnisation du centre', 'none',
+  () => 'La mairie veut fermer le centre-ville aux voitures pendant une semaine d’essai. Vos bus pourraient y circuler.',
+  [['Soutenir le projet', { tc: 0.6, da: 1.12, ma: 0.1, d: 10080 }, 'Centre apaisé, bus rapides et pleins.'],
+   ['Exiger des voies bus', { m: -10, ma: 0.03, tc: 0.8, d: 10080 }, 'Compromis : voies réservées.'],
+   ['S’y opposer', { ma: -0.12 }, 'Le projet est enterré, la mairie est vexée.']]);
+CH('c_couleurs_ville', 'eco', 'Aux couleurs de la ville', 'none',
+  () => 'Pour son anniversaire, la ville aimerait que vos véhicules arborent son blason pendant un mois.',
+  [['Accepter', { m: 25, ma: 0.08, ra: 0.01 }, 'Véhicules pavoisés et subvention à la clé.'],
+   ['Seulement une ligne', { m: 8, ma: 0.03 }, 'Une ligne vitrine.'],
+   ['Refuser', { ma: -0.04 }, 'La ville cherchera ailleurs.']]);
+CH('c_gratuite_dimanche', 'eco', 'Gratuité le dimanche ?', 'none',
+  () => 'Avant les municipales, la mairie vous demande la gratuité des transports le week-end pendant un mois, avec une compensation partielle.',
+  [['Accepter', { m: 20, fa: 0.85, da: 1.15, ma: 0.12, d: 43200 }, 'Gratuité du week-end : affluence record.'],
+   ['Gratuité pour les moins de 18 ans', { fa: 0.94, da: 1.05, ma: 0.06, ra: 0.03, d: 43200 }, 'Les jeunes voyagent gratis.'],
+   ['Refuser', { ma: -0.1 }, 'Le candidat sortant vous critique publiquement.']]);
+CH('c_travaux_vacances', 'trafic', 'Travaux pendant les vacances', 'zone',
+  (v) => `La mairie propose d’avancer la réfection des rues de ${v.Z} pendant les vacances : deux jours de perturbations.`,
+  [['Accepter', { tz: 1.8, d: 2880, ma: 0.08 }, 'Chantier éclair dans le quartier.'],
+   ['Travaux de nuit uniquement', { tz: 1.3, d: 1440, ma: 0.03 }, 'Gêne limitée.'],
+   ['Refuser', { ma: -0.06 }, 'Les travaux seront décalés… à la rentrée.']]);
+CH('c_parking_relais', 'eco', 'Parking relais', 'none',
+  () => 'La commune propose de cofinancer un parking relais en entrée de ville, relié à votre réseau.',
+  [['Cofinancer', { m: -120, da: 1.08, ma: 0.1, d: 43200 }, 'P+R ouvert : les automobilistes prennent le relais.'],
+   ['Participation symbolique', { m: -30, da: 1.03, ma: 0.04, d: 43200 }, 'Petit parking relais.'],
+   ['Refuser', { ma: -0.03 }, 'Pas de parking relais.']]);
+CH('c_ecole_arret', 'usager', 'Arrêt devant l’école', 'zone',
+  (v) => `Les parents d’élèves de ${v.Z} demandent un service renforcé aux heures d’entrée et de sortie des classes.`,
+  [['Renfort scolaire', { om: ['bus', 1.04], dz: 1.3, ra: 0.03, d: 43200 }, 'Service scolaire mis en place.'],
+   ['Ajuster les horaires', { dz: 1.1, d: 43200 }, 'Horaires calés sur la sonnerie.'],
+   ['Refuser', { ra: -0.03 }, 'Les parents sont déçus.']]);
+CH('c_subvention_tarif', 'eco', 'Subvention sous condition', 'none',
+  () => 'La Région offre une subvention si vous baissez vos tarifs de 10 % pendant un mois.',
+  [['Accepter', { m: 150, fa: 0.9, da: 1.06, d: 43200 }, 'Tarifs en baisse, caisse renflouée.'],
+   ['Refuser', { ma: -0.03 }, 'Vous gardez la main sur vos tarifs.']]);
+CH('c_fete_quartier', 'fete', 'Fête de quartier', 'zone',
+  (v) => `Le comité des fêtes de ${v.Z} demande une navette gratuite pour sa fête de samedi.`,
+  [['Navette gratuite', { m: -5, ra: 0.03, ma: 0.03, dz: 1.5, d: 360 }, 'Fête réussie, navette bondée.'],
+   ['Navette payante', { dz: 1.3, d: 360 }, 'Service assuré au tarif normal.'],
+   ['Non', { ra: -0.02 }, 'Le comité se débrouillera.']]);
+CH('c_audit', 'eco', 'Menace d’audit', 'none',
+  () => 'La mairie conteste vos comptes et menace de diligenter un audit.',
+  [['Ouvrir les livres', { m: -8, ma: 0.08 }, 'Transparence totale : la confiance revient.'],
+   ['Prendre un avocat', { m: -25, ma: -0.05 }, 'Bataille juridique en vue.'],
+   ['Ignorer', { risk: [0.45, { m: -50, ma: -0.15 }, 'L’audit révèle des irrégularités : pénalités.'] }, 'Silence radio.']],
+  { dflt: 0, when: () => (G.s.mairie || 0) < 0.2 });
+CH('c_tram', 'eco', 'Projet de tramway', 'none',
+  () => 'La métropole souhaite racheter une partie de votre dépôt pour un futur tramway.',
+  [['Céder le terrain', { m: 80, ta: 1.2, d: 4320, ma: 0.08 }, 'Indemnité encaissée, quelques jours de chantier.'],
+   ['Négocier un échange de terrain', { m: 20, ma: 0.03 }, 'Accord gagnant-gagnant.'],
+   ['Refuser', { ma: -0.08 }, 'Le projet de tram prend du retard.']]);
+CH('c_noel_deco', 'fete', 'Décorations de Noël', 'none',
+  () => 'Décorer vos véhicules pour les fêtes ?',
+  [['Grand jeu : guirlandes et lumières', { m: -15, ra: 0.04, da: 1.05, d: 10080 }, 'Les enfants adorent.'],
+   ['Discret', { m: -3, ra: 0.01 }, 'Quelques touches festives.'],
+   ['Non', {}, 'Pas cette année.']], { when: () => chMonth() === 11 });
+CH('c_jumelage', 'eco', 'Ville jumelée', 'none',
+  () => 'Une délégation de la ville jumelée souhaite visiter votre réseau.',
+  [['Accueil VIP', { m: -6, ma: 0.06, ra: 0.02 }, 'Visite réussie, échanges prometteurs.'],
+   ['Visite simple', { m: -1, ma: 0.02 }, 'Tour du dépôt et café.'],
+   ['Décliner', { ma: -0.03 }, 'Rendez-vous manqué.']]);
+CH('c_budget_participatif', 'eco', 'Budget participatif', 'stop',
+  (v) => `Les habitants ont voté un abri vélos sécurisé près de l’arrêt ${v.S}. La mairie vous demande de participer.`,
+  [['Cofinancer', { m: -10, ra: 0.03, ma: 0.05, dp: 1.15, d: 43200 }, 'Abri vélos inauguré : plus de voyageurs.'],
+   ['Laisser la ville payer', { ma: -0.02 }, 'La ville paie seule.'],
+   ['Refuser', { ma: -0.04, ra: -0.01 }, 'Projet abandonné.']]);
+CH('c_carnaval', 'fete', 'Carnaval', 'none',
+  () => 'Le carnaval traverse la ville samedi. Que faire de vos lignes ?',
+  [['Dévier les lignes', { tc: 2, d: 360, ma: 0.03 }, 'Détours, mais service assuré.'],
+   ['Arrêter les bus 4 h', { h: 'bus', d: 240, ma: 0.05 }, 'Rues libres pour le défilé.'],
+   ['Maintenir le service', { tc: 2.6, d: 360, risk: [0.4, { ra: -0.03 }, 'Bus bloqués au milieu des chars : critiques.'] }, 'Service normal… en théorie.']],
+  { when: () => chMonth() === 1 || chMonth() === 2 });
+CH('c_foire', 'fete', 'Foire annuelle', 'zone',
+  (v) => `La foire annuelle s’installe près de ${v.Z} pour deux jours.`,
+  [['Navettes et renforts', { m: -8, dz: 1.8, d: 2880, ra: 0.02 }, 'Navettes pleines à craquer.'],
+   ['Service normal', { dz: 1.4, d: 2880 }, 'Le service habituel absorbe la foule tant bien que mal.']]);
+CH('c_marches_noel', 'fete', 'Navette du marché de Noël', 'none',
+  () => 'La ville propose une navette « marché de Noël » entre la gare et le centre.',
+  [['Navette gratuite', { m: -10, tc: 0.9, da: 1.06, ma: 0.06, d: 10080 }, 'Navette décorée, très appréciée.'],
+   ['Navette payante', { da: 1.04, d: 10080 }, 'Service ajouté au tarif normal.'],
+   ['Non', { ma: -0.03 }, 'Pas de navette cette année.']], { when: () => chMonth() === 11 });
+
+/* ===================== ASSOCIATIONS ET POPULATION ===================== */
+CH('c_pmr', 'usager', 'Accessibilité', 'line',
+  (v) => `L’association des personnes handicapées réclame des rampes d’accès à tous les arrêts de la ligne ${v.L}.`,
+  [['Équiper toute la ligne', { m: -45, r: 0.06, dl: 1.05, d: 43200 }, 'Ligne entièrement accessible.'],
+   ['Les arrêts principaux', { m: -15, r: 0.02 }, 'Premiers aménagements réalisés.'],
+   ['Plus tard', { r: -0.05, risk: [0.3, { m: -20 }, 'L’association saisit la justice et obtient gain de cause.'] }, 'Dossier reporté.']], { dflt: 1 });
+CH('c_velos_bus', 'usager', 'Vélos à bord', 'bus',
+  () => 'Les cyclistes demandent à monter avec leur vélo dans les bus en heures creuses.',
+  [['Autoriser', { dm: ['bus', 1.04], ra: 0.02, d: 10080, risk: [0.2, { ra: -0.02 }, 'Quelques altercations dans les bus bondés.'] }, 'Vélos admis hors pointe.'],
+   ['Porte-vélos à l’avant des bus', { m: -20, dm: ['bus', 1.06], d: 43200 }, 'Bus équipés de racks.'],
+   ['Refuser', { ra: -0.02 }, 'Les cyclistes protestent.']]);
+CH('c_riverains_bruit', 'usager', 'Bruit nocturne', 'stop',
+  (v) => `Les riverains de l’arrêt ${v.S} se plaignent du bruit des bus la nuit.`,
+  [['Bus électriques la nuit', { om: ['bus', 1.03], ra: 0.03, d: 20160 }, 'Nuits plus calmes.'],
+   ['Déplacer l’arrêt de 50 m', { m: -3, ra: 0.01 }, 'Arrêt déplacé.'],
+   ['Ignorer', { ra: -0.04, risk: [0.4, { ma: -0.05 }, 'Pétition remise au maire.'] }, 'Aucune suite.']]);
+CH('c_sans_abri', 'usager', 'Sans-abri sous un abribus', 'stop',
+  (v) => `Plusieurs personnes sans abri dorment sous l’abri de l’arrêt ${v.S}. Des voyageurs se plaignent, d’autres s’indignent qu’on les déloge.`,
+  [['Partenariat avec une association', { m: -5, ra: 0.04 }, 'Maraudes et hébergement proposé.'],
+   ['Laisser faire', { ra: -0.01 }, 'Statu quo.'],
+   ['Faire évacuer', { ra: -0.06, ma: 0.02 }, 'Évacuation sous l’œil des caméras.']]);
+CH('c_fresque', 'culture', 'Fresque sur un bus', 'line',
+  (v) => `Un collectif d’artistes propose de peindre une fresque sur un véhicule de la ligne ${v.L}.`,
+  [['Accepter', { r: 0.04, dl: 1.05, d: 10080 }, 'Le bus-fresque devient la star de la ville.'],
+   ['Concours de fresques', { m: -8, ra: 0.05, ma: 0.03 }, 'Dix artistes, dix véhicules.'],
+   ['Refuser', {}, 'Véhicules sobres.']]);
+CH('c_petition', 'usager', 'Pétition des usagers', 'line',
+  (v) => `Une pétition de 2 000 signatures réclame plus de passages sur la ligne ${v.L}.`,
+  [['Promettre des renforts', { r: 0.03 }, 'Promesse faite : achetez des véhicules !'],
+   ['Expliquer les contraintes', { r: -0.01 }, 'Réunion publique tendue.'],
+   ['Ignorer', { r: -0.05 }, 'Les usagers se sentent méprisés.']]);
+CH('c_animaux', 'usager', 'Animaux à bord', 'none',
+  () => 'Faut-il autoriser les chiens de toute taille dans vos véhicules ?',
+  [['Tous, muselés si besoin', { da: 1.02, ra: 0.01, d: 43200, risk: [0.2, { ra: -0.02 }, 'Morsure dans un bus : polémique.'] }, 'Les maîtres apprécient.'],
+   ['Petits animaux en sac', { ra: 0.005 }, 'Règle inchangée.'],
+   ['Interdits', { ra: -0.01 }, 'Les propriétaires râlent.']]);
+CH('c_allaitement', 'usager', 'Allaitement dans le bus', 'line',
+  (v) => `Une mère affirme avoir été priée de descendre d’un bus de la ligne ${v.L} parce qu’elle allaitait. Le conducteur conteste.`,
+  [['Excuses et campagne de sensibilisation', { m: -4, r: 0.05 }, 'Message clair : bienvenue aux familles.'],
+   ['Excuses', { r: 0.01 }, 'Le réseau regrette l’incident.'],
+   ['Soutenir le conducteur', { r: -0.1, so: 0.03 }, 'Polémique nationale.']], { dflt: 1 });
+CH('c_mendicite', 'usager', 'Mendicité', 'metro',
+  () => 'Des usagers réclament l’interdiction de la mendicité dans le métro.',
+  [['Interdire et faire appliquer', { ra: -0.02, ma: 0.03 }, 'Arrêté pris, associations indignées.'],
+   ['Travailler avec les associations', { m: -6, ra: 0.03 }, 'Accompagnement social en station.'],
+   ['Ne rien changer', {}, 'Statu quo.']]);
+CH('c_club_foot', 'sport', 'Tournoi de jeunes', 'none',
+  () => 'Le club de foot amateur demande une navette pour son tournoi de jeunes de dimanche.',
+  [['Navette gratuite', { m: -3, ra: 0.03, ma: 0.02 }, 'Les gamins arrivent en bus, ravis.'],
+   ['Tarif de groupe', { m0: 1 }, 'Navette au tarif groupe.'],
+   ['Non', { ra: -0.01 }, 'Les parents feront du covoiturage.']]);
+CH('c_militants', 'social', 'Blocage écologiste', 'bus',
+  () => 'Des militants écologistes bloquent l’entrée du dépôt pour exiger des bus électriques.',
+  [['Dialoguer et annoncer un plan', { m: -20, ra: 0.04, h: 'bus', d: 60 }, 'Plan de transition annoncé, blocage levé.'],
+   ['Appeler la police', { ra: -0.03, h: 'bus', d: 120 }, 'Évacuation musclée filmée.'],
+   ['Attendre', { h: 'bus', d: 360 }, 'Les bus restent coincés au dépôt.']], { dflt: 2 });
+CH('c_seniors', 'usager', 'Gratuité pour les seniors', 'none',
+  () => 'Les associations de retraités demandent la gratuité en heures creuses.',
+  [['Accepter', { fa: 0.95, da: 1.04, ra: 0.04, ma: 0.03, d: 43200 }, 'Les seniors sortent davantage.'],
+   ['Tarif réduit', { fa: 0.98, ra: 0.02, d: 43200 }, 'Demi-tarif pour les plus de 65 ans.'],
+   ['Refuser', { ra: -0.02 }, 'Courrier indigné des retraités.']]);
+CH('c_etudiants', 'usager', 'Abonnement étudiant', 'none',
+  () => 'Le syndicat étudiant réclame un abonnement à moitié prix.',
+  [['Accepter', { fa: 0.95, da: 1.06, d: 43200 }, 'Les étudiants délaissent la voiture.'],
+   ['Seulement les boursiers', { fa: 0.985, ra: 0.02, d: 43200 }, 'Aide ciblée.'],
+   ['Refuser', { ra: -0.03 }, 'Manifestation étudiante devant le siège.']]);
+CH('c_sondage', 'image', 'Publier vos chiffres ?', 'none',
+  () => 'Un journal veut publier un classement des réseaux. Vous fournissez vos vrais chiffres de ponctualité ?',
+  [['Transparence totale', { risk: [0.5, { ra: 0.04 }, 'Vos chiffres impressionnent les lecteurs.'], ra: -0.01 }, 'Chiffres publiés tels quels.'],
+   ['Communication maîtrisée', { m: -5, ra: 0.01 }, 'Une agence enjolive le tableau.'],
+   ['Refuser', { ra: -0.02 }, '« Le réseau qui cache ses chiffres ».']]);
+CH('c_objets_vente', 'image', 'Objets trouvés', 'none',
+  () => 'Des centaines d’objets trouvés n’ont jamais été réclamés. Que faire ?',
+  [['Vente au profit d’une association', { ra: 0.03 }, 'Vente solidaire réussie.'],
+   ['Vente au profit du réseau', { m0: 4 }, 'Quelques milliers d’euros encaissés.'],
+   ['Les garder un an de plus', {}, 'Les étagères débordent.']]);
+CH('c_allergie', 'usager', 'Parfum dans les rames', 'line',
+  (v) => `Une association d’allergiques demande d’arrêter la diffusion de parfum d’ambiance sur la ligne ${v.L}.`,
+  [['Arrêter le parfum', { r: 0.02, m0: 2 }, 'Air neutre et petite économie.'],
+   ['Parfum hypoallergénique', { m: -2, r: 0.01 }, 'Compromis.'],
+   ['Garder le parfum', { r: -0.02 }, 'L’association proteste.']]);
+CH('c_naissance_bebe', 'image', 'Bébé né à bord : un cadeau ?', 'line',
+  (v) => `Un bébé est né dans un bus de la ligne ${v.L} la nuit dernière. Les parents vous remercient chaleureusement.`,
+  [['Abonnement gratuit à vie pour l’enfant', { r: 0.05 }, 'L’histoire fait le tour du pays.'],
+   ['Un bouquet et une peluche', { m0: -0.2, r: 0.02 }, 'Joli geste.'],
+   ['Rien', {}, 'Simple fait divers.']]);
+
+/* ===================== COMMERCE ET ÉCONOMIE ===================== */
+CH('c_pub_alcool', 'eco', 'Publicité pour de l’alcool', 'none',
+  () => 'Une marque d’alcool veut couvrir vos véhicules de publicité pour un mois.',
+  [['Accepter', { m: 40, ra: -0.03 }, 'Contrat juteux, critiques des associations de santé.'],
+   ['Seulement dans les dépôts', { m: 8 }, 'Affiches discrètes.'],
+   ['Refuser', {}, 'Vous restez fidèle à vos valeurs.']]);
+CH('c_pub_politique', 'eco', 'Publicité politique', 'none',
+  () => 'Un parti veut louer tous vos espaces publicitaires pendant la campagne électorale.',
+  [['Accepter', { m: 25, ma: -0.06, ra: -0.02 }, 'Affiches partout, neutralité en question.'],
+   ['Ouvrir à tous les partis à égalité', { m: 10, ma: 0.02 }, 'Équité saluée.'],
+   ['Refuser', {}, 'Neutralité préservée.']]);
+CH('c_naming', 'eco', 'Station au nom d’une banque', 'metro',
+  () => 'Une banque propose de payer pour que la principale station de métro porte son nom.',
+  [['Accepter', { m: 120, ra: -0.04 }, 'Station rebaptisée, les habitants grincent des dents.'],
+   ['Double nom', { m: 60, ra: -0.01 }, 'Le nom historique est conservé.'],
+   ['Refuser', { ma: 0.02 }, 'Patrimoine préservé.']]);
+CH('c_colis', 'eco', 'Colis par bus', 'bus',
+  () => 'Une start-up propose de transporter des colis dans vos bus aux heures creuses.',
+  [['Accepter', { m: 20, om: ['bus', 1.02], d: 20160 }, 'Nouveaux revenus, soutes chargées.'],
+   ['Test sur une ligne', { m: 6 }, 'Essai concluant à petite échelle.'],
+   ['Refuser', {}, 'Vos bus restent pour les voyageurs.']]);
+CH('c_wifi', 'eco', 'Wifi à bord', 'none',
+  () => 'Installer le wifi gratuit dans vos véhicules ?',
+  [['Wifi gratuit', { m: -35, da: 1.04, ra: 0.03, d: 43200 }, 'Les voyageurs adorent.'],
+   ['Wifi financé par la pub', { m: 5, da: 1.02, d: 43200 }, 'Wifi avec bannières publicitaires.'],
+   ['Non', {}, 'Pas de wifi.']]);
+CH('c_sans_contact', 'eco', 'Paiement sans contact', 'none',
+  () => 'Équiper tous les véhicules de valideurs acceptant la carte bancaire ?',
+  [['Tout le réseau', { m: -50, da: 1.05, fa: 1.03, d: 43200 }, 'Plus simple, moins de fraude.'],
+   ['Une ligne pilote', { m: -10, da: 1.01, d: 43200 }, 'Expérimentation lancée.'],
+   ['Non', {}, 'Billets classiques uniquement.']]);
+CH('c_covoit', 'eco', 'Appli de covoiturage', 'none',
+  () => 'Une appli de covoiturage veut intégrer vos horaires pour proposer des trajets combinés.',
+  [['Partenariat gratuit', { da: 1.03, d: 43200 }, 'Trajets combinés disponibles.'],
+   ['Contre commission', { m: 10, da: 1.02, d: 43200 }, 'Partenariat rémunéré.'],
+   ['Refuser', {}, 'Pas de partenariat.']]);
+CH('c_pneus', 'eco', 'Pneus bon marché', 'bus',
+  () => 'Un fournisseur propose des pneus 40 % moins chers, mais moins durables.',
+  [['Pneus bon marché', { m: 15, risk: [0.35, { lend: 360, m: -10 }, 'Crevaisons en série : un bus immobilisé.'] }, 'Économie immédiate.'],
+   ['Pneus premium', { m: -10, ra: 0.01 }, 'Sécurité et longévité.'],
+   ['Fournisseur habituel', {}, 'On ne change rien.']]);
+CH('c_hvo', 'eco', 'Biocarburant', 'bus',
+  () => 'Passer vos bus au biocarburant HVO : moins de CO₂, mais carburant 8 % plus cher.',
+  [['Toute la flotte', { om: ['bus', 1.08], ra: 0.04, ma: 0.05, d: 43200 }, 'Flotte verdie.'],
+   ['La moitié', { om: ['bus', 1.04], ra: 0.02, d: 43200 }, 'Transition progressive.'],
+   ['Non', {}, 'Gazole classique.']]);
+CH('c_snacks', 'eco', 'Distributeurs en station', 'none',
+  () => 'Installer des distributeurs de snacks et boissons aux principaux arrêts ?',
+  [['Grande marque', { m: 6 }, 'Petits revenus réguliers.'],
+   ['Produits locaux', { m: 3, ra: 0.02 }, 'Producteurs du coin à l’honneur.'],
+   ['Non', {}, 'Rien à grignoter.']]);
+CH('c_sponsor_rugby', 'sport', 'Sponsor du club', 'none',
+  () => 'Le club de rugby local cherche un sponsor maillot.',
+  [['Sponsor principal', { m: -20, ra: 0.04, ma: 0.02 }, 'Votre logo sur tous les maillots.'],
+   ['Petit sponsor', { m: -5, ra: 0.01 }, 'Logo sur la manche.'],
+   ['Non', {}, 'Pas de sponsoring.']]);
+CH('c_rachat_minibus', 'eco', 'Faillite d’un concurrent', 'bus',
+  () => 'Une petite compagnie privée de navettes fait faillite. Ses minibus sont à vendre, ses salariés cherchent un emploi.',
+  [['Racheter deux minibus', { m0: -110, add: ['b22', 2] }, 'Deux Urbis Mini rejoignent votre flotte.'],
+   ['Reprendre les salariés', { m: -10, so: 0.05, ra: 0.02 }, 'Cinq conducteurs expérimentés embauchés.'],
+   ['Les deux', { m0: -110, m: -10, add: ['b22', 2], so: 0.05 }, 'Minibus et équipes repris.'],
+   ['Rien', {}, 'Vous laissez passer l’occasion.']], { dflt: 3 });
+CH('c_loyer', 'eco', 'Loyer du dépôt', 'none',
+  () => 'Le propriétaire du dépôt annonce une hausse de loyer de 20 %.',
+  [['Accepter', { oa: 1.03, d: 43200 }, 'Loyer en hausse.'],
+   ['Négocier', { m: -5, oa: 1.01, d: 43200 }, 'Hausse limitée à 5 %.'],
+   ['Déménager', { m: -80, h: 'all', d: 120 }, 'Déménagement express, deux heures d’arrêt.']], { dflt: 0 });
+CH('c_assurance', 'eco', 'Contrat d’assurance', 'none',
+  () => 'Votre assureur propose une franchise plus élevée contre une prime réduite.',
+  [['Accepter', { m: 20, risk: [0.25, { m: -45 }, 'Sinistre majeur peu après : la franchise coûte cher.'] }, 'Prime réduite.'],
+   ['Refuser', {}, 'Contrat inchangé.']], { dflt: 1 });
+CH('c_velos_libres', 'eco', 'Vélos en libre-service', 'none',
+  () => 'Un opérateur de vélos en libre-service veut installer des stations devant vos arrêts.',
+  [['Partenariat', { da: 1.03, ra: 0.02, d: 43200 }, 'Abonnement combiné vélo + bus.'],
+   ['Contre redevance', { m: 10 }, 'Revenus d’occupation.'],
+   ['Refuser', {}, 'Trottoirs dégagés.']]);
+CH('c_trottinettes', 'usager', 'Trottinettes envahissantes', 'stop',
+  (v) => `Des trottinettes abandonnées encombrent l’arrêt ${v.S} et gênent les personnes en fauteuil.`,
+  [['Demander leur interdiction', { ma: -0.03, ra: 0.01 }, 'Débat houleux en conseil municipal.'],
+   ['Zones de stationnement dédiées', { m: -5, ra: 0.02 }, 'Arrêts dégagés.'],
+   ['Rien', { ra: -0.01 }, 'Le désordre continue.']]);
+
+/* ===================== MÉDIAS ET IMAGE ===================== */
+CH('c_reportage', 'image', 'Reportage télé', 'none',
+  () => 'France 3 veut tourner un reportage dans les coulisses de votre réseau.',
+  [['Accepter', { ra: 0.04, risk: [0.25, { ra: -0.08 }, 'Le montage final est à charge…'] }, 'Équipe accueillie au dépôt.'],
+   ['Accepter avec relecture', { ra: 0.02 }, 'Reportage consensuel.'],
+   ['Refuser', { ra: -0.01 }, 'Le reportage se fera sans vous.']]);
+CH('c_influenceur', 'image', 'Influenceur intéressé', 'none',
+  () => 'Un influenceur aux 800 000 abonnés propose une vidéo sur votre réseau contre 5 000 €.',
+  [['Payer', { m0: -5, da: 1.04, ra: 0.02, d: 4320 }, 'Vidéo vue un million de fois.'],
+   ['Lui offrir un pass', { ra: 0.01, risk: [0.4, { da: 1.03, d: 4320 }, 'Il poste quand même une vidéo enthousiaste.'] }, 'Pass envoyé.'],
+   ['Refuser', {}, 'Pas de placement de produit.']]);
+CH('c_rumeur', 'image', 'Rumeur de fermeture', 'line',
+  (v) => `Une rumeur affirme que la ligne ${v.L} va fermer. Les voyageurs s’inquiètent.`,
+  [['Démenti officiel', { m: -2, r: 0.01 }, 'Rumeur éteinte.'],
+   ['Campagne d’affichage', { m: -10, r: 0.03, dl: 1.05, d: 10080 }, '« La ligne qui ne ferme jamais ».'],
+   ['Laisser dire', { dl: 0.85, d: 4320 }, 'Des voyageurs se détournent de la ligne.']]);
+CH('c_enquete_nuit', 'image', 'Enquête sur la nuit', 'none',
+  () => 'Un journaliste enquête sur l’insécurité dans vos transports de nuit et demande une interview.',
+  [['Interview transparente', { ra: 0.02 }, 'Discours honnête, salué.'],
+   ['Renforcer la sûreté avant parution', { m: -20, ra: 0.03, so: 0.05 }, 'Article positif sur vos efforts.'],
+   ['Refuser l’interview', { ra: -0.04 }, '« Le réseau refuse de répondre ».']]);
+CH('c_satire', 'image', 'Émission satirique', 'none',
+  () => 'Une émission satirique se moque de vos retards dans un sketch très partagé.',
+  [['Répondre avec humour', { ra: 0.05, risk: [0.2, { ra: -0.03 }, 'L’humour tombe à plat.'] }, 'Votre réponse devient virale.'],
+   ['Communiqué sérieux', { ra: -0.01 }, 'Ton jugé rigide.'],
+   ['Ignorer', {}, 'La polémique s’éteint.']]);
+CH('c_pub_voiture', 'image', 'Pub automobile', 'none',
+  () => 'Un constructeur automobile veut tourner une publicité montrant vos bus bondés pour vanter… la voiture.',
+  [['Accepter', { m: 30, ra: -0.05 }, 'Chèque encaissé, image écornée.'],
+   ['Refuser', {}, 'Pas question.']]);
+CH('c_mascotte', 'image', 'Une mascotte', 'none',
+  () => 'Créer une mascotte pour votre réseau ?',
+  [['Concours dans les écoles', { m: -6, ra: 0.04, ma: 0.03 }, 'Un petit hérisson à casquette gagne.'],
+   ['Agence de design', { m: -15, ra: 0.03 }, 'Mascotte professionnelle.'],
+   ['Non', {}, 'Pas de mascotte.']]);
+CH('c_concours_photo', 'image', 'Concours photo', 'none',
+  () => 'Organiser un concours photo « Mon trajet » sur les réseaux sociaux ?',
+  [['Oui', { m: -3, ra: 0.03, da: 1.02, d: 10080 }, 'Des milliers de photos partagées.'],
+   ['Non', {}, 'Pas de concours.']]);
+
+/* ===================== SÉCURITÉ ET ÉTHIQUE ===================== */
+CH('c_reconnaissance', 'reseau', 'Reconnaissance faciale', 'none',
+  () => 'Une société propose des caméras à reconnaissance faciale pour lutter contre la fraude et les incivilités.',
+  [['Installer', { m: -60, fa: 1.05, ra: -0.05, d: 43200 }, 'Fraude en baisse, défenseurs des libertés vent debout.'],
+   ['Caméras classiques', { m: -25, fa: 1.02, ra: 0.01, d: 43200 }, 'Vidéoprotection simple.'],
+   ['Refuser', { ra: 0.01 }, 'Vie privée respectée.']]);
+CH('c_donnees', 'reseau', 'Vente de données', 'none',
+  () => 'Un courtier veut acheter les données « anonymisées » des trajets de vos voyageurs.',
+  [['Vendre', { m: 50, ra: -0.03, risk: [0.3, { ra: -0.08 }, 'Scandale : les données étaient identifiables.'] }, 'Données vendues.'],
+   ['Open data gratuit et anonyme', { ra: 0.03, ma: 0.03 }, 'Données publiques salués par les chercheurs.'],
+   ['Refuser', {}, 'Les données restent chez vous.']], { dflt: 2 });
+CH('c_facies', 'social', 'Contrôles au faciès ?', 'none',
+  () => 'Une vidéo accuse vos contrôleurs de cibler certains voyageurs selon leur apparence.',
+  [['Enquête indépendante', { m: -10, ra: 0.03, so: -0.03 }, 'Rapport attendu sous un mois.'],
+   ['Formation de tous les contrôleurs', { m: -15, ra: 0.02, so: 0.02 }, 'Formation antidiscrimination.'],
+   ['Défendre les agents', { so: 0.08, ra: -0.07 }, 'Les agents soutenus, l’opinion choquée.']], { dflt: 0 });
+CH('c_ultras', 'sport', 'Supporters ultras', 'none',
+  () => 'Des supporters ultras prendront vos bus après le match de ce soir.',
+  [['Bus dédiés escortés', { m: -10, ra: 0.02 }, 'Transport encadré, sans incident.'],
+   ['Service normal', { risk: [0.4, { m: -15, ra: -0.03 }, 'Bus saccagé au retour du match.'] }, 'On croise les doigts.'],
+   ['Suspendre les lignes du stade', { ra: -0.03 }, 'Les supporters rentrent à pied… en colère.']]);
+CH('c_magot', 'image', 'Le sac de billets', 'line',
+  (v) => `Il y a un an, un sac contenant 50 000 € a été trouvé dans un bus de la ligne ${v.L}. Personne ne l’a réclamé. Il vous revient légalement.`,
+  [['Le garder', { m0: 50 }, 'Un joli coup de pouce pour la trésorerie.'],
+   ['Le donner aux Restos du cœur', { r: 0.06, ra: 0.02 }, 'Geste salué partout.'],
+   ['Moitié-moitié', { m0: 25, r: 0.03 }, 'Compromis généreux.']]);
+CH('c_cycliste', 'trafic', 'Cycliste renversé', 'bus',
+  (v) => `Un bus de la ligne ${v.L} a renversé un cycliste, légèrement blessé. Les témoignages se contredisent.`,
+  [['Reconnaître et indemniser', { m: -20, r: 0.02 }, 'Affaire réglée rapidement.'],
+   ['Contester', { m: -5, risk: [0.5, { m: -40, r: -0.05 }, 'Le tribunal vous donne tort.'] }, 'Procédure engagée.'],
+   ['Accord amiable', { m: -10 }, 'Arrangement discret.']], { dflt: 2 });
+CH('c_pickpockets', 'reseau', 'Vague de pickpockets', 'metro',
+  () => 'Une bande de pickpockets sévit dans le métro.',
+  [['Brigade avec la police', { m: -15, dm: ['metro', 1.03], ra: 0.03, d: 10080 }, 'Interpellations en série.'],
+   ['Annonces sonores', { m0: -1 }, '« Attention aux pickpockets ».'],
+   ['Rien', { dm: ['metro', 0.95], d: 4320 }, 'Les voyageurs se méfient.']]);
+CH('c_trafic_drogue', 'reseau', 'Trafic près d’une station', 'stop',
+  (v) => `Un trafic de drogue est signalé aux abords de l’arrêt ${v.S}.`,
+  [['Éclairage et médiateurs', { m: -12, ra: 0.04 }, 'Le quartier respire.'],
+   ['Fermer l’arrêt le soir', { dl: 0.97, ma: 0.03, d: 10080 }, 'Arrêt fermé après 20 h.'],
+   ['Rien', { ra: -0.04 }, 'Les riverains désespèrent.']]);
+CH('c_eau_canicule', 'usager', 'Eau en canicule', 'none',
+  () => 'Canicule : distribuer de l’eau gratuitement dans les stations ?',
+  [['Oui', { m: -4, ra: 0.04 }, 'Bouteilles distribuées par les agents.'],
+   ['Fontaines seulement', { m: -1, ra: 0.01 }, 'Points d’eau signalés.'],
+   ['Non', { ra: -0.02 }, 'Les voyageurs suffoquent.']], { when: chHot });
+CH('c_defibrillateurs', 'usager', 'Défibrillateurs', 'none',
+  () => 'Équiper vos stations et véhicules de défibrillateurs ?',
+  [['Partout', { m: -20, ra: 0.03, so: 0.03 }, 'Réseau entièrement équipé.'],
+   ['Stations principales', { m: -6, ra: 0.01 }, 'Les grandes stations sont équipées.'],
+   ['Non', {}, 'Pas d’équipement.']]);
+CH('c_vaccination', 'usager', 'Bus de prévention santé', 'bus',
+  () => 'L’agence régionale de santé demande de prêter un bus pour en faire un centre mobile de dépistage.',
+  [['Prêter un bus deux jours', { lend: 2880, ra: 0.05, ma: 0.05 }, 'Le bus-santé sillonne la ville.'],
+   ['Prêter un bus le week-end', { lend: 1440, ra: 0.02 }, 'Opération limitée.'],
+   ['Refuser', { ma: -0.03 }, 'L’ARS trouvera une autre solution.']]);
+CH('c_emploi', 'usager', 'Transport vers l’emploi', 'none',
+  () => 'Pôle emploi propose la gratuité des trajets pour les demandeurs d’emploi qui se rendent à un entretien.',
+  [['Accepter', { fa: 0.99, ra: 0.04, ma: 0.04, d: 43200 }, 'Coup de pouce apprécié.'],
+   ['Demi-tarif', { fa: 0.995, ra: 0.02, d: 43200 }, 'Réduction accordée.'],
+   ['Refuser', {}, 'Tarifs inchangés.']]);
+CH('c_arret_demande', 'usager', 'Descente à la demande', 'bus',
+  () => 'Une association demande que les bus de nuit puissent arrêter entre deux arrêts pour la sécurité des femmes.',
+  [['Oui', { om: ['bus', 1.01], ra: 0.05, d: 43200 }, 'Descente à la demande dès 22 h.'],
+   ['À l’essai sur une ligne', { ra: 0.02 }, 'Test lancé.'],
+   ['Non', { ra: -0.02 }, 'Demande rejetée.']]);
+CH('c_hopital_nuit', 'usager', 'Personnel hospitalier', 'poi:hospital',
+  (v) => `${v.P} demande une desserte nocturne pour ses soignants.`,
+  [['Navette de nuit dédiée', { om: ['bus', 1.03], dp: 1.3, ra: 0.03, d: 43200 }, 'Les soignants rentrent en sécurité.'],
+   ['Promettre une étude', { ra: 0.01, ma: 0.02 }, 'Étude lancée.'],
+   ['Non', { ra: -0.02 }, 'Les soignants prendront leur voiture.']]);
+
+/* ===================== ENVIRONNEMENT ===================== */
+CH('c_arbres', 'image', 'Planter des arbres', 'none',
+  () => 'Une association propose de planter 200 arbres sur votre dépôt.',
+  [['Oui', { m: -8, ra: 0.03, ma: 0.03 }, 'Dépôt verdoyant.'],
+   ['Une haie seulement', { m: -2, ra: 0.01 }, 'Petit geste.'],
+   ['Non', {}, 'Bitume conservé.']]);
+CH('c_solaire', 'eco', 'Panneaux solaires', 'none',
+  () => 'Couvrir la toiture du dépôt de panneaux solaires ?',
+  [['Investir', { m: -150, oa: 0.95, ra: 0.03, d: 129600 }, 'Électricité verte et économies pendant des mois.'],
+   ['Louer la toiture', { m: 10, ra: 0.01 }, 'Un énergéticien exploite le toit.'],
+   ['Non', {}, 'Toiture inchangée.']]);
+CH('c_ruches', 'image', 'Ruches sur le toit', 'none',
+  () => 'Des apiculteurs proposent d’installer des ruches sur le toit du siège.',
+  [['Oui', { m: -2, ra: 0.02 }, 'Miel du réseau offert aux agents.'],
+   ['Non', {}, 'Pas d’abeilles.']]);
+CH('c_eclairage', 'eco', 'Éclairage des abris', 'none',
+  () => 'Éteindre l’éclairage des abris la nuit pour économiser l’énergie ?',
+  [['Éteindre', { m: 6, ra: -0.03, risk: [0.25, { ra: -0.03 }, 'Agression dans un abri plongé dans le noir.'] }, 'Économies réalisées.'],
+   ['Passer aux LED à détection', { m: -10, ra: 0.01 }, 'Lumière quand il faut.'],
+   ['Garder tel quel', {}, 'Abris éclairés.']]);
+
+/* ===================== CULTURE ET ÉVÉNEMENTS ===================== */
+CH('c_nocturne_musee', 'culture', 'Nocturne au musée', 'poi:museum,attraction',
+  (v) => `${v.P} organise une nocturne et demande une navette spéciale.`,
+  [['Navette dédiée', { m: -4, dp: 2, ra: 0.02, d: 360 }, 'Navette pleine de visiteurs.'],
+   ['Prolonger les lignes voisines', { dp: 1.4, d: 360 }, 'Service prolongé.'],
+   ['Non', {}, 'Les visiteurs se débrouilleront.']]);
+CH('c_concert_surprise', 'culture', 'Concert surprise', 'stop',
+  (v) => `Un artiste célèbre propose un concert surprise à l’arrêt ${v.S}.`,
+  [['Accepter', { dp: 2.5, ra: 0.04, d: 240, risk: [0.2, { h: 'line', d: 45 }, 'La foule déborde : ligne coupée 45 min.'] }, 'Moment magique.'],
+   ['Refuser', {}, 'Il jouera ailleurs.']]);
+CH('c_poemes', 'culture', 'Poèmes dans les bus', 'none',
+  () => 'Afficher des poèmes écrits par des écoliers dans vos véhicules ?',
+  [['Oui', { m0: -1, ra: 0.03, ma: 0.02 }, 'Les voyageurs lisent et sourient.'],
+   ['Non', {}, 'Pas de poésie.']]);
+CH('c_piano', 'culture', 'Piano en libre accès', 'stop',
+  (v) => `Installer un piano en libre accès près de l’arrêt ${v.S} ?`,
+  [['Oui', { m: -5, ra: 0.03, risk: [0.15, { ra: -0.01 }, 'Les riverains se plaignent des concerts à minuit.'] }, 'Les mélomanes s’en donnent à cœur joie.'],
+   ['Non', {}, 'Pas de piano.']]);
+CH('c_livres', 'culture', 'Boîtes à livres', 'none',
+  () => 'Installer des boîtes à livres aux arrêts principaux ?',
+  [['Oui', { m: -2, ra: 0.02 }, 'Les livres circulent.'],
+   ['Non', {}, 'Pas de boîtes.']]);
+CH('c_marathon_partenaire', 'sport', 'Partenaire du marathon', 'none',
+  () => 'Devenir partenaire officiel du marathon : transport gratuit pour les coureurs ?',
+  [['Oui', { m: -5, ra: 0.03, da: 1.03, d: 1440 }, 'Logo sur les dossards.'],
+   ['Non', {}, 'Pas de partenariat.']]);
+CH('c_esport', 'culture', 'Tournoi e-sport', 'none',
+  () => 'Un tournoi e-sport réunira 3 000 joueurs toute la nuit. Les organisateurs demandent des navettes.',
+  [['Navettes de nuit', { m: -3, da: 1.04, ra: 0.02, d: 720 }, 'Navettes pleines à 3 h du matin.'],
+   ['Non', {}, 'Les joueurs dormiront sur place.']]);
+CH('c_film_tournage_metro', 'culture', 'Tournage dans le métro', 'metro',
+  () => 'Une série policière veut tourner une scène dans une station de métro, fermée une nuit.',
+  [['Accepter', { m: 35, ra: 0.02 }, 'Votre station à l’écran.'],
+   ['Accepter de jour', { m: 50, h: 'metro', d: 120, ra: -0.02 }, 'Plus payé, mais deux heures sans métro.'],
+   ['Refuser', {}, 'Pas de tournage.']]);
+
+/* ===================== TECHNIQUE ===================== */
+CH('c_maj_logiciel', 'reseau', 'Mise à jour logicielle', 'none',
+  () => 'L’éditeur recommande d’installer ce soir une mise à jour du système de régulation.',
+  [['Installer maintenant', { risk: [0.3, { h: 'all', d: 60 }, 'Bug à l’installation : tout le réseau à l’arrêt 1 h.'] }, 'Mise à jour installée.'],
+   ['Attendre le week-end', { m0: -1 }, 'Installation planifiée.'],
+   ['Ne pas mettre à jour', { risk: [0.15, { fa: 0, d: 240, m: -15 }, 'Faille exploitée : billettique paralysée.'] }, 'Système inchangé.']], { dflt: 1 });
+CH('c_open_data', 'reseau', 'Horaires en open data', 'none',
+  () => 'Publier vos horaires en temps réel en données ouvertes ?',
+  [['Oui', { ra: 0.03, da: 1.02, ma: 0.02, d: 43200 }, 'Les applis affichent vos passages.'],
+   ['Non', {}, 'Données réservées.']]);
+CH('c_ia_planning', 'social', 'Plannings par IA', 'none',
+  () => 'Une IA promet d’optimiser les plannings : 5 % d’économies, mais les syndicats craignent des cadences infernales.',
+  [['Adopter', { oa: 0.95, so: -0.12, d: 43200 }, 'Économies réelles, équipes tendues.'],
+   ['En concertation', { oa: 0.97, so: -0.03, d: 43200 }, 'IA encadrée par les représentants.'],
+   ['Refuser', { so: 0.02 }, 'Les plannings restent humains.']]);
+CH('c_sms', 'reseau', 'Billet par SMS', 'none',
+  () => 'Proposer l’achat de billets par SMS ?',
+  [['Oui', { m: -8, da: 1.03, fa: 1.01, d: 43200 }, 'Plus besoin de chercher un distributeur.'],
+   ['Non', {}, 'Billets classiques.']]);
+CH('c_navette_autonome', 'reseau', 'Navette autonome', 'none',
+  () => 'Un industriel propose d’expérimenter une navette sans conducteur en ville.',
+  [['Oui', { m: -40, ra: 0.05, so: -0.05 }, 'La navette autonome fait sensation.'],
+   ['Avec un agent à bord', { m: -45, ra: 0.03 }, 'Expérimentation rassurante.'],
+   ['Non', {}, 'Pas d’expérimentation.']]);
+CH('c_ecrans', 'reseau', 'Écrans d’information', 'none',
+  () => 'Installer des écrans d’information en temps réel à tous les arrêts ?',
+  [['Partout', { m: -30, da: 1.04, ra: 0.02, d: 43200 }, 'Attente plus sereine.'],
+   ['Aux arrêts principaux', { m: -10, da: 1.015, d: 43200 }, 'Premiers écrans posés.'],
+   ['Non', {}, 'Fiches horaires papier.']]);
+CH('c_appli', 'reseau', 'Application mobile', 'none',
+  () => 'Développer votre propre application mobile ?',
+  [['Appli complète', { m: -45, da: 1.05, fa: 1.02, d: 43200 }, 'Appli lancée : achat de billets, alertes, horaires.'],
+   ['Appli simple', { m: -12, da: 1.02, d: 43200 }, 'Horaires et plan.'],
+   ['Non', {}, 'Pas d’appli.']]);
+CH('c_bus_hydrogene', 'eco', 'Bus à hydrogène', 'bus',
+  () => 'La Région propose un bus à hydrogène à moitié prix, mais la station de recharge est loin.',
+  [['Accepter', { m0: -200, add: ['b12e', 1], ra: 0.04, ma: 0.05 }, 'Un bus vert rejoint la flotte.'],
+   ['Refuser', {}, 'Pas d’hydrogène pour l’instant.']]);
+CH('c_retrofit', 'eco', 'Moteurs électriques', 'bus',
+  () => 'Une entreprise propose de convertir des bus diesel à l’électrique (rétrofit).',
+  [['Convertir', { m: -50, om: ['bus', 0.95], ra: 0.03, d: 129600 }, 'Moins de bruit, moins de carburant.'],
+   ['Un prototype', { m: -15, ra: 0.01 }, 'Un bus converti à l’essai.'],
+   ['Non', {}, 'Diesel conservé.']]);
+CH('c_cadeau_client', 'image', 'Millionième voyageur', 'none',
+  () => 'Votre réseau va accueillir son millionième voyageur cette semaine. On fête ça ?',
+  [['Grande opération', { m: -10, ra: 0.04, da: 1.05, d: 4320 }, 'Le millionième gagne un voyage, les médias adorent.'],
+   ['Un cadeau symbolique', { m0: -0.5, ra: 0.01 }, 'Bouquet et abonnement offert.'],
+   ['Non', {}, 'Un voyageur comme un autre.']]);
+
+/* ---------- moteur des événements à choix ---------- */
+const ChoiceFX = {
+  scale() { return EvCtx.scale(); },
+  /** contexte : ligne, arrêt, quartier ou lieu concerné */
+  context(kind) {
+    const v = { C: G.s.city.nom };
+    const pickLine = (pred) => { const l = EvCtx.line(pred); if (!l) return false; v.line = l; v.L = lab(l); return true; };
+    if (kind === 'none') return v;
+    if (kind === 'line' && !pickLine()) return null;
+    if (kind === 'bus' && !pickLine((l) => l.mode === 'bus')) return null;
+    if (kind === 'metro' && !pickLine((l) => l.mode === 'metro')) return null;
+    if (kind === 'rail' && !pickLine((l) => l.mode === 'metro' || l.mode === 'ter')) return null;
+    if (kind === 'boat' && !pickLine((l) => l.mode === 'boat')) return null;
+    if (kind === 'stop') { if (!pickLine()) return null; const { st } = EvCtx.stop(v.line); v.S = st.name; v.mx = st.mx; v.my = st.my; }
+    if (kind === 'zone') { const z = EvCtx.zone(); if (!z) return null; v.Z = z.name; v.zone = z.code; v.mx = z.cx; v.my = z.cy; }
+    if (kind.startsWith('poi:')) { const p = EvCtx.poi(kind.slice(4).split(',')); if (!p) return null; v.P = p.name; v.mx = p.mx; v.my = p.my; }
+    return v;
+  },
+  /** coût affiché sur le bouton (sans dévoiler les autres conséquences) */
+  costLabel(fx, sc) {
+    const m = ((fx.m || 0) * sc + (fx.m0 || 0)) * 1000;
+    if (Math.abs(m) < 500) return '';
+    return ' · ' + (m > 0 ? '+' : '') + fmtEur(m);
+  },
+  /** tonalité d'un résultat : grossièrement, le solde des conséquences */
+  tone(fx, sc) {
+    let t = ((fx.m || 0) * sc + (fx.m0 || 0)) / (25 * sc);
+    t += ((fx.r || 0) + (fx.ra || 0) * 1.5 + (fx.rm ? fx.rm[1] : 0)) * 40;
+    t += ((fx.so || 0) + (fx.ma || 0)) * 12;
+    for (const k of ['dl', 'da', 'dz', 'dp']) if (fx[k]) t += (fx[k] - 1) * 8;
+    if (fx.h) t -= 2;
+    return t > 2.5 ? 2 : t > 0.3 ? 1 : t < -2.5 ? -2 : t < -0.3 ? -1 : 0;
+  },
+  /** applique les effets d'une option à l'événement (effets temporaires : à partir de maintenant) */
+  apply(e, fx, v, sc) {
+    const s = G.s, m = s.min;
+    e.start = m; e.end = m + (fx.d || 60); e.applied = false; e.moneyDone = false;
+    const money = ((fx.m || 0) * sc + (fx.m0 || 0)) * 1000;
+    if (money) e.money = Math.round(money / 100) * 100;
+    const lid = v.line && v.line.id;
+    if (fx.r && lid) e.rep = { lineId: lid, delta: fx.r }; else if (fx.r) e.rep = { all: true, delta: fx.r / 2 };
+    if (fx.ra) e.rep = { all: true, delta: fx.ra };
+    if (fx.rm) e.rep = { mode: fx.rm[0], delta: fx.rm[1] };
+    if (fx.dl && lid) e.demand = { lineId: lid, mult: fx.dl };
+    if (fx.da) e.demand = { all: true, mult: fx.da };
+    if (fx.dm) e.demand = { mode: fx.dm[0], mult: fx.dm[1] };
+    if ((fx.dz || fx.dp) && v.mx !== undefined) e.demand = { mx: v.mx, my: v.my, r: fx.dz ? 900 : 700, mult: fx.dz || fx.dp };
+    if (fx.fl && lid) e.fare = { lineId: lid, mult: fx.fl };
+    if (fx.fa !== undefined) e.fare = { all: true, mult: fx.fa };
+    if (fx.fm) e.fare = { mode: fx.fm[0], mult: fx.fm[1] };
+    if (fx.oa) e.ops = { all: true, mult: fx.oa };
+    if (fx.om) e.ops = { mode: fx.om[0], mult: fx.om[1] };
+    if (fx.ta) e.traffic = { all: fx.ta };
+    if (fx.tz && v.zone) e.traffic = { zone: v.zone, mult: fx.tz };
+    if (fx.ts && v.mx !== undefined) e.traffic = { mx: v.mx, my: v.my, r: 400, mult: fx.ts };
+    if (fx.tc) { const c = EvCtx.center(); e.traffic = { mx: c.mx, my: c.my, r: 900, mult: fx.tc }; }
+    if (fx.h === 'line' && lid) e.halt = { lineId: lid };
+    else if (fx.h === 'all') e.halt = { all: true };
+    else if (fx.h) e.halt = { mode: fx.h };
+    if (fx.sp) e.speed = { mode: fx.sp[0], mult: fx.sp[1] };
+    if (fx.so) e.social = fx.so;
+    if (fx.ma) e.mairie = fx.ma;
+    if (fx.add) e.addVeh = { model: fx.add[0], n: fx.add[1], lineId: lid };
+    if (fx.lend && v.line) {
+      const veh = EvCtx.veh(v.line);
+      if (veh) { e.veh = { lineId: v.line.id, vehId: veh.id, type: 'breakdown', min: 3 }; e.end = m + fx.lend; }
+    }
+    if (v.mx !== undefined && e.mx === undefined && (e.demand || e.traffic)) { e.mx = v.mx; e.my = v.my; }
+    // sans effet durable : l'événement ne reste pas « en cours »
+    if (!(e.demand || e.traffic || e.halt || e.speed || e.fare || e.ops || e.veh)) e.end = m + 1;
+  },
+};
+
+/** transforme chaque description en événement du catalogue */
+for (const sp of CHOICE_SPECS) {
+  const def = {
+    id: sp.id, cat: sp.cat, tone: 0, title: sp.title, w: sp.w || 1, cd: sp.cd || 168, glyph: '?', choice: true, generic: true,
+    when: sp.when,
+    make() {
+      const v = ChoiceFX.context(sp.ctx); if (!v) return null;
+      const sc = ChoiceFX.scale();
+      const opts = sp.opts.map(([label, fx]) => label + ChoiceFX.costLabel(fx, sc));
+      const q = sp.q(v), lineId = v.line ? v.line.id : undefined;
+      const vs = { ...v, line: undefined, lineId }; // la sauvegarde ne garde que l'identifiant de la ligne
+      return { start: G.s.min + 90, dur: 1, q, opts, v: vs, sc, lineId, mx: v.mx, my: v.my, zone: v.zone, desc: q, dflt: sp.dflt ?? sp.opts.length - 1 };
+    },
+    choose(e, i) {
+      const o = sp.opts[i] || sp.opts[sp.opts.length - 1];
+      let fx = { ...o[1] }, out = o[2];
+      delete fx.risk;
+      if (o[1].risk && Math.random() < o[1].risk[0]) { fx = { ...fx, ...o[1].risk[1] }; out += ' ' + o[1].risk[2]; }
+      const v = { ...(e.v || {}) };
+      v.line = v.lineId !== undefined ? G.s.lines.find((l) => l.id === v.lineId) || null : null;
+      ChoiceFX.apply(e, fx, v, e.sc || ChoiceFX.scale());
+      e.choice = o[0]; e.desc = `« ${o[0]} » — ${out}`;
+      e.tone = ChoiceFX.tone(fx, e.sc || 1); e.bad = e.tone < 0;
+      Events.apply(e);
+      Notif.push({ title: sp.title + ' : ' + o[0].toLowerCase(), desc: out, tone: e.tone, cat: sp.cat, glyph: e.tone >= 0 ? '✓' : '!' }, 'now');
+    },
+  };
+  EVENTS.push(def); EVDEF[def.id] = def;
+}
+
+/* ---------- jauges durables : climat social et relations avec la mairie (de −1 à +1) ---------- */
+const Gauges = {
+  social() { return G.s.social || 0; },
+  mairie() { return G.s.mairie || 0; },
+  /** climat social : un bon climat éloigne les grèves, un mauvais les rapproche */
+  strikeMult() { return clamp(1 - 0.6 * this.social(), 0.3, 1.8); },
+  /** relations avec la mairie : subventions plus fréquentes, pénalités et travaux plus rares */
+  weight(id) {
+    const m = this.mairie();
+    if (id === 'subvention' || id === 'mecene') return 1 + m;
+    if (id === 'amende') return 1 - 0.5 * m;
+    if (id === 'works') return 1 - 0.3 * m;
+    return 1;
+  },
+  label(x) { return x >= 0.5 ? 'Excellent' : x >= 0.15 ? 'Bon' : x > -0.15 ? 'Neutre' : x > -0.5 ? 'Tendu' : 'Mauvais'; },
+  tone(x) { return x >= 0.15 ? 'good' : x > -0.15 ? '' : 'bad'; },
+  /** véhicules offerts ou rachetés : sur la ligne concernée, sinon sur la ligne du mode la plus chargée */
+  addVehicles(e) {
+    const a = e.addVeh, md = MODEL[a.model]; if (!md) return;
+    const mode = Object.keys(CATALOG).find((k) => CATALOG[k].some((x) => x.id === a.model));
+    let l = G.s.lines.find((x) => x.id === a.lineId && x.mode === mode);
+    if (!l) l = G.s.lines.filter((x) => x.mode === mode && x.status === 'active').sort((p, q) => q.veh.length - p.veh.length)[0];
+    if (!l) return;
+    for (let k = 0; k < a.n; k++) Lines.addVehicle(l, a.model, true);
+  },
+  /** texte d'aide pour les fiches */
+  html() {
+    const row = (lab, x, help) => `<div class="gauge"><span>${lab}</span><i class="gbar"><b style="left:${50 + x * 50}%"></b></i><em class="${this.tone(x)}">${this.label(x)}</em><small>${help}</small></div>`;
+    return row('Climat social', this.social(), 'Grèves plus ou moins probables, qualité de service')
+      + row('Relations avec la mairie', this.mairie(), 'Prix des quartiers, subventions, pénalités, travaux');
   },
 };
 
@@ -4999,11 +5758,11 @@ const Plan = {
     }
     el.hidden = false;
     document.body.classList.add('plan-open');
-    this.layout = null;
+    this.layout = null; this.drawn = false;
     this.refresh();
   },
   close() { const el = document.getElementById('plan'); if (el) el.hidden = true; document.body.classList.remove('plan-open'); },
-  setFilter(f) { this.filter = f; this.layout = null; this.refresh(); },
+  setFilter(f) { this.filter = f; this.layout = null; this.drawn = false; this.refresh(); },
   modesFor(f) { return f === 'rail' ? ['metro', 'ter'] : f === 'bus' ? ['bus'] : MODE_ORDER; },
   refresh() {
     const has = (ms) => G.s.lines.some((l) => ms.includes(l.mode));
@@ -5234,15 +5993,38 @@ const Plan = {
   },
 
   /* ---------- dessin ---------- */
+  /** taille de dessin pour que les stations soient assez espacées pour leurs noms (plan plus grand que l'écran si besoin) */
+  sizeFor(s, minW, minH, forImage, maxW, maxH) {
+    const g = this.ensureLayout(), N = g.nodes;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const n of N) { minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x); miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); }
+    const lens = g.edges.map(([a, b]) => Math.hypot(N[a].x - N[b].x, N[a].y - N[b].y)).filter((x) => x > 0).sort((a, b) => a - b);
+    const med = lens.length ? lens[Math.floor(lens.length / 2)] : 1;
+    // espacement selon la longueur des noms (largeur médiane, sur deux lignes au besoin)
+    const mc = (this._mc = this._mc || document.createElement('canvas').getContext('2d'));
+    mc.font = `500 ${12 * s}px ${FONT}`;
+    const widths = N.map((n) => { const w = mc.measureText(n.name).width; return w > 8.5 * 12 * s && n.name.includes(' ') ? w * 0.58 : w; }).sort((a, b) => a - b);
+    const lw = widths.length ? widths[Math.floor(widths.length * 0.6)] : 60 * s;
+    const k = Math.max(100 * s, lw * 1.2 + 36 * s) / med;    // stations voisines assez espacées pour leurs noms
+    const perRow = minW > 600 * s / 1.2 ? 3 : 2;
+    const top = forImage ? 78 * s : 16 * s, bottom = Math.ceil(g.lines.length / perRow) * 26 * s + 22 * s + (forImage ? 18 * s : 0);
+    const W = clamp((maxx - minx) * k + 140 * s, minW, maxW), H = clamp((maxy - miny) * k + 68 * s + top + bottom, minH, maxH);
+    return [Math.round(W), Math.round(H)];
+  },
   draw() {
     const cv = document.getElementById('planCv'); if (!cv) return;
-    const box = cv.parentElement, W = box.clientWidth, H = box.clientHeight;
+    const box = cv.parentElement, bw = box.clientWidth, bh = box.clientHeight;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const s = Math.min(1.15, Math.max(0.8, bw / 420));
+    const first = !this.drawn; this.drawn = true;
+    const [W, H] = this.sizeFor(s, bw, bh, false, 4000 / dpr, 6000 / dpr);
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.render(ctx, W, H, Math.min(1.15, Math.max(0.8, W / 420)), false);
+    this.render(ctx, W, H, s, false);
+    // plan plus grand que l'écran : on le fait glisser du doigt, en partant du centre
+    if (first) { box.scrollLeft = Math.max(0, (W - bw) / 2); box.scrollTop = Math.max(0, (H - bh) / 2); }
   },
   ensureLayout() {
     if (this.layout) return this.layout;
@@ -5254,6 +6036,7 @@ const Plan = {
   /** dessine le plan dans un rectangle W×H (s : échelle des traits et textes) */
   render(ctx, W, H, s, forImage) {
     const g = this.ensureLayout(), N = g.nodes;
+    this.labelHits = 0; this.labelPlaced = 0;
     ctx.fillStyle = '#F4F2EC'; ctx.fillRect(0, 0, W, H);
     // en-tête et légende (dans l'image seulement : à l'écran, la barre du haut suffit)
     let top = 16 * s, bottom = 16 * s;
@@ -5325,45 +6108,108 @@ const Plan = {
       n.px = x; n.py = y; n.r = r;
       boxes.push([x - r, y - r, 2 * r, 2 * r]);
     }
-    // noms : position libre autour de la station, sans chevauchement
-    const fs = 12 * s;
-    ctx.font = `500 ${fs}px ${FONT}`; ctx.textBaseline = 'middle';
-    const hitSeg = (bx) => {
-      for (const q of segsAll) for (let i = 0; i < q.length - 1; i++) {
-        const [x1, y1] = q[i], [x2, y2] = q[i + 1];
-        for (let t = 0; t <= 1; t += 0.25) { const x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t; if (x > bx[0] && x < bx[0] + bx[2] && y > bx[1] && y < bx[1] + bx[3]) return true; }
-      }
-      return false;
+    // noms : horizontaux, verticaux ou en biais (45°), sur une ou deux lignes ;
+    // on évite les tracés, les stations et les autres noms (rectangles éventuellement tournés)
+    const fs0 = 12 * s, LH = 1.18;
+    const segs = [];
+    for (const q of segsAll) for (let i = 0; i < q.length - 1; i++) segs.push([q[i][0], q[i][1], q[i + 1][0], q[i + 1][1]]);
+    const placed = boxes.map((b) => [[b[0], b[1]], [b[0] + b[2], b[1]], [b[0] + b[2], b[1] + b[3]], [b[0], b[1] + b[3]]]);
+    const segX = (a1, a2, b1, b2) => {
+      const d = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+      const d1 = d(b1, b2, a1), d2 = d(b1, b2, a2), d3 = d(a1, a2, b1), d4 = d(a1, a2, b2);
+      return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
     };
-    const order = [...N].sort((a, b) => b.lines.size - a.lines.size);
+    const inPoly = (P, x, y) => { let sgn = 0; for (let i = 0; i < 4; i++) { const a1 = P[i], a2 = P[(i + 1) % 4]; const c = (a2[0] - a1[0]) * (y - a1[1]) - (a2[1] - a1[1]) * (x - a1[0]); if (c !== 0) { if (sgn && Math.sign(c) !== sgn) return false; sgn = Math.sign(c); } } return true; };
+    /** longueur du segment cachée par le quadrilatère convexe P (découpage de Cyrus-Beck) */
+    const coverLen = (P, sg) => {
+      const x0 = sg[0], y0 = sg[1], dx = sg[2] - x0, dy = sg[3] - y0;
+      let area = 0; for (let i = 0; i < 4; i++) { const a1 = P[i], a2 = P[(i + 1) % 4]; area += a1[0] * a2[1] - a2[0] * a1[1]; }
+      const sgn = area > 0 ? 1 : -1;
+      let t0 = 0, t1 = 1;
+      for (let i = 0; i < 4; i++) {
+        const a1 = P[i], a2 = P[(i + 1) % 4];
+        const nx = -(a2[1] - a1[1]) * sgn, ny = (a2[0] - a1[0]) * sgn; // normale intérieure
+        const num = nx * (x0 - a1[0]) + ny * (y0 - a1[1]), den = nx * dx + ny * dy;
+        if (Math.abs(den) < 1e-12) { if (num < 0) return 0; continue; }
+        const t = -num / den;
+        if (den > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+        if (t0 >= t1) return 0;
+      }
+      return (t1 - t0) * Math.hypot(dx, dy);
+    };
+    const hitsSeg = (P, sg) => inPoly(P, sg[0], sg[1]) || inPoly(P, sg[2], sg[3]) || [0, 1, 2, 3].some((i) => segX(P[i], P[(i + 1) % 4], [sg[0], sg[1]], [sg[2], sg[3]]));
+    const overlap = (A, B) => { // séparation d'axes pour deux quadrilatères convexes
+      for (const P of [A, B]) for (let i = 0; i < 4; i++) {
+        const nx = P[(i + 1) % 4][1] - P[i][1], ny = P[i][0] - P[(i + 1) % 4][0];
+        let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+        for (const p of A) { const v = p[0] * nx + p[1] * ny; a0 = Math.min(a0, v); a1 = Math.max(a1, v); }
+        for (const p of B) { const v = p[0] * nx + p[1] * ny; b0 = Math.min(b0, v); b1 = Math.max(b1, v); }
+        if (a1 <= b0 || b1 <= a0) return false;
+      }
+      return true;
+    };
+    const wrap = (t, f) => {
+      ctx.font = f;
+      if (ctx.measureText(t).width < 8.5 * fs0 || !t.includes(' ')) return [t];
+      const words = t.split(' '); let best = null;
+      for (let i = 1; i < words.length; i++) {
+        const l1 = words.slice(0, i).join(' '), l2 = words.slice(i).join(' ');
+        const w = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width);
+        if (!best || w < best.w) best = { w, lines: [l1, l2] };
+      }
+      return best.lines;
+    };
+    const order = [...N].sort((a, b) => b.lines.size - a.lines.size || b.name.length - a.name.length);
+    const minY = top - 10 * s, maxY = H - bottom + 6 * s;
+    const D45 = Math.PI / 4;
     for (const n of order) {
-      const t = n.name, tw = ctx.measureText(t).width, th = fs * 1.25, gap = n.r + 4 * s;
-      const cand = [[gap, -th / 2, 'left'], [-gap - tw, -th / 2, 'left'], [-tw / 2, -gap - th, 'left'], [-tw / 2, gap, 'left'],
-        [gap * 0.75, -gap * 0.75 - th, 'left'], [gap * 0.75, gap * 0.75, 'left'], [-gap * 0.75 - tw, -gap * 0.75 - th, 'left'], [-gap * 0.75 - tw, gap * 0.75, 'left']];
-      let pick = null;
-      for (const [dx, dy] of cand) {
-        const bx = [n.px + dx - 2, n.py + dy, tw + 4, th];
-        if (bx[0] < 2 || bx[0] + bx[2] > W - 2 || bx[1] < top - 10 * s || bx[1] + bx[3] > H - bottom + 6 * s) continue;
-        if (boxes.some((b) => bx[0] < b[0] + b[2] && bx[0] + bx[2] > b[0] && bx[1] < b[1] + b[3] && bx[1] + bx[3] > b[1])) continue;
-        if (hitSeg(bx)) continue;
-        pick = bx; break;
-      }
-      if (!pick) {
-        // dernier recours : on accepte de croiser une ligne, pas un autre nom
-        for (const [dx, dy] of cand) {
-          const bx = [n.px + dx - 2, n.py + dy, tw + 4, th];
-          if (bx[0] < 2 || bx[0] + bx[2] > W - 2) continue;
-          if (boxes.some((b) => bx[0] < b[0] + b[2] && bx[0] + bx[2] > b[0] && bx[1] < b[1] + b[3] && bx[1] + bx[3] > b[1])) continue;
-          pick = bx; break;
+      let best = null;
+      for (const scale of [1, 0.86, 0.74]) {
+        const fs = fs0 * scale, font = `${n.lines.size > 1 ? 600 : 500} ${fs}px ${FONT}`;
+        const lines = wrap(n.name, font);
+        ctx.font = font;
+        const tw = Math.max(...lines.map((l) => ctx.measureText(l).width)), th = lines.length * fs * LH;
+        const g = n.r + 4 * s, pad = 2.5 * s;
+        // [angle, x0, y0 (coin haut-gauche dans le repère tourné), alignement, préférence]
+        const cand = [
+          [0, g, -th / 2, 'left', 0], [0, -g - tw, -th / 2, 'right', 0.2],
+          [-D45, g, -th / 2, 'left', 0.5], [D45, g, -th / 2, 'left', 0.6],
+          [-D45, -g - tw, -th / 2, 'right', 0.7], [D45, -g - tw, -th / 2, 'right', 0.8],
+          [0, -tw / 2, -g - th, 'center', 0.9], [0, -tw / 2, g, 'center', 1],
+          [0, g * 0.7, -g * 0.7 - th, 'left', 1.1], [0, g * 0.7, g * 0.7, 'left', 1.2],
+          [0, -g * 0.7 - tw, -g * 0.7 - th, 'right', 1.3], [0, -g * 0.7 - tw, g * 0.7, 'right', 1.4],
+          // plus loin le long des diagonales, quand tout est encombré près de la station
+          [-D45, g * 1.9, -th / 2, 'left', 1.8], [D45, g * 1.9, -th / 2, 'left', 1.9],
+          [-D45, -g * 1.9 - tw, -th / 2, 'right', 2], [D45, -g * 1.9 - tw, -th / 2, 'right', 2.1],
+        ];
+        for (const [ang, x0, y0, align, pref] of cand) {
+          const c = Math.cos(ang), sn = Math.sin(ang);
+          const loc = [[x0 - pad, y0 - pad], [x0 + tw + pad, y0 - pad], [x0 + tw + pad, y0 + th + pad], [x0 - pad, y0 + th + pad]];
+          const P = loc.map(([u, v]) => [n.px + u * c - v * sn, n.py + u * sn + v * c]);
+          if (P.some((p) => p[0] < 2 || p[0] > W - 2 || p[1] < minY || p[1] > maxY)) continue;
+          if (placed.some((B) => overlap(P, B))) continue;
+          let hits = 0, cover = 0;
+          for (const sg of segs) { const c = coverLen(P, sg); if (c > 0.5) { hits++; cover += c; } }
+          // pénalité proportionnelle à la longueur de ligne masquée (un nom couché le long d'une ligne est le pire cas)
+          const score = cover * 0.4 + hits * 4 + pref + (1 - scale) * 6;
+          if (!best || score < best.score) best = { score, P, ang, x0, y0, align, lines, fs, font, tw, th, hits };
         }
+        if (best && best.hits === 0) break; // position libre trouvée : inutile de réduire le texte
       }
-      if (!pick) continue;
-      boxes.push(pick);
-      ctx.textAlign = 'left';
-      ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(244,242,236,.95)'; ctx.lineWidth = 4 * s;
-      ctx.font = `${n.lines.size > 1 ? 600 : 500} ${fs}px ${FONT}`;
-      ctx.strokeText(t, pick[0] + 2, pick[1] + th / 2 + 0.5);
-      ctx.fillStyle = INK; ctx.fillText(t, pick[0] + 2, pick[1] + th / 2 + 0.5);
+      if (!best) continue;
+      placed.push(best.P);
+      ctx.save();
+      ctx.translate(n.px, n.py); ctx.rotate(best.ang);
+      ctx.font = best.font; ctx.textBaseline = 'middle'; ctx.textAlign = best.align;
+      // nom qui croise malgré tout une ligne : contour clair translucide pour que la ligne reste visible
+      ctx.lineJoin = 'round'; ctx.strokeStyle = best.hits ? 'rgba(244,242,236,.5)' : 'rgba(244,242,236,.95)'; ctx.lineWidth = (best.hits ? 3 : 4) * s; ctx.fillStyle = INK;
+      const tx = best.align === 'left' ? best.x0 : best.align === 'right' ? best.x0 + best.tw : best.x0 + best.tw / 2;
+      best.lines.forEach((l, i) => {
+        const ty = best.y0 + best.fs * LH * (i + 0.5) + 0.5;
+        ctx.strokeText(l, tx, ty); ctx.fillText(l, tx, ty);
+      });
+      ctx.restore();
+      this.labelHits = (this.labelHits || 0) + best.hits; this.labelPlaced = (this.labelPlaced || 0) + 1;
     }
     // en-tête (image)
     if (forImage) {
@@ -5405,7 +6251,8 @@ const Plan = {
     let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
     for (const n of g.nodes) { minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x); miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); }
     const ar = clamp((maxy - miny) / Math.max(1e-9, maxx - minx), 0.55, 1.6);
-    const s = 2, W = 1800, H = Math.round(W * ar * 0.92 + 200 * s + Math.ceil(g.lines.length / 3) * 26 * s);
+    const s = 2;
+    const [W, H] = this.sizeFor(s, 1800, Math.round(1800 * ar * 0.92 + 200 * s), true, 5000, 7000);
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     this.render(cv.getContext('2d'), W, H, s, true);
     const name = 'plan-' + (G.s.city.nom || 'reseau').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-') + '.png';
@@ -5731,7 +6578,9 @@ const UI = {
     const c = Events.cat(e);
     this.modal(`<div class="plate big"><span class="evcard-ic" style="--c:${c.col}">${esc(Events.glyph(e))}</span> ${esc(e.title)}</div>
       <p>${esc(e.q)}</p>
-      <div class="row2">${e.opts.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>`, { pause: true, lock: true });
+      ${e.v ? `<div class="chcol">${e.opts.map((o, i) => `<button class="btn" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>
+        <p class="sub chnote">Sans réponse d’ici ${Time.label(e.start).time} : « ${esc(e.opts[e.dflt ?? e.opts.length - 1].replace(/ · .*$/, ''))} ».</p>`
+      : `<div class="row2">${e.opts.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>`}`, { pause: true, lock: true });
   },
   strikeDialog(e) {
     this.modal(`<div class="plate big">${icon('strike')} Préavis de grève</div>
@@ -5893,6 +6742,7 @@ const SHEETS = {
       title: 'Personnel et formations',
       html: `<p class="sub">Former vos équipes réduit la fraude, les pannes et la durée des incidents, et améliore l’image du réseau. Chaque niveau acquis augmente un peu les salaires (+1 % d’exploitation), l’éco-conduite fait économiser de l’énergie.</p>
         <div class="kpis"><div><small>Niveaux acquis</small><b>${tot} / ${STAFF.length * 3}</b></div><div><small>Effet sur l’exploitation</small><b class="${wage > 0 ? 'neg' : 'pos'}">${wage > 0 ? '+' : ''}${wage} %</b></div><div><small>Formations en cours</small><b>${busy} / ${STAFF_MAX_PARALLEL}</b></div><div><small>Recettes billets</small><b class="pos">+${Math.round((Staff.fareMult() - 1) * 100)} %</b></div></div>
+        ${Gauges.html()}
         ${cards}`,
     };
   },
@@ -5975,6 +6825,7 @@ const SHEETS = {
       <div><small>Correspondances aujourd’hui</small><b>${fmtInt(t.xfer || 0)}</b></div>
       <div><small>Pôles d’échange</small><b>${Transfers.hubs.length}</b></div>
     </div>
+    ${section('Relations')}${Gauges.html()}
     ${section('Voyageurs des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: x.pax, l: Time.dayLabel(x.date) })), true)}
     <label class="tgl"><input type="checkbox" data-change="statsAdv" ${u.statsAdv ? 'checked' : ''}><span>Statistiques détaillées par ligne</span></label>`;
     if (u.statsAdv) {
@@ -6498,7 +7349,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.13.1';
+const APP_VERSION = '1.14.0';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();

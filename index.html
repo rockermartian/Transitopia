@@ -99,7 +99,7 @@ small{font-size:12.5px;color:var(--muted)}
 #game{position:fixed;inset:0}
 #map{position:absolute;inset:0;z-index:0;background:var(--paper)}
 .leaflet-container{font-family:var(--f-body);background:var(--paper)}
-.leaflet-control-attribution{background:rgba(251,250,246,.8)!important;color:var(--muted)!important;font-size:10px!important;margin-bottom:calc(var(--nav-h) + var(--sab) + 2px)!important}
+.leaflet-control-attribution{display:none!important} /* sources citées dans le menu */
 .leaflet-control-attribution a{color:var(--ink-2)!important}
 .ov{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}
 .ov-n{z-index:405}.ov-s{z-index:410}.ov-d{z-index:420}
@@ -111,8 +111,15 @@ small{font-size:12.5px;color:var(--muted)}
 .tplate{display:flex;flex-direction:column;justify-content:center;padding:3px 10px;border-radius:22px;background:var(--panel);box-shadow:var(--shadow);min-width:0}
 .tplate b{font:600 18px/1.05 var(--f-display);white-space:nowrap}
 .tplate small{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#cash{flex:1}
-#clock{flex:1.35;flex-direction:row;align-items:center;gap:7px;padding-left:5px}
+#cash{flex:.85 1 0;text-align:left;font:inherit;color:inherit}
+#cash.on,#clock.on{box-shadow:var(--shadow),inset 0 0 0 2px var(--ink)}
+#btnPlay .ic{width:20px;height:20px}
+#clock{flex:2 1 0;flex-direction:row;align-items:center;gap:7px;padding-left:5px;padding-right:8px;text-align:left;font:inherit;color:inherit}
+#clock>span{flex:1}
+.spd{flex:none;display:flex;align-items:center;gap:3px;padding:5px 8px;border-radius:14px;background:var(--ink);color:#fff;font:600 13px/1 var(--f-display)}
+.spd.rt{background:var(--bad);font-size:12px}
+.spd.pz{background:var(--panel-2);color:var(--muted)}
+#clock>span small{overflow:visible}
 #wx{display:none!important}
 .wxs{display:flex;align-items:center;gap:3px}
 .wxs .ic{width:13px;height:13px;flex:none;color:var(--ink-2)}
@@ -123,11 +130,8 @@ small{font-size:12.5px;color:var(--muted)}
 .speed{display:flex;gap:2px;background:var(--panel);box-shadow:var(--shadow);border-radius:22px;padding:3px}
 .speed button{width:35px;display:grid;place-items:center;border-radius:19px;font:600 14px/1 var(--f-display)}
 .speed button .ic{width:18px;height:18px}
-#btnSpeed{background:var(--ink);color:#fff}
-#btnSpeed.rt{background:var(--bad);font-size:12px}
-#btnSpeed{width:auto!important;padding:0 7px;display:flex!important;align-items:center;gap:3px}
 .caret{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid currentColor;opacity:.8}
-#speedMenu{position:absolute;z-index:1100;top:calc(58px + var(--sat));right:max(10px,var(--sar));width:min(250px,calc(100% - 20px));background:var(--panel);border-radius:18px;box-shadow:0 10px 30px rgba(35,35,35,.22);padding:6px;animation:up .15s ease-out}
+#speedMenu{position:absolute;z-index:1100;top:calc(58px + var(--sat));left:50%;width:min(250px,calc(100% - 20px));background:var(--panel);border-radius:18px;box-shadow:0 10px 30px rgba(35,35,35,.22);padding:6px;animation:up .15s ease-out}
 .sm-it{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:center;column-gap:8px;width:100%;text-align:left;padding:8px 12px;border-radius:12px}
 .sm-it b{font:600 15px/1.1 var(--f-display)}
 .sm-it small{grid-column:1;font-size:12px}
@@ -356,11 +360,10 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
 <div id="game" hidden>
   <div id="map"></div>
   <header id="top">
-    <button class="icon-b" id="btnMenu" data-act="menu" aria-label="Menu"></button>
-    <div class="tplate" id="cash"></div>
-    <div class="tplate" id="clock"></div>
+    <button class="tplate" id="cash" data-act="nav" data-arg="finance" aria-label="Finances"></button>
+    <button class="tplate" id="clock" data-act="speed" aria-label="Date et vitesse du jeu"></button>
     <div id="wx"></div>
-    <div class="speed"><button id="btnPlay" data-act="play" aria-label="Pause"></button><button id="btnSpeed" data-act="speed" aria-label="Vitesse">×1</button></div>
+    <button class="icon-b" id="btnPlay" data-act="play" aria-label="Pause"></button>
   <div id="speedMenu" hidden></div>
   </header>
   <div id="chip" hidden></div>
@@ -578,8 +581,8 @@ const API = {
   },
   async bdtopo(b) {
     const [roads, rails, water, gares, pois] = await Promise.all([
-      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche'),
-      this.wfsAll('BDTOPO_V3:troncon_de_voie_ferree', b, 'geometrie,nature,etat_de_l_objet,vitesse_maximale'),
+      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche,position_par_rapport_au_sol'),
+      this.wfsAll('BDTOPO_V3:troncon_de_voie_ferree', b, 'geometrie,nature,etat_de_l_objet,vitesse_maximale,position_par_rapport_au_sol'),
       this.wfsAll('BDTOPO_V3:troncon_hydrographique', b, 'geometrie,navigabilite,classe_de_largeur,cpx_toponyme_de_cours_d_eau'),
       this.wfsAll('BDTOPO_V3:equipement_de_transport', b, 'geometrie,nature,toponyme'),
       this.wfsAll('BDTOPO_V3:zone_d_activite_ou_d_interet', b, 'geometrie,categorie,nature,toponyme'),
@@ -670,6 +673,25 @@ class Net {
     this.idx.set(id, i); this.ids.push(id); this.x.push(mx); this.y.push(my); this.adj.push([]);
     const k = Math.floor(mx / GCELL) + ',' + Math.floor(my / GCELL);
     let c = this.grid.get(k); if (!c) { c = []; this.grid.set(k, c); } c.push(i);
+    return i;
+  }
+  /** nœud tenant compte des ponts et tunnels : deux tronçons qui se superposent au même endroit ne sont
+   *  reliés que s'ils sont au même niveau, ou si aucun des deux n'y passe « en l'air » (point intérieur
+   *  d'un pont ou d'un tunnel) et que leurs altitudes concordent (bretelle, entrée de tunnel).
+   *  lv : niveau (0 au sol, > 0 pont, < 0 tunnel) · inner : point intérieur du tronçon · z : altitude (m) */
+  nodeLv(key, mx, my, lv, inner, z) {
+    const b = this.lvB || (this.lvB = new Map());
+    const zv = z > -500 ? z : NaN, flying = inner && lv !== 0;
+    let list = b.get(key);
+    if (list) for (const o of list) {
+      if (o.lvs.has(lv)) { if (flying) o.fly = true; return o.i; } // même niveau : carrefour normal
+      if (flying || o.fly) continue; // l'un passe au-dessus (ou au-dessous) de l'autre sans s'y arrêter
+      if (Number.isFinite(zv) && Number.isFinite(o.z) && Math.abs(zv - o.z) >= 4.5) continue; // altitudes trop différentes : pas de bretelle ici
+      o.lvs.add(lv); return o.i;
+    }
+    if (!list) { list = []; b.set(key, list); }
+    const i = this.node(list.length ? key + '#' + list.length : key, mx, my);
+    list.push({ i, lvs: new Set([lv]), fly: flying, z: zv });
     return i;
   }
   /** ow = 1 : circulation autorisée seulement de a vers b ; bl = 1 : voie réservée aux bus */
@@ -946,6 +968,7 @@ class World {
         } else if (t.waterway) { net = this.water; cls = 0; kmh = 20; }
         if (!net) continue;
         const name = t.name || t.ref || '';
+        // OpenStreetMap : un nœud partagé est un vrai carrefour (les ponts n'en partagent pas avec la route du dessous)
         let prev = -1;
         for (let k = 0; k < el.nodes.length; k++) {
           const nd = nodes.get(el.nodes[k]);
@@ -984,10 +1007,12 @@ class World {
   ingestBDTopo(d) {
     const key = (c) => c[0].toFixed(7) + ',' + c[1].toFixed(7);
     const lines = (g) => !g ? [] : g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
-    const addLine = (net, fid, coords, cls, kmh, name, ow, bl, lim = -1) => {
+    const level = (p) => parseInt(p.position_par_rapport_au_sol, 10) || 0;
+    const addLine = (net, fid, coords, cls, kmh, name, ow, bl, lim = -1, lv = 0) => {
       let prev = -1;
+      const nC = coords.length;
       coords.forEach((c, k) => {
-        const i = net.node(key(c), lonToMx(c[0]), latToMy(c[1]));
+        const i = net.nodeLv(key(c), lonToMx(c[0]), latToMy(c[1]), lv, k > 0 && k < nC - 1, c.length > 2 ? +c[2] : NaN);
         if (prev >= 0) {
           if (ow === -1) net.edge(i, prev, cls, kmh, name, fid + ':' + k, 1, bl, lim);
           else net.edge(prev, i, cls, kmh, name, fid + ':' + k, ow ? 1 : 0, bl, lim);
@@ -1020,7 +1045,7 @@ class World {
       if (/autoroutier/i.test(nat)) lim = p.urbain === true ? 90 : 130;
       else if (p.urbain === true) lim = 50;
       else if (p.urbain === false) lim = cls === 0 ? 110 : 80;
-      for (const ln of lines(f.geometry)) addLine(this.road, f.id, ln, cls, kmh, name, ow, bus ? 1 : 0, lim);
+      for (const ln of lines(f.geometry)) addLine(this.road, f.id, ln, cls, kmh, name, ow, bus ? 1 : 0, lim, level(p));
     }
     this.road.version++;
     /* voies ferrées (hors tram, métro, voies de service) */
@@ -1029,7 +1054,7 @@ class World {
       if (!/principale|LGV|grande vitesse/i.test(p.nature || '')) continue;
       if (p.etat_de_l_objet && !/service/i.test(p.etat_de_l_objet)) continue;
       const kmh = +p.vitesse_maximale > 20 ? +p.vitesse_maximale : 120;
-      for (const ln of lines(f.geometry)) addLine(this.rail, f.id, ln, 0, kmh, '', 0, 0);
+      for (const ln of lines(f.geometry)) addLine(this.rail, f.id, ln, 0, kmh, '', 0, 0, -1, level(p));
     }
     this.rail.version++;
     /* fleuves et canaux navigables */
@@ -1381,14 +1406,18 @@ const Loader = {
       this.busy++; this.status(w.roadSrc === 'ign' ? 'Routes IGN…' : 'Routes OpenStreetMap…');
       try {
         if (w.roadSrc === 'ign') {
-          let d = await Cache.get('bdt:' + key);
+          let d = await Cache.get('bdt2:' + key);
           if (!d) {
-            try { d = await API.bdtopo(b); await Cache.set('bdt:' + key, d); }
+            try { d = await API.bdtopo(b); await Cache.set('bdt2:' + key, d); }
             catch (e) {
-              w.bdFail++;
-              if (w.bdFail >= 2 && !w.road.nE) w.roadSrc = 'osm';
-              throw e;
+              // hors ligne : on se contente de l'ancienne copie (sans les niveaux des ponts et tunnels)
+              d = await Cache.get('bdt:' + key);
             }
+          }
+          if (!d) {
+            w.bdFail++;
+            if (w.bdFail >= 2 && !w.road.nE) w.roadSrc = 'osm';
+            throw new Error('BD TOPO indisponible');
           }
           w.ingestBDTopo(d);
         } else {
@@ -6329,7 +6358,7 @@ const $ = (sel) => document.querySelector(sel);
 const UI = {
   init() {
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#speedMenu, #btnSpeed')) { const sm = $('#speedMenu'); if (sm && !sm.hidden) sm.hidden = true; }
+      if (!e.target.closest('#speedMenu, #clock')) { const sm = $('#speedMenu'); if (sm && !sm.hidden) sm.hidden = true; }
       const el = e.target.closest('[data-act]');
       if (!el) return;
       const fn = ACT[el.dataset.act];
@@ -6343,10 +6372,9 @@ const UI = {
       const el = e.target.closest('[data-change]');
       if (el && CHG[el.dataset.change]) CHG[el.dataset.change](el.value, el);
     });
-    $('#btnMenu').innerHTML = icon('menu');
     $('#nav').innerHTML = [
       ['lines', 'net', 'Réseau'], ['build', 'plus', 'Construire'], ['zones', 'zones', 'Zones'],
-      ['finance', 'euro', 'Finances'], ['stats', 'chart', 'Stats'], ['infos', 'info', 'Infos'],
+      ['stats', 'chart', 'Stats'], ['infos', 'info', 'Infos'], ['menu', 'menu', 'Menu'],
     ].map(([k, ic, t]) => `<button class="nav-b ${k === 'build' ? 'nav-build' : ''}" data-act="nav" data-arg="${k}" id="nav-${k}">${icon(ic)}<span>${t}</span>${k === 'infos' ? '<i class="dot" id="infoDot" hidden></i>' : ''}</button>`).join('');
     Loader.listeners.push((msg) => {
       const c = $('#chip');
@@ -6364,14 +6392,14 @@ const UI = {
     $('#cash').innerHTML = s.unlimited ? `<b>∞ Illimité</b><small>sans limite</small>`
       : `<b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b><small>${prof === null ? 'trésorerie' : (prof >= 0 ? '+' : '') + fmtEur(prof) + ' hier'}</small>`;
     const mod = Time.mod(s.min), ah = ((mod / 60) % 12) * 30, am = (mod % 60) * 6;
-    const night = Time.night(s.min);
-    $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${RealWeather.active() ? Math.round(s.wxReal.temp) + '° ' : ''}${t.day.split(' ').slice(0, 2).join(' ')}</small></span>`;
+    const night = Night.factor() > 0.5; // cadran sombre entre le coucher et le lever du soleil
+    $('#clock').innerHTML = `<svg class="dial" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="${night ? '#232323' : '#fff'}" stroke="#232323" stroke-width="2.5"/>${[0, 90, 180, 270].map((a) => `<line x1="17" y1="4.5" x2="17" y2="7" stroke="${night ? '#fff' : '#232323'}" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 17 17)"/>`).join('')}<line x1="17" y1="17" x2="17" y2="9.5" stroke="${night ? '#fff' : '#232323'}" stroke-width="3" stroke-linecap="round" transform="rotate(${ah} 17 17)"/><line x1="17" y1="17" x2="17" y2="6.5" stroke="${night ? '#F2B705' : '#E2563F'}" stroke-width="1.8" stroke-linecap="round" transform="rotate(${am} 17 17)"/><circle cx="17" cy="17" r="2" fill="${night ? '#fff' : '#232323'}"/></svg><span><b>${t.time}</b><small class="wxs">${icon(EV_INFO[Events.weather()].icon)}${RealWeather.active() ? Math.round(s.wxReal.temp) + '° ' : ''}${esc(t.day)}</small></span><i class="spd ${G.paused ? 'pz' : G.speed === 'rt' ? 'rt' : ''}">${G.speed === 'rt' ? 'Réel' : '×' + G.speed}<i class="caret"></i></i>`;
     $('#wx').innerHTML = icon(EV_INFO[Events.weather()].icon);
     $('#wx').title = EV_INFO[Events.weather()].title;
     $('#btnPlay').innerHTML = G.paused ? icon('play') : icon('pause');
     $('#btnPlay').setAttribute('aria-label', G.paused ? 'Reprendre' : 'Pause');
-    $('#btnSpeed').innerHTML = (G.speed === 'rt' ? 'Réel' : '×' + G.speed) + '<i class="caret"></i>';
-    $('#btnSpeed').classList.toggle('rt', G.speed === 'rt');
+    $('#clock').classList.toggle('on', !$('#speedMenu').hidden);
+    $('#cash').classList.toggle('on', G.ui.sheet === 'finance' && this.sheetOpen());
   },
   refreshInfoBadge() {
     const n = Notif.unread();
@@ -6393,7 +6421,11 @@ const UI = {
   /** menu déroulant des vitesses, du temps réel et de la météo */
   speedMenu(open) {
     const m = $('#speedMenu');
-    if (!open) { m.hidden = true; return; }
+    if (!open) { m.hidden = true; $('#clock').classList.remove('on'); return; }
+    // sous la date
+    const c = $('#clock'), w = Math.min(250, window.innerWidth - 20);
+    m.style.left = clamp(c.offsetLeft + c.offsetWidth / 2 - w / 2, 10, window.innerWidth - w - 10) + 'px';
+    $('#clock').classList.add('on');
     const s = G.s, cur = G.paused ? 'pause' : G.speed;
     const items = [['pause', 'Pause', ''], [1, '×1', '1 min de jeu par seconde'], [5, '×5', '5 min par seconde'], [20, '×20', '20 min par seconde'], [60, '×60', '1 h de jeu par seconde'], ['rt', 'Temps réel', 'Heure de Paris, 1 min = 1 min']];
     const wx = s.settings.realWeather && s.wxReal ? s.wxReal.label + ', ' + Math.round(s.wxReal.temp) + ' °C' : 'Météo-France, ville de départ';
@@ -6431,12 +6463,15 @@ const UI = {
     const sh = $('#sheet');
     sh.hidden = false;
     document.querySelectorAll('.nav-b').forEach((b) => b.classList.toggle('on', b.dataset.arg === name || (name === 'line' && b.dataset.arg === 'lines')));
+    $('#cash').classList.toggle('on', name === 'finance');
+    this.speedMenu(false);
     this.refreshSheet(true);
   },
   sheetOpen() { return !$('#sheet').hidden; },
   close() {
     $('#sheet').hidden = true; G.ui.sheet = null;
     document.querySelectorAll('.nav-b').forEach((b) => b.classList.remove('on'));
+    $('#cash').classList.remove('on');
     if (G.ui.selLine) { G.ui.selLine = null; Render.dirty = true; }
   },
   refreshSheet(scrollTop) {
@@ -6889,7 +6924,7 @@ const SHEETS = {
       ${tg('realWeather', 'Météo réelle (modèles Météo-France via Open-Meteo)')}
       <p class="sub">${s.realtime ? 'Mode temps réel actif : l’horloge suit l’heure de Paris.' : 'Le mode temps réel s’active avec le bouton de vitesse (après ×60).'}${s.wxReal && s.settings.realWeather ? ' Dernière météo : ' + esc(s.wxReal.label.toLowerCase()) + ', ' + Math.round(s.wxReal.temp) + ' °C.' : ''}</p>
       <div class="row2"><button class="btn" data-act="centerHome">${icon('target')} Recentrer</button><button class="btn danger" data-act="quit">Quitter la partie</button></div>
-      ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes et quartiers IRIS : IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population des quartiers : recensement INSEE 2019 (France métropolitaine) ; emplois : estimations du jeu.</p>`,
+      ${section('Données')}<p class="sub">Version ${APP_VERSION}. Photographies aériennes, Plan IGN et quartiers IRIS : © IGN, Géoplateforme. Routes (sens de circulation, voies de bus), voies ferrées, fleuves, gares et lieux : IGN, BD TOPO. Feux, stops et cédez-le-passage : © contributeurs OpenStreetMap (ODbL). Communes : geo.api.gouv.fr. Population des quartiers : recensement INSEE 2019 (France métropolitaine) ; emplois : estimations du jeu.</p>`,
     };
   },
 };
@@ -7349,7 +7384,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.15.0';
 const ACT = {
   nav(k) {
     if (Build.b) Build.cancel();

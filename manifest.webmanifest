@@ -1,6 +1,6 @@
 {
-  "name": "Correspondance",
-  "short_name": "Correspondance",
+  "name": "Transitopia",
+  "short_name": "Transitopia",
   "description": "Jeu de gestion de transports sur la vraie carte de France",
   "lang": "fr",
   "start_url": "./",

@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Correspondance</title>
+<title>Transitopia</title>
 <meta name="description" content="Jeu de gestion de transports sur la vraie carte de France">
 <meta name="theme-color" content="#F4F2EC">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Transitopia">
+<meta name="application-name" content="Transitopia">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -70,7 +72,24 @@ small{font-size:12.5px;color:var(--muted)}
 .lab{font:500 12px/1 var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-top:10px}
 .inp{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--panel);border:2px solid var(--ink);border-radius:var(--r);padding:12px}
 .cityres{display:flex;flex-direction:column;gap:6px}
-.cityrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:11px 14px;border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow);text-align:left}
+.cityrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow);text-align:left;width:100%}
+.cityrow .cr-n{display:flex;flex-direction:column;min-width:0;flex:1}.cityrow .cr-n b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cityrow .cr-n small{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cityrow .cr-p{flex:none;color:var(--muted);font-size:12px}
+.chosen:empty{display:none}
+/* tutoriel */
+#tuto{position:absolute;z-index:1250;left:max(10px,var(--sal));right:max(10px,var(--sar));max-width:460px;margin:0 auto;background:var(--ink);color:#fff;border-radius:18px;padding:12px 14px 10px;box-shadow:0 10px 30px rgba(35,35,35,.3);animation:up .2s ease-out}
+#tuto.tuto-top{top:calc(64px + var(--sat))}
+#tuto.tuto-bottom{bottom:calc(var(--nav-h) + var(--sab) + 12px)}
+#tuto .tuto-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px}#tuto .tuto-h b{font:600 16px/1.2 var(--f-display);color:#F7C600}#tuto .tuto-h small{opacity:.6;font-size:12px}
+#tuto p{margin:0 0 8px;font-size:14px;line-height:1.4}#tuto p b{color:#F7C600}
+#tuto .tuto-hint{color:#F7C600;font-weight:600}
+#tuto .tuto-a{display:flex;justify-content:space-between;gap:8px;align-items:center}
+#tuto .btn.ghost{background:transparent;color:rgba(255,255,255,.75);box-shadow:none;padding-left:0}
+#tuto .btn.primary{background:#F7C600;color:var(--ink)}
+.tuto-hl{position:relative;z-index:2;animation:tutohl 1.2s ease-in-out infinite;border-radius:14px}
+@keyframes tutohl{0%,100%{box-shadow:0 0 0 3px #F7C600,0 0 0 6px rgba(247,198,0,.25)}50%{box-shadow:0 0 0 3px #F7C600,0 0 0 12px rgba(247,198,0,0)}}
+.tuto-ill{display:flex;gap:8px;justify-content:center;margin:4px 0 2px}
+.note .spin{display:inline-block;vertical-align:-2px;margin-right:6px}
 .cityrow.on{box-shadow:inset 0 0 0 2.5px var(--ink)}
 .chosen{display:flex;align-items:center;gap:8px;color:var(--ok)}
 .chosen b{color:var(--ink)}
@@ -382,7 +401,7 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
 <script>
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — cœur : utilitaires, géographie, données réelles,
+   TRANSITOPIA — cœur : utilitaires, géographie, données réelles,
    cache, monde (zones + réseaux), itinéraires
    ===================================================================== */
 
@@ -565,11 +584,20 @@ const HW = 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|l
 
 const API = {
   async searchCommunes(q) {
-    const u = 'https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(q) +
-      '&fields=nom,code,codesPostaux,population,centre,codeDepartement&boost=population&limit=12';
-    // France métropolitaine uniquement (Corse comprise)
+    const F = '&fields=nom,code,codesPostaux,population,centre,codeDepartement,departement';
+    q = q.trim().replace(/\s+/g, ' ');
+    let u;
+    if (/^\d{5}$/.test(q)) u = 'https://geo.api.gouv.fr/communes?codePostal=' + q + F + '&limit=20'; // code postal
+    else {
+      // « St Malo », « Ste Foy » : abréviations courantes
+      const n = q.replace(/\b[Ss]t\b\.?/g, 'Saint').replace(/\b[Ss]te\b\.?/g, 'Sainte');
+      u = 'https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(n) + F + '&boost=population&limit=30';
+    }
+    // France métropolitaine uniquement (Corse comprise) ; les grandes villes d'outre-mer prenaient sinon des places
     const r = await fetchJSON(u, {}, 15000);
-    return (r || []).filter((c) => c.codeDepartement && !/^9[78]/.test(c.codeDepartement)).slice(0, 8);
+    const out = (r || []).filter((c) => c.codeDepartement && !/^9[78]/.test(c.codeDepartement) && c.centre);
+    if (/^\d{5}$/.test(q)) out.sort((a, b) => (b.population || 0) - (a.population || 0));
+    return out.slice(0, 8);
   },
   async communePop(code) {
     const k = 'pop:' + code;
@@ -1588,7 +1616,7 @@ const Loader = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — simulation : catalogue, lignes, voyageurs,
+   TRANSITOPIA — simulation : catalogue, lignes, voyageurs,
    trafic, économie, événements, temps, sauvegardes
    ===================================================================== */
 
@@ -2150,7 +2178,9 @@ const Lines = {
     if (i < 0) return;
     const v = line.veh[i];
     line.veh.splice(i, 1);
-    Eco.earn(Math.round(MODEL[modelId].price * G.s.costMul * 0.6), 'sales');
+    // véhicule offert par un tutoriel : il n'est pas revendable
+    if (line.gift && line.veh.length < line.gift) { line.gift = line.veh.length; UI.toast('Véhicule offert par le tutoriel : retiré sans revente.', 'info'); }
+    else Eco.earn(Math.round(MODEL[modelId].price * G.s.costMul * 0.6), 'sales');
     if (G.ui && G.ui.follow === v) G.ui.follow = null;
   },
   placeVehicles(line) {
@@ -2171,7 +2201,8 @@ const Lines = {
   remove(line) {
     const s = G.s;
     s.lines = s.lines.filter((l) => l !== line);
-    let refund = line.veh.reduce((a, v) => a + MODEL[v.model].price * 0.6, 0) * s.costMul;
+    const sold = line.veh.slice(Math.min(line.veh.length, line.gift || 0)); // les véhicules offerts ne sont pas remboursés
+    let refund = sold.reduce((a, v) => a + MODEL[v.model].price * 0.6, 0) * s.costMul;
     Eco.earn(Math.round(refund), 'sales');
     if (G.ui && G.ui.follow && line.veh.includes(G.ui.follow)) G.ui.follow = null;
   },
@@ -2598,7 +2629,7 @@ const Sim = {
     const startMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     return {
       v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301,
-      owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun', rail: { stations: [], tracks: [] },
+      owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun', rail: { stations: [], tracks: [] }, tuto: { main: 'pending', seen: {} },
       today: Eco.blankDay(), days: [], ads: { bus: 1, metro: 1, ter: 1, boat: 1 },
       settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, lights: true, base: 'pale' },
       modalShift: 0, view: null, lastReal: Date.now(), created: Date.now(), zoneMode: 'iris',
@@ -3185,7 +3216,7 @@ const Save = {
       veh: l.veh.map((v) => v.model),
       path: { pts: l.path.pts.map((p) => [r6(p[0]), r6(p[1])]), pairs: l.path.pairs, stopPt: l.path.stopPt },
       pathB: l.pathB ? { pts: l.pathB.pts.map((p) => [r6(p[0]), r6(p[1])]), pairs: l.pathB.pairs, stopPt: l.pathB.stopPt } : null,
-      routedV2: !!l.routedV2,
+      routedV2: !!l.routedV2, gift: l.gift || 0,
       od: Array.from(l.od, (x) => Math.round(x * 100) / 100),
     }));
     const owned = [...G.w.zones.values()].filter((z) => z.owned).map((z) => z.code);
@@ -3229,7 +3260,7 @@ const Save = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — événements : catalogue, planification, effets
+   TRANSITOPIA — événements : catalogue, planification, effets
    Chaque événement a une tonalité de −3 (très négatif) à +3 (très positif).
    Effets possibles (cumulables) :
      traffic {mx,my,r,mult} | {zone,mult} | {all}   circulation routière
@@ -3854,7 +3885,7 @@ const Notif = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — personnel et formations
+   TRANSITOPIA — personnel et formations
    Huit filières, trois niveaux chacune. Une formation coûte de l'argent et
    prend quelques jours ; un personnel mieux qualifié est un peu mieux payé
    (coûts d'exploitation légèrement en hausse), mais il change le quotidien
@@ -3996,7 +4027,7 @@ const Staff = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — événements à choix (questions, dilemmes)
+   TRANSITOPIA — événements à choix (questions, dilemmes)
    Chaque événement : une question, 2 à 4 options. Les conséquences sont
    décrites en abrégé (voir FX ci-dessous) ; certaines options ont un
    risque tiré au sort au moment du choix : [probabilité, effets, texte].
@@ -4769,7 +4800,7 @@ const Gauges = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — taxis
+   TRANSITOPIA — taxis
    Un seul dépôt (stockage illimité, atelier de réparation). Les taxis ne
    suivent pas de ligne : ils prennent des courses partout dans les zones
    d'exploitation, payées au kilomètre.
@@ -5333,7 +5364,208 @@ const Taxi = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — lieux d'intérêt + construction ferroviaire
+   TRANSITOPIA — tutoriels
+   - Tutoriel principal, proposé à chaque nouvelle partie (on peut le passer) :
+     première ligne de bus offerte (3 arrêts, 1 bus), puis tour rapide des menus.
+   - Mini-tutoriel proposé la première fois qu'on choisit chaque mode (métro, TER,
+     navette, et bus si le tutoriel principal a été passé) : une petite ligne offerte.
+   Les lignes offertes sont strictement limitées (arrêts, longueur, 1 véhicule le
+   moins cher) et ne sont proposées qu'une fois par mode et par partie.
+   ===================================================================== */
+
+const TUTO_LIM = {
+  bus: { stops: 3, len: 2500 },
+  metro: { stops: 2, len: 1500 },
+  ter: { stops: 2, len: 25000 },
+  boat: { stops: 2, len: 2000 },
+};
+const TUTO_MODE_TXT = {
+  bus: { place: 'Touchez une rue de votre territoire pour poser chaque arrêt. Le bus suit les vraies rues et le sens de circulation.',
+    done: 'Vos bus roulent dans la circulation : les couloirs de bus et les feux prioritaires (fiche de la ligne) les accélèrent.' },
+  metro: { place: 'Touchez la carte pour poser 2 stations : le métro est souterrain, son tracé est libre.',
+    done: 'Un métro demande un jour de chantier avant d’ouvrir. Rapide et capacitaire, il coûte cher au kilomètre : réservez-le aux quartiers denses.' },
+  ter: { place: 'Touchez près de 2 gares reliées par une voie ferrée. Le TER ne s’arrête qu’en gare.',
+    done: 'Le TER est le plus rapide sur les longues distances. Construire : « Nouvelle gare » et « Nouvelle voie ferrée » pour étendre le réseau ferré.' },
+  boat: { place: 'Touchez le fleuve ou le canal pour poser 2 pontons.',
+    done: 'La navette fluviale est lente mais appréciée des touristes, surtout l’été.' },
+};
+
+const Tuto = {
+  cur: null, timer: null,
+  st() { if (!G.s.tuto) G.s.tuto = { main: 'done', seen: {} }; return G.s.tuto; },
+  /** parties d'avant les tutoriels : les modes déjà utilisés ne sont plus proposés */
+  normalize(isNew) {
+    if (!G.s.tuto) G.s.tuto = { main: isNew ? 'pending' : 'done', seen: {} };
+    for (const l of G.s.lines) G.s.tuto.seen[l.mode] = true;
+  },
+  active() { return !!this.cur; },
+  lim() { return this.cur && this.cur.free ? TUTO_LIM[this.cur.mode] : null; },
+
+  /* ---------- tutoriel principal ---------- */
+  startMain() {
+    const t = this.st(); if (t.main !== 'pending') return;
+    const city = G.s.city.nom;
+    UI.modal(`<div class="tuto-ill">${pict('bus')}${pict('metro')}${pict('ter')}${pict('boat')}</div>
+      <div class="plate big">Bienvenue à ${esc(city)} !</div>
+      <p>Vous dirigez le tout nouveau réseau de transport de la ville. Votre mission : relier les habitants à leurs emplois, leurs écoles et leurs loisirs, sans faire faillite.</p>
+      <p class="sub">Ce court tutoriel vous guide pour ouvrir votre première ligne de bus, <b>offerte</b> (3 arrêts, 1 bus), puis présente les menus. Comptez deux minutes.</p>
+      <div class="row2"><button class="btn" data-act="tutoSkip">Passer le tutoriel</button><button class="btn primary" data-act="tutoGo">Commencer</button></div>`, { lock: true });
+  },
+  goMain() {
+    UI.closeModal();
+    this.cur = { kind: 'main', mode: 'bus', free: true, i: 0, steps: this.mainSteps() };
+    this.built = false;
+    G.paused = true; UI.refreshTop();
+    this.enter();
+  },
+  mainSteps() {
+    const L = TUTO_LIM.bus;
+    return [
+      { t: 'Votre territoire', x: 'Les quartiers sans voile blanc sont à vous : c’est là que vous pouvez construire. Les quartiers voisins, entourés de pointillés, s’achètent dans « Zones » pour agrandir votre réseau.', next: true, pos: 'top' },
+      { t: 'Le jeu est en pause', x: 'Prenez votre temps : la simulation reprendra à la fin du tutoriel. Ouvrez maintenant le menu « Construire ».', sel: '#nav [data-arg="build"]', done: () => G.ui.sheet === 'build' && UI.sheetOpen(), pos: 'top' },
+      { t: 'Choisissez le bus', x: 'Le bus est le moyen le plus simple et le moins cher pour commencer.', sel: '[data-act="buildMode"][data-arg="bus"]', done: () => Build.b && Build.b.mode === 'bus' && !Build.b.edit, pos: 'top', back: () => !UI.sheetOpen() && !Build.b ? 1 : null },
+      { t: 'Posez vos arrêts', x: () => `Touchez une rue de votre territoire pour poser le premier arrêt, puis les suivants (${L.stops} au plus, sur ${fmtKm(L.len)} maximum pour la ligne offerte). Le bus suit les vraies rues.<br><b>${Build.b ? Build.b.stops.length : 0} / ${L.stops} arrêts</b>`,
+        sel: () => Build.b && Build.b.stops.length >= 2 ? '[data-act="bOk"]' : null, done: () => !!G.ui.bSel && $('#modal') && !$('#modal').hidden && !!$('[data-act="bBuild"]'), pos: 'top', back: () => !Build.b ? 1 : null,
+        hint: () => Build.b && Build.b.stops.length >= 2 ? 'Touchez « Valider » quand votre tracé vous convient.' : '' },
+      { t: 'Votre ligne', x: 'Choisissez sa couleur, puis touchez « Construire ». La ligne et son bus sont offerts : par la suite, vous pourrez ajouter des bus depuis la fiche de la ligne.', sel: '[data-act="bBuild"]', done: () => this.built, pos: 'top', back: () => !Build.b ? 1 : $('#modal').hidden ? 3 : null },
+      { t: 'Ligne ouverte !', x: 'Votre premier bus est en route. Touchez un bus ou un arrêt sur la carte pour voir ses informations. Les voyageurs paient leur billet à chaque montée.', next: true, pos: 'top' },
+      { t: 'En haut de l’écran', x: 'À gauche, votre trésorerie : touchez-la pour ouvrir les finances (recettes, dépenses, emprunts). Au centre, la date : touchez-la pour changer la vitesse du temps. À droite, pause et lecture.', sel: '#cash, #clock', next: true, pos: 'bottom' },
+      { t: 'Réseau', x: 'Vos lignes et leurs fiches : véhicules, tarifs, horaires, modifications du tracé, et le plan schématique.', sel: '#nav [data-arg="lines"]', next: true, pos: 'top' },
+      { t: 'Zones', x: 'Achetez les quartiers voisins pour étendre votre territoire. Plus un quartier est dense, plus il est cher… et rentable.', sel: '#nav [data-arg="zones"]', next: true, pos: 'top' },
+      { t: 'Stats et Infos', x: '« Stats » suit la fréquentation et la qualité de service. « Infos » rassemble les événements, les notifications et les décisions qui vous attendent.', sel: '#nav [data-arg="stats"], #nav [data-arg="infos"]', next: true, pos: 'top' },
+      { t: 'Menu', x: 'Sauvegarde, fond de carte, options. La partie est aussi sauvegardée automatiquement.', sel: '#nav [data-arg="menu"]', next: true, pos: 'top' },
+      { t: 'À vous de jouer !', x: 'La première fois que vous choisirez le métro, le TER ou la navette fluviale, un petit tutoriel gratuit vous sera proposé. Bonne chance !', next: true, pos: 'top', last: true },
+    ];
+  },
+
+  /* ---------- mini-tutoriels par mode ---------- */
+  /** appelé quand le joueur choisit un mode dans « Construire » ; vrai si on intercepte */
+  offerMode(m) {
+    const t = this.st();
+    if (this.cur || t.seen[m] || !TUTO_LIM[m]) return false;
+    // le mode doit être utilisable ici (routes chargées, voie ferrée, fleuve…)
+    const w = G.w;
+    if ((m === 'bus' && !w.road.nE) || (m === 'ter' && !w.rail.nE) || (m === 'boat' && !w.water.nE)) return false;
+    const L = TUTO_LIM[m];
+    UI.close();
+    UI.modal(`<div class="plate big">${pict(m)} Premier ${m === 'boat' ? 'ponton' : MODES[m].label.toLowerCase()} !</div>
+      <p>${esc(TUTO_MODE_TXT[m].place)}</p>
+      <p class="sub">Petit tutoriel gratuit : une ligne de ${L.stops} ${m === 'bus' ? 'arrêts' : m === 'boat' ? 'pontons' : m === 'ter' ? 'gares' : 'stations'} au plus (${fmtKm(L.len)} maximum) et 1 véhicule, offerts. Proposé une seule fois.</p>
+      <div class="row2"><button class="btn" data-act="tutoModeSkip" data-arg="${m}">Passer</button><button class="btn primary" data-act="tutoModeGo" data-arg="${m}">Tutoriel gratuit</button></div>`, { lock: true });
+    return true;
+  },
+  goMode(m) {
+    UI.closeModal();
+    this.st().seen[m] = true;
+    const L = TUTO_LIM[m], txt = TUTO_MODE_TXT[m];
+    const unit = m === 'bus' ? 'arrêts' : m === 'boat' ? 'pontons' : m === 'ter' ? 'gares' : 'stations';
+    this.cur = { kind: 'mode', mode: m, free: true, i: 0, steps: [
+      { t: 'Posez vos ' + unit, x: () => `${esc(txt.place)}<br><b>${Build.b ? Build.b.stops.length : 0} / ${L.stops} ${unit}</b> · ${fmtKm(L.len)} maximum`,
+        sel: () => Build.b && Build.b.stops.length >= 2 ? '[data-act="bOk"]' : null, done: () => !!G.ui.bSel && !!$('[data-act="bBuild"]'), pos: 'top', back: () => !Build.b ? -1 : null,
+        hint: () => Build.b && Build.b.stops.length >= 2 ? 'Touchez « Valider ».' : '' },
+      { t: 'Construire', x: 'Choisissez la couleur et touchez « Construire » : cette ligne et son véhicule sont offerts.', sel: '[data-act="bBuild"]', done: () => this.built, pos: 'top', back: () => !Build.b ? -1 : $('#modal').hidden ? 0 : null },
+      { t: 'Bravo !', x: txt.done, next: true, pos: 'top', last: true },
+    ] };
+    this.built = false;
+    Build.start(m);
+    if (!Build.b) { this.end(); return; }
+    Build.b.tuto = true;
+    this.enter();
+  },
+
+  /* ---------- déroulement ---------- */
+  enter() {
+    const c = this.cur; if (!c) return;
+    if (c.kind === 'main' && c.i === 3 && Build.b) Build.b.tuto = true;
+    this.paint();
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.tick(), 250);
+  },
+  step() { return this.cur && this.cur.steps[this.cur.i]; },
+  tick() {
+    const c = this.cur; if (!c || !G.ready) { this.end(); return; }
+    const s = this.step();
+    if (c.kind === 'main' && Build.b && !Build.b.tuto && Build.b.mode === 'bus' && !Build.b.edit) Build.b.tuto = true;
+    if (s.done && s.done()) { this.next(); return; }
+    if (s.back) {
+      const k = s.back();
+      if (k === -1) { this.end(); return; } // mini-tutoriel abandonné (tracé annulé) : il n'est proposé qu'une fois
+      if (k !== null && k !== undefined && k !== c.i) { c.i = k; this.paint(); return; }
+    }
+    this.paint(true);
+  },
+  next() {
+    const c = this.cur; if (!c) return;
+    if (this.step().last) { this.finish(); return; }
+    c.i++;
+    this.paint();
+  },
+  /** affiche la bulle et met en évidence l'élément à toucher */
+  paint(light) {
+    const s = this.step(); if (!s) return;
+    document.querySelectorAll('.tuto-hl').forEach((e) => e.classList.remove('tuto-hl'));
+    const sel = typeof s.sel === 'function' ? s.sel() : s.sel;
+    if (sel) document.querySelectorAll(sel).forEach((e) => { if (e.offsetParent !== null) e.classList.add('tuto-hl'); });
+    let el = $('#tuto');
+    if (!el) { el = document.createElement('div'); el.id = 'tuto'; document.body.appendChild(el); }
+    const x = typeof s.x === 'function' ? s.x() : s.x, hint = s.hint ? s.hint() : '';
+    const n = this.cur.steps.length;
+    const html = `<div class="tuto-h"><b>${esc(s.t)}</b><small>${this.cur.i + 1} / ${n}</small></div><p>${x}</p>${hint ? `<p class="tuto-hint">${esc(hint)}</p>` : ''}
+      <div class="tuto-a"><button class="btn sm ghost" data-act="tutoSkip">Passer le tutoriel</button>${s.next ? `<button class="btn sm primary" data-act="tutoNext">${s.last ? 'Terminer' : 'Suivant'}</button>` : ''}</div>`;
+    if (!light || el.dataset.k !== this.cur.i + ':' + x + hint) { el.innerHTML = html; el.dataset.k = this.cur.i + ':' + x + hint; }
+    // en haut si l'élément à toucher est en bas (barre de navigation, barre de tracé, boutons d'une fenêtre), et inversement
+    el.className = 'tuto-' + (s.pos || 'top');
+    el.hidden = false;
+  },
+  /** le joueur a ouvert une ligne pendant un tutoriel */
+  onBuilt(line) {
+    if (!this.cur) return;
+    this.built = true;
+    this.st().seen[line.mode] = true;
+    Events.log('Tutoriel : ligne ' + Lines.label(line) + ' offerte.', 'ok');
+  },
+  finish() {
+    const c = this.cur;
+    if (c && c.kind === 'main') { this.st().main = 'done'; G.paused = false; UI.refreshTop(); UI.toast('Tutoriel terminé. Le temps reprend son cours !', 'ok'); }
+    this.end();
+  },
+  skip() {
+    const c = this.cur;
+    this.st().main = this.st().main === 'pending' ? 'skipped' : this.st().main;
+    if (c && c.kind === 'main') { G.paused = false; UI.refreshTop(); }
+    // une ligne en cours de tracé redevient payante
+    if (Build.b) Build.b.tuto = false;
+    if (G.ui.bSel && Build.b) Build.dialog && $('#modal') && !$('#modal').hidden && Build.dialog();
+    this.end();
+  },
+  end() {
+    clearInterval(this.timer); this.timer = null;
+    this.cur = null; this.built = false;
+    document.querySelectorAll('.tuto-hl').forEach((e) => e.classList.remove('tuto-hl'));
+    const el = $('#tuto'); if (el) el.hidden = true;
+  },
+
+  /* ---------- limites des lignes offertes ---------- */
+  /** vrai si l'arrêt peut être ajouté ; sinon explique pourquoi */
+  canAdd(b) {
+    if (!b.tuto) return true;
+    const L = TUTO_LIM[b.mode];
+    if (b.stops.length >= L.stops) { UI.toast(`Ligne offerte : ${L.stops} arrêts au plus. Validez votre tracé.`, 'warn'); return false; }
+    return true;
+  },
+  /** après l'ajout : longueur maximale */
+  checkLen(b) {
+    if (!b.tuto || b.segs.length === 0) return true;
+    const L = TUTO_LIM[b.mode];
+    const path = Lines.assemble(b.stops, b.segs, b.loop);
+    if (path && path.L > L.len) { UI.toast(`Ligne offerte : ${fmtKm(L.len)} au plus. Choisissez un arrêt plus proche.`, 'warn'); return false; }
+    return true;
+  },
+};
+
+'use strict';
+/* =====================================================================
+   TRANSITOPIA — lieux d'intérêt + construction ferroviaire
    (gares orientables, voies ferrées en longues courbes)
    ===================================================================== */
 
@@ -5607,7 +5839,7 @@ const RailBuild = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — rendu de la carte (calques canvas au-dessus de Leaflet)
+   TRANSITOPIA — rendu de la carte (calques canvas au-dessus de Leaflet)
    ===================================================================== */
 
 const TR_COL = ['#58B368', '#F0A53A', '#E2563F', '#9C2B25'];
@@ -6542,7 +6774,7 @@ const Render = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — plan schématique du réseau (sans carte, façon plan de métro)
+   TRANSITOPIA — plan schématique du réseau (sans carte, façon plan de métro)
    Disposition : positions réelles, puis relaxation vers des tronçons à 0/45/90°
    et des interstations régulières ; export en image PNG à partager.
    ===================================================================== */
@@ -7046,7 +7278,7 @@ const Plan = {
     }
     if (forImage) {
       ctx.font = `400 ${11 * s}px ${FONT}`; ctx.fillStyle = '#8a8a8a'; ctx.textAlign = 'right';
-      ctx.fillText('Correspondance', W - 16 * s, H - 12 * s);
+      ctx.fillText('Transitopia', W - 16 * s, H - 12 * s);
     }
   },
 
@@ -7080,7 +7312,7 @@ const Plan = {
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — interface, construction de lignes, démarrage
+   TRANSITOPIA — interface, construction de lignes, démarrage
    ===================================================================== */
 
 G.ui = { selZone: null, selLine: null, selVeh: null, follow: null, sheet: null, sheetArg: null, statsAdv: false, statsMode: 'all', statsPeriod: 'today', statsSort: 'pax' };
@@ -7143,6 +7375,9 @@ const UI = {
     document.addEventListener('input', (e) => {
       const el = e.target.closest('[data-input]');
       if (el && INP[el.dataset.input]) INP[el.dataset.input](el.value, el);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target && e.target.id === 'citySearch') { e.preventDefault(); StartScreen.enter(); }
     });
     document.addEventListener('change', (e) => {
       const el = e.target.closest('[data-change]');
@@ -7843,7 +8078,7 @@ const Build = {
     const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
     const cost = Lines.costOf(b.mode, b.stops, path);
     const est = path ? Lines.estimate(b.mode, b.stops, path, b.loop) : null;
-    $('#buildbar').innerHTML = `<div class="bb-t">${pict(b.mode)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}${b.loop ? ' · circulaire' : ''}</b><small>${fmtEur(cost)}${est ? ' · ≈ ' + fmtInt(Math.round(est.pax / 10) * 10) + ' voy./jour' : ' · placez au moins 2 arrêts'}</small></div></div>
+    $('#buildbar').innerHTML = `<div class="bb-t">${pict(b.mode)}<div><b>${b.stops.length} arrêt${b.stops.length > 1 ? 's' : ''}${path ? ' · ' + fmtKm(path.L) : ''}${b.loop ? ' · circulaire' : ''}</b><small>${b.tuto ? 'offert (tutoriel)' : fmtEur(cost)}${est ? ' · ≈ ' + fmtInt(Math.round(est.pax / 10) * 10) + ' voy./jour' : ' · placez au moins 2 arrêts'}</small></div></div>
       <div class="bb-a"><button class="icon-b" data-act="bUndo" aria-label="Retirer le dernier arrêt" ${b.stops.length ? '' : 'disabled'}>${icon('undo')}</button><button class="icon-b" data-act="bCancel" aria-label="Annuler">${icon('close')}</button><button class="btn primary sm" data-act="bOk" ${b.stops.length >= 2 ? '' : 'disabled'}>${icon('check')} Valider</button></div>`;
   },
   allStops(mode) {
@@ -7883,6 +8118,7 @@ const Build = {
       if (px < 26) return this.closeLoop();
     }
     if (b.loop) { UI.toast('La ligne est déjà bouclée. Validez ou retirez un arrêt.', 'info'); return; }
+    if (!Tuto.canAdd(b)) return;
     if (mode === 'metro') {
       const ex = this.allStops('metro').find((s) => dist(s.mx, s.my, mx, my) < 90);
       st = ex ? { mx: ex.mx, my: ex.my, name: ex.name, shared: true } : { mx, my };
@@ -7930,6 +8166,7 @@ const Build = {
       b.segs.push(sg);
     }
     b.stops.push(st);
+    if (!Tuto.checkLen(b)) { b.stops.pop(); b.segs.pop(); this.bar(); return; }
     if (navigator.vibrate) navigator.vibrate(12);
     this.bar();
   },
@@ -8181,35 +8418,41 @@ const Build = {
     }
     const infra = Lines.costOf(b.mode, b.stops, path);
     const cat = CATALOG[b.mode];
-    G.ui.bSel = { model: cat[b.mode === 'bus' ? 1 : 0].id, count: b.mode === 'bus' ? 3 : 2, color: b.color, path, infra };
+    G.ui.bSel = b.tuto
+      ? { model: cat[0].id, count: 1, color: b.color, path, infra: 0 } // ligne offerte : 1 véhicule, le plus simple
+      : { model: cat[b.mode === 'bus' ? 1 : 0].id, count: b.mode === 'bus' ? 3 : 2, color: b.color, path, infra };
     this.dialog();
   },
   dialog() {
     const b = this.b, q = G.ui.bSel;
+    if (!b.tuto && q.infra === 0 && q.path) { q.infra = Lines.costOf(b.mode, b.stops, q.path); } // tutoriel passé en cours de route
     const md = MODEL[q.model];
-    const vehCost = Math.round(md.price * G.s.costMul) * q.count;
+    const vehCost = b.tuto ? 0 : Math.round(md.price * G.s.costMul) * q.count;
     const total = q.infra + vehCost;
     const sp = { bus: 4.2, metro: 12.4, ter: 18, boat: 5.5 }[b.mode];
     const cyc = (b.loop ? q.path.L : 2 * q.path.L) / sp / 60 + b.stops.length * 2 * 0.6;
     const hw = cyc / q.count;
-    const cat = CATALOG[b.mode].map((m) => `<button class="catrow ${m.id === q.model ? 'on' : ''}" data-act="bModel" data-arg="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(m.desc)} · ${m.cap} pl. · ${m.kmh} km/h en ${accTime(m)} s · ${fmtEur(m.op * G.s.costMul)}/h</small></span><em>${fmtEur(m.price * G.s.costMul)}</em></button>`).join('');
+    const cat = CATALOG[b.mode].filter((m) => !b.tuto || m.id === q.model).map((m) => `<button class="catrow ${m.id === q.model ? 'on' : ''}" data-act="bModel" data-arg="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(m.desc)} · ${m.cap} pl. · ${m.kmh} km/h en ${accTime(m)} s · ${fmtEur(m.op * G.s.costMul)}/h</small></span><em>${fmtEur(m.price * G.s.costMul)}</em></button>`).join('');
     const sw = LINE_COLORS.map((c) => `<button class="sw ${c === q.color ? 'on' : ''}" style="background:${c}" data-act="bColor" data-arg="${c}" aria-label="Couleur ${c}"></button>`).join('');
     UI.modal(`<div class="plate big">${pict(b.mode)} Nouvelle ligne · ${esc(MODES[b.mode].label)}</div>
       <p class="sub">${b.stops.length} arrêts · ${fmtKm(q.path.L)}${b.loop ? ' · circulaire' : ''} · de ${esc(b.stops[0].name)} à ${esc(b.loop ? b.stops[0].name : b.stops[b.stops.length - 1].name)}${b.mode === 'metro' ? `<br>Chantier : ${q.path.L > 4000 ? '2 jours' : '1 jour'} avant l’ouverture.` : ''}</p>
       <h3 class="sec">Couleur</h3><div class="swatches">${sw}</div>
       <h3 class="sec">Véhicules</h3>${cat}
-      <div class="vrow"><div><b>Nombre</b><small>passage toutes les ~${Math.max(1, Math.round(hw))} min</small></div><div class="stepper"><button data-act="bCount" data-arg="-1">−</button><b>${q.count}</b><button data-act="bCount" data-arg="1">+</button></div></div>
+      ${b.tuto ? `<p class="note ok">Ligne offerte par le tutoriel : 1 véhicule, passage toutes les ~${Math.max(1, Math.round(hw))} min. Vous pourrez en ajouter ensuite depuis la fiche de la ligne.</p>`
+        : `<div class="vrow"><div><b>Nombre</b><small>passage toutes les ~${Math.max(1, Math.round(hw))} min</small></div><div class="stepper"><button data-act="bCount" data-arg="-1">−</button><b>${q.count}</b><button data-act="bCount" data-arg="1">+</button></div></div>`}
       ${(() => { const est = Lines.estimate(b.mode, b.stops, q.path, b.loop); return est ? `<div class="kpis"><div><small>Voyageurs estimés</small><b>≈ ${fmtInt(Math.round(est.pax / 10) * 10)} / jour</b></div><div><small>Habitants et emplois desservis</small><b>${fmtInt(Math.round(est.pop / 100) * 100)}</b></div></div><p class="sub">Estimation un jour de semaine, avec un passage fréquent et le tarif de référence, hors correspondances.</p>` : ''; })()}
-      <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${fmtEur(total)}</td></tr>${Eco.free() ? '<tr><th>Argent illimité</th><td>gratuit</td></tr>' : `<tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr>`}</tbody></table>
+      <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${b.tuto ? 'offert' : fmtEur(total)}</td></tr>${b.tuto ? '' : Eco.free() ? '<tr><th>Argent illimité</th><td>gratuit</td></tr>' : `<tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr>`}</tbody></table>
       <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bBuild" ${Eco.canAfford(total) ? '' : 'disabled'}>Construire</button></div>`);
   },
   build() {
     const b = this.b, q = G.ui.bSel;
     const md = MODEL[q.model];
-    const total = q.infra + Math.round(md.price * G.s.costMul) * q.count;
-    if (!Eco.spend(total, 'capex')) return;
+    const gift = !!b.tuto;
+    const total = gift ? 0 : q.infra + Math.round(md.price * G.s.costMul) * q.count;
+    if (total > 0 && !Eco.spend(total, 'capex')) return;
     b.path = q.path;
     const line = Lines.create(b, { model: q.model, count: q.count, color: q.color });
+    if (gift) { line.gift = q.count; Tuto.onBuilt(line); }
     Transfers.rebuild();
     Render.lineBox(line);
     Sim.lineQuality(line);
@@ -8225,7 +8468,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.17.2';
+const APP_VERSION = '1.18.0';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
@@ -8280,7 +8523,12 @@ const ACT = {
   taxiBuy(id) { if (Taxi.buy(id)) { Taxi.balance(Taxi.open(G.s.min)); UI.refreshSheet(); } },
   taxiSell(id) { Taxi.sell(id); UI.refreshSheet(); },
   taxiGoto() { const T = Taxi.st(); if (!T) return; UI.close(); G.map.setView([myToLat(T.depot.my), mxToLon(T.depot.mx)], 16.5); },
-  buildMode(m) { if (RailBuild.b) RailBuild.cancel(); Build.start(m); },
+  buildMode(m) { if (RailBuild.b) RailBuild.cancel(); if (Tuto.offerMode(m)) return; Build.start(m); },
+  tutoGo() { Tuto.goMain(); },
+  tutoSkip() { if (!Tuto.cur) { UI.closeModal(); Tuto.st().main = Tuto.st().main === 'pending' ? 'skipped' : Tuto.st().main; return; } Tuto.skip(); },
+  tutoNext() { Tuto.next(); },
+  tutoModeGo(m) { Tuto.goMode(m); },
+  tutoModeSkip(m) { Tuto.st().seen[m] = true; UI.closeModal(); Build.start(m); },
   railMode(k) { RailBuild.start(k); },
   rbRot(d) { RailBuild.rotate(+d); },
   rbCancel() { RailBuild.cancel(); },
@@ -8310,9 +8558,9 @@ const ACT = {
   bUndo() { Build.undo(); },
   bCancel() { Build.cancel(); },
   bOk() { Build.confirm(); },
-  bModel(id) { G.ui.bSel.model = id; Build.dialog(); },
+  bModel(id) { if (Build.b && Build.b.tuto) return; G.ui.bSel.model = id; Build.dialog(); },
   bColor(c) { G.ui.bSel.color = c; Build.b.color = c; Build.dialog(); },
-  bCount(d) { G.ui.bSel.count = clamp(G.ui.bSel.count + +d, 1, 40); Build.dialog(); },
+  bCount(d) { if (Build.b && Build.b.tuto) return; G.ui.bSel.count = clamp(G.ui.bSel.count + +d, 1, 40); Build.dialog(); },
   bBuild() { Build.build(); },
   bEditApply() { Build.applyEdit(); },
   bEditVeh(d) { const q = G.ui.editPend, l = Build.b && Build.b.edit; if (!q || !l) return; q.dv = Math.max(1 - l.veh.length, q.dv + +d); Build.editDialog(); },
@@ -8490,7 +8738,7 @@ const ACT = {
   stNew() { StartScreen.render('new'); },
   stLoad() { StartScreen.render('load'); },
   stContinue() { const n = +localStorage.getItem('corr.last'); if (n) Game.load(n); },
-  stPickCity(i) { StartScreen.city = StartScreen.results[+i]; StartScreen.render('new'); },
+  stPickCity(i) { StartScreen.pick(i); },
   stDiff(d) { StartScreen.diff = d; StartScreen.render('new'); },
   stSlot(n) { StartScreen.slot = +n; StartScreen.render('new'); },
   stGo() { StartScreen.go(); },
@@ -8526,12 +8774,13 @@ const CHG = {
 const StartScreen = {
   city: null, diff: 'normal', slot: 1, results: [], timer: null, q: '',
   render(view) {
+    const prev = this.view; this.view = view; this.lastView = prev;
     const box = $('#startBox');
     const last = +localStorage.getItem('corr.last');
     const slots = Save.list();
     if (view === 'home') {
       const lm = last ? slots[last - 1].meta : null;
-      box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
+      box.innerHTML = `<div class="logo"><span class="pict pict-metro">T</span><h1>Transitopia</h1></div>
         <p class="verpill">Version ${APP_VERSION}</p>
         <p class="tagline">Bâtissez le réseau de transport de votre ville, sur la vraie carte de France.</p>
         <div class="stack">
@@ -8546,39 +8795,66 @@ const StartScreen = {
         <label class="lab" for="citySearch">Ville de départ</label>
         <input id="citySearch" class="inp" type="search" placeholder="Ex. Lyon, Nantes, Annecy…" autocomplete="off" data-input="citySearch" value="${esc(this.q)}">
         <div id="cityRes" class="cityres">${this.resHTML()}</div>
-        ${this.city ? `<div class="chosen">${icon('ok')} <b>${esc(this.city.nom)}</b> <small>${esc(this.city.codesPostaux?.[0] || this.city.codeDepartement || '')} · ${fmtInt(this.city.population || 0)} hab.</small></div>` : ''}
+        <div id="chosenCity" class="chosen">${this.chosenHTML()}</div>
         <label class="lab">Difficulté</label>
         <div class="seg">${Object.entries(DIFF).map(([k, d]) => `<button class="${this.diff === k ? 'on' : ''}" data-act="stDiff" data-arg="${k}">${d.label}</button>`).join('')}</div>
         <p class="sub">Capital de départ : ${fmtEur(DIFF[this.diff].money)} · coûts ×${DIFF[this.diff].cost.toLocaleString('fr-FR')}</p>
         <label class="lab">Emplacement de sauvegarde</label>
         <div class="seg wrap">${slots.map((s) => `<button class="${this.slot === s.n ? 'on' : ''}" data-act="stSlot" data-arg="${s.n}">${s.n}${s.meta ? ' · ' + esc(s.meta.city) : ' · libre'}</button>`).join('')}</div>
         ${slots[this.slot - 1].meta ? '<p class="note warn">Cet emplacement contient une partie : elle sera remplacée.</p>' : ''}
-        <div class="row2"><button class="btn" data-act="stHome">Retour</button><button class="btn primary" data-act="stGo" ${this.city ? '' : 'disabled'}>Démarrer</button></div>`;
+        <div class="row2"><button class="btn" data-act="stHome">Retour</button><button class="btn primary" id="stGoBtn" data-act="stGo" ${this.city ? '' : 'disabled'}>Démarrer</button></div>`;
+      // le clavier ne s'ouvre qu'en arrivant sur l'écran, pas à chaque choix de difficulté ou d'emplacement
       const inp = $('#citySearch');
-      if (inp && !this.city) inp.focus();
+      if (inp && !this.city && this.lastView !== 'new') inp.focus();
     } else if (view === 'load') {
       box.innerHTML = `<div class="plate big">Charger une partie</div>
         ${slots.map(({ n, meta }) => `<div class="vrow"><div><b>Emplacement ${n}</b><small>${meta ? esc(meta.city) + ' · ' + esc(meta.date) + ' · ' + (meta.unlimited ? 'illimité' : fmtEur(meta.money)) + ' · ' + meta.lines + ' lignes' : 'vide'}</small></div>${meta ? `<div class="row2 tight"><button class="btn sm primary" data-act="stLoadSlot" data-arg="${n}">Jouer</button><button class="btn sm danger" data-act="stDelSlot" data-arg="${n}">Effacer</button></div>` : ''}</div>`).join('')}
         <button class="btn wide" data-act="stHome">Retour</button>`;
     } else if (view === 'loading') {
-      box.innerHTML = `<div class="logo"><span class="pict pict-metro">M</span><h1>Correspondance</h1></div>
+      box.innerHTML = `<div class="logo"><span class="pict pict-metro">T</span><h1>Transitopia</h1></div>
         <div class="loadbox"><span class="spin big"></span><p id="loadMsg">${esc(this.loadMsg || 'Chargement…')}</p></div>`;
     }
   },
   resHTML() {
-    if (!this.results.length) return this.q.length >= 2 ? '<p class="note">Aucune commune trouvée.</p>' : '';
-    return this.results.map((c, i) => `<button class="cityrow ${this.city && this.city.code === c.code ? 'on' : ''}" data-act="stPickCity" data-arg="${i}"><b>${esc(c.nom)}</b><small>${esc(c.codesPostaux?.[0] || '')} · ${fmtInt(c.population || 0)} hab.</small></button>`).join('');
+    if (this.busy && !this.results.length) return '<p class="note"><span class="spin"></span> Recherche…</p>';
+    if (this.err) return '<p class="note bad">Recherche impossible : vérifiez la connexion internet.</p>';
+    if (!this.results.length) return this.q.trim().length >= 2 && this.done === this.q.trim() ? '<p class="note">Aucune commune trouvée. Essayez sans accent, ou avec le code postal.</p>' : '';
+    // homonymes : le département les distingue
+    return this.results.map((c, i) => `<button class="cityrow ${this.city && this.city.code === c.code ? 'on' : ''}" data-act="stPickCity" data-arg="${i}"><span class="cr-n"><b>${esc(c.nom)}</b><small>${esc(c.codeDepartement || '')}${c.departement ? ' · ' + esc(c.departement.nom) : ''}</small></span><small class="cr-p">${fmtInt(c.population || 0)} hab.</small></button>`).join('');
   },
+  /** n'affiche que si l'écran « Nouvelle partie » est toujours là */
+  paintRes() {
+    const r = $('#cityRes'); if (r) r.innerHTML = this.resHTML();
+    const ch = $('#chosenCity'); if (ch) ch.innerHTML = this.chosenHTML();
+    const go = $('#stGoBtn'); if (go) go.disabled = !this.city;
+  },
+  chosenHTML() { return this.city ? `${icon('ok')} <b>${esc(this.city.nom)}</b> <small>${esc(this.city.codeDepartement || '')}${this.city.departement ? ' · ' + esc(this.city.departement.nom) : ''} · ${fmtInt(this.city.population || 0)} hab.</small>` : ''; },
   search(v) {
     this.q = v;
+    const t = v.trim();
+    // le texte a changé : la ville choisie ne correspond plus forcément
+    if (this.city && t !== this.city.nom) this.city = null;
     clearTimeout(this.timer);
-    if (v.trim().length < 2) { this.results = []; $('#cityRes').innerHTML = ''; return; }
+    const id = this.reqId = (this.reqId || 0) + 1;
+    this.err = false;
+    if (t.length < 2) { this.results = []; this.busy = false; this.paintRes(); return; }
+    this.busy = true; this.paintRes();
     this.timer = setTimeout(async () => {
       try {
-        this.results = (await API.searchCommunes(v.trim())).filter((c) => c.centre);
-        $('#cityRes').innerHTML = this.resHTML();
-      } catch (e) { $('#cityRes').innerHTML = '<p class="note bad">Recherche impossible : vérifiez la connexion internet.</p>'; }
+        const res = await API.searchCommunes(t);
+        if (id !== this.reqId) return; // une recherche plus récente est en cours : on ignore cette réponse
+        this.results = res; this.done = t;
+      } catch (e) { if (id !== this.reqId) return; this.results = []; this.err = true; }
+      this.busy = false; this.paintRes();
     }, 300);
+  },
+  /** Entrée : la première commune proposée */
+  enter() { if (this.results.length) { this.pick(0); $('#citySearch')?.blur(); } },
+  pick(i) {
+    const c = this.results[+i]; if (!c) return;
+    this.city = c; this.q = c.nom;
+    const inp = $('#citySearch'); if (inp) { inp.value = c.nom; inp.blur(); }
+    this.paintRes();
   },
   setMsg(t) { this.loadMsg = t; const el = $('#loadMsg'); if (el) el.textContent = t; },
   go() {
@@ -8724,6 +9000,7 @@ const Game = {
     if (v) G.map.setView([v.lat, v.lng], v.z, { animate: false });
     else G.map.setView([G.s.city.lat, G.s.city.lon], 14.5, { animate: false });
     if (!G.s.rail) G.s.rail = { stations: [], tracks: [] };
+    Tuto.normalize(isNew);
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     if (!G.s.settings.notif) G.s.settings.notif = 'all';
@@ -8739,7 +9016,7 @@ const Game = {
     UI.refreshTop(); UI.updateTint(); UI.refreshInfoBadge();
     Traffic.update();
     for (const l of G.s.lines) Sim.lineQuality(l);
-    if (isNew) setTimeout(() => UI.toast('Touchez « Construire » pour créer votre première ligne de bus.', 'info'), 1200);
+    if (isNew && G.s.tuto && G.s.tuto.main === 'pending') setTimeout(() => Tuto.startMain(), 900);
     Loader.ensureAround().then(() => {
       for (const l of G.s.lines) { Lines.resolveEdges(l); if (!l.catchPop) Lines.computeOD(l); }
       Transfers.rebuild();
@@ -8747,7 +9024,7 @@ const Game = {
     });
   },
 
-  stop() { G.ready = false; Build.cancel(); if (RailBuild.b) RailBuild.cancel(); UI.closeCard(); UI.closeModal(); },
+  stop() { G.ready = false; Tuto.end(); Build.cancel(); if (RailBuild.b) RailBuild.cancel(); UI.closeCard(); UI.closeModal(); },
 };
 
 /* ownedBoxes ajouté à la sauvegarde pour recharger le bon secteur */
@@ -8823,7 +9100,7 @@ document.addEventListener('DOMContentLoaded', boot);
 
 'use strict';
 /* =====================================================================
-   CORRESPONDANCE — confort d'utilisation : bouton retour Android,
+   TRANSITOPIA — confort d'utilisation : bouton retour Android,
    messages en bas d'écran, panneaux redimensionnables, mouvements
    d'argent animés, confirmation et annulation des grosses dépenses
    ===================================================================== */

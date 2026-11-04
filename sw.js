@@ -1,5 +1,5 @@
 /* Transitopia — service worker : appli hors cache réseau + cache des photos aériennes */
-const APP = 'transitopia-app-v8';
+const APP = 'transitopia-app-v9';
 const TILES = 'corr-tiles-v1';
 const MAX_TILES = 3000;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',

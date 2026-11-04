@@ -1,5 +1,5 @@
 /* Transitopia — service worker : appli hors cache réseau + cache des photos aériennes */
-const APP = 'transitopia-app-v7';
+const APP = 'transitopia-app-v8';
 const TILES = 'corr-tiles-v1';
 const MAX_TILES = 3000;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
@@ -10,11 +10,11 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(APP).then((c) => c.addAll(SHELL).catch(() => {})).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== APP && k !== TILES).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== APP && k !== TILES && k !== TILES + '-cors').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
-async function trim() {
-  const c = await caches.open(TILES);
+async function trim(name) {
+  const c = await caches.open(name || TILES);
   const keys = await c.keys();
   if (keys.length > MAX_TILES) for (const k of keys.slice(0, keys.length - MAX_TILES)) await c.delete(k);
 }
@@ -25,11 +25,12 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   // tuiles IGN : cache d'abord
   if (url.hostname === 'data.geopf.fr' && url.searchParams.get('REQUEST') === 'GetTile') {
-    e.respondWith(caches.open(TILES).then(async (c) => {
+    // les dalles lues par la carte dessinée (mode « cors ») ne doivent pas reprendre une réponse « opaque » du cache des images
+    e.respondWith(caches.open(req.mode === 'cors' ? TILES + '-cors' : TILES).then(async (c) => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok) { c.put(req, res.clone()); if (Math.random() < 0.02) trim(); }
+      if (res.ok) { c.put(req, res.clone()); if (Math.random() < 0.02) trim(req.mode === 'cors' ? TILES + '-cors' : TILES); }
       return res;
     }));
     return;

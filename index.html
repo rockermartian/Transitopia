@@ -122,6 +122,7 @@ small{font-size:12.5px;color:var(--muted)}
 #game{position:fixed;inset:0}
 #map{position:absolute;inset:0;z-index:0;background:var(--paper)}
 .leaflet-container{font-family:var(--f-body);background:var(--paper)}
+#map.bg-photo{background:#59604f}
 .leaflet-control-attribution{display:none!important} /* sources citées dans le menu */
 .leaflet-control-attribution a{color:var(--ink-2)!important}
 .ov{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}
@@ -493,7 +494,7 @@ const nextFrame = () => new Promise((r) => { if (document.hidden) setTimeout(r, 
 /** BD TOPO allégée avant mise en cache : seulement les champs utiles, et le centre des gares et des lieux
  *  (au lieu de leurs contours). Les coordonnées des routes restent intactes (clés des carrefours). */
 const BD_KEEP = {
-  roads: ['nature', 'importance', 'sens_de_circulation', 'reserve_aux_bus', 'vitesse_moyenne_vl', 'acces_vehicule_leger', 'urbain', 'nom_voie_ban_gauche', 'nom_collaboratif_gauche', 'position_par_rapport_au_sol'],
+  roads: ['nature', 'importance', 'sens_de_circulation', 'reserve_aux_bus', 'vitesse_moyenne_vl', 'acces_vehicule_leger', 'urbain', 'nom_voie_ban_gauche', 'nom_collaboratif_gauche', 'position_par_rapport_au_sol', 'nombre_de_voies', 'largeur_de_chaussee'],
   rails: ['nature', 'etat_de_l_objet', 'vitesse_maximale', 'position_par_rapport_au_sol'],
   water: ['navigabilite', 'classe_de_largeur', 'cpx_toponyme_de_cours_d_eau'],
   gares: ['nature', 'toponyme'], pois: ['categorie', 'nature', 'toponyme'],
@@ -652,7 +653,7 @@ const API = {
   },
   async bdtopo(b) {
     const [roads, rails, water, gares, pois] = await Promise.all([
-      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche,position_par_rapport_au_sol'),
+      this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche,position_par_rapport_au_sol,nombre_de_voies,largeur_de_chaussee'),
       this.wfsAll('BDTOPO_V3:troncon_de_voie_ferree', b, 'geometrie,nature,etat_de_l_objet,vitesse_maximale,position_par_rapport_au_sol'),
       this.wfsAll('BDTOPO_V3:troncon_hydrographique', b, 'geometrie,navigabilite,classe_de_largeur,cpx_toponyme_de_cours_d_eau'),
       this.wfsAll('BDTOPO_V3:equipement_de_transport', b, 'geometrie,nature,toponyme'),
@@ -734,6 +735,7 @@ class Net {
     this.grid = new Map();
     this.dens = []; this.zone = []; this.noise = []; this.traffic = [];
     this.ow = []; this.bl = []; this.lim = []; this.limSrc = [];
+    this.wid = []; this.lanes = []; this.curW = 0; this.curL = 0; // largeur de chaussée (m) et nombre de voies (BD TOPO), 0 si inconnus
     // niveau (sol, pont, tunnel), point « en l'air » et altitude de chaque nœud (BD TOPO)
     this.nLv = []; this.nFly = []; this.nZ = []; this.nLvX = null; this.lvMore = null;
     this.version = 0;
@@ -794,6 +796,7 @@ class Net {
     this.noise.push(0.7 + 0.6 * rnd01(hashStr(key)));
     this.traffic.push(0.2);
     this.ow.push(ow ? 1 : 0); this.bl.push(bl ? 1 : 0); this.lim.push(lim); this.limSrc.push(lim > 0 ? 2 : 0);
+    this.wid.push(this.curW); this.lanes.push(this.curL);
     this.adj[a].push(e); this.adj[b].push(e);
   }
   /** tronçon entre deux nœuds (indices), ou −1 */
@@ -1152,7 +1155,9 @@ class World {
       if (/autoroutier/i.test(nat)) lim = p.urbain === true ? 90 : 130;
       else if (p.urbain === true) lim = 50;
       else if (p.urbain === false) lim = cls === 0 ? 110 : 80;
+      this.road.curW = +p.largeur_de_chaussee > 0 ? +p.largeur_de_chaussee : 0; this.road.curL = +p.nombre_de_voies > 0 ? +p.nombre_de_voies : 0;
       for (const ln of lines(f.geometry)) addLine(this.road, f.id, ln, cls, kmh, name, ow, bus ? 1 : 0, lim, level(p));
+      this.road.curW = 0; this.road.curL = 0;
     }
     this.road.version++;
     /* voies ferrées (hors tram, métro, voies de service) */
@@ -1560,6 +1565,7 @@ const Loader = {
         n++;
         Render.dirty = true;
         Sim.onNetworkGrow();
+        Dessin.refresh();
         this.signalsFor(i, j); // en arrière-plan
       } catch (e) {
         console.warn('routes', key, e);
@@ -1591,7 +1597,7 @@ const Loader = {
     try {
       let js = await Cache.get('sig2:' + key);
       if (!js) { const b = chunkBox(i, j); js = await API.signals(b.s, b.w, b.n, b.e); await Cache.set('sig2:' + key, js); }
-      const n = w.ingestSignals(js);
+      const n = w.ingestSignals(js); if (n) Dessin.refresh();
       w.ingestMaxspeed(js);
       if (n) Sim.onSignals();
       Render.dirty = true;
@@ -2631,7 +2637,7 @@ const Sim = {
       v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301,
       owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun', rail: { stations: [], tracks: [] }, tuto: { main: 'pending', seen: {} },
       today: Eco.blankDay(), days: [], ads: { bus: 1, metro: 1, ter: 1, boat: 1 },
-      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, lights: true, base: 'pale' },
+      settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, lights: true, base: 'photo' },
       modalShift: 0, view: null, lastReal: Date.now(), created: Date.now(), zoneMode: 'iris',
     };
   },
@@ -5565,6 +5571,351 @@ const Tuto = {
 
 'use strict';
 /* =====================================================================
+   TRANSITOPIA — fond de carte « dessiné »
+   Chaque dalle (256 px) est composée une fois puis gardée :
+   1. sol : la photo aérienne réduite, ramenée à une palette d'aplats (filtre « mode »),
+      éclaircie en tons pastel : chaque ville garde ses vraies couleurs ;
+   2. eau et voies ferrées ;
+   3. routes à leur largeur réelle (nombre de voies, largeur de chaussée IGN),
+      bordures, asphalte, marquages : ligne médiane, séparations de voies,
+      lignes de rive, couloirs de bus rouges, passages piétons et lignes d'arrêt aux feux ;
+   4. bâtiments (BD TOPO) : couleur moyenne de leur toit sur la photo, contour, petite ombre.
+   ===================================================================== */
+
+const ORTHO_URL = (z, x, y) => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`;
+const DS = {
+  paper: [236, 231, 219],
+  asph: ['#5d6067', '#676a71', '#71747a', '#7b7d82', '#85878b'], // par catégorie (autoroute → desserte)
+  casing: 'rgba(40,42,46,.85)',
+  mark: 'rgba(255,255,255,.88)', bus: '#b8433b', rail: '#8e8476', water: '#7fb3d5',
+  defW: [15, 11, 8.5, 7, 5.5], minPx: [3, 2.6, 2.2, 1.6, 1.1],
+};
+
+const Dessin = {
+  bat: new Map(), batP: new Map(), batQ: [], batRun: 0,
+  layer: null, ver: 0,
+
+  /** couche Leaflet : chaque dalle est un canevas composé à la demande */
+  make() {
+    const self = this;
+    const Lay = L.GridLayer.extend({
+      createTile(c, done) {
+        const t = document.createElement('canvas');
+        const r = Math.min(2, window.devicePixelRatio || 1);
+        t.width = t.height = 256 * r;
+        t._c = { x: c.x, y: c.y, z: c.z };
+        self.draw(t, c, r).then(() => done(null, t), () => done(null, t));
+        return t;
+      },
+    });
+    this.layer = new Lay({ maxZoom: 20, maxNativeZoom: 20, keepBuffer: 6, updateWhenZooming: false, attribution: '© IGN Géoplateforme · © contributeurs OpenStreetMap' });
+    return this.layer;
+  },
+  /** le réseau a grandi ou des bâtiments sont arrivés : on recompose les dalles affichées (sans clignotement) */
+  refresh() {
+    clearTimeout(this.rt);
+    this.rt = setTimeout(() => {
+      if (!this.layer || !G.map || !G.map.hasLayer(this.layer)) return;
+      const r = Math.min(2, window.devicePixelRatio || 1);
+      for (const k in this.layer._tiles) { const tl = this.layer._tiles[k]; if (tl.el && tl.el._c) this.draw(tl.el, tl.el._c, r); }
+    }, 1200);
+  },
+
+  /* ---------- photo aérienne ---------- */
+  photo(z, x, y) {
+    return new Promise((res) => {
+      const im = new Image(); im.crossOrigin = 'anonymous';
+      im.onload = () => res(im); im.onerror = () => res(null);
+      im.src = ORTHO_URL(Math.min(19, z), x, y);
+    });
+  },
+  /** sol en aplats : réduction, palette, filtre « mode » 3×3, tons pastel */
+  ground(im) {
+    const N = 96;
+    const [c, g] = Night.buf('dsg', N, N);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(im, 0, 0, N, N);
+    let d;
+    try { d = g.getImageData(0, 0, N, N); } catch (e) { return null; } // image « protégée » : pas de lecture possible
+    const p = d.data, q = new Uint16Array(N * N);
+    // regroupement en teintes (5 niveaux par canal, après légère désaturation)
+    const LV = 5, ST = 255 / (LV - 1);
+    for (let i = 0; i < N * N; i++) {
+      let r = p[i * 4], gg = p[i * 4 + 1], b = p[i * 4 + 2];
+      const m = (r + gg + b) / 3; r = m + (r - m) * 0.85; gg = m + (gg - m) * 0.85; b = m + (b - m) * 0.85;
+      q[i] = Math.round(r / ST) * LV * LV + Math.round(gg / ST) * LV + Math.round(b / ST);
+    }
+    // filtre « mode » : chaque pixel prend la couleur la plus fréquente autour de lui → grands aplats
+    const o = new Uint16Array(N * N), cnt = new Uint8Array(LV * LV * LV);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const seen = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = Math.min(N - 1, Math.max(0, x + dx)), yy = Math.min(N - 1, Math.max(0, y + dy)), v = q[yy * N + xx];
+        if (!cnt[v]) seen.push(v); cnt[v]++;
+      }
+      let best = q[y * N + x], bc = 0;
+      for (const v of seen) { if (cnt[v] > bc) { bc = cnt[v]; best = v; } cnt[v] = 0; }
+      o[y * N + x] = best;
+    }
+    // couleur de chaque teinte : moyenne réelle apprise sur toutes les dalles de la ville (fidèle à la photo,
+    // et identique d'une dalle à l'autre : pas de couture), puis éclaircie en ton pastel
+    const pal = this.pal || (this.pal = new Float64Array(LV * LV * LV * 4));
+    for (let i = 0; i < N * N; i++) {
+      const v = q[i] * 4; if (pal[v + 3] > 2e5) continue; // teinte bien connue : on ne la fait plus bouger
+      pal[v] += p[i * 4]; pal[v + 1] += p[i * 4 + 1]; pal[v + 2] += p[i * 4 + 2]; pal[v + 3]++;
+    }
+    const P = DS.paper;
+    for (let i = 0; i < N * N; i++) {
+      const v = o[i] * 4, n = pal[v + 3] || 1;
+      p[i * 4] = pal[v] / n * 0.72 + P[0] * 0.28 + 8; p[i * 4 + 1] = pal[v + 1] / n * 0.72 + P[1] * 0.28 + 8; p[i * 4 + 2] = pal[v + 2] / n * 0.72 + P[2] * 0.28 + 6;
+    }
+    g.putImageData(d, 0, 0);
+    return c;
+  },
+  /** pixels de la photo pleine définition (couleur des toits) */
+  pixels(im, S) {
+    const [c, g] = Night.buf('dsp', S, S);
+    g.drawImage(im, 0, 0, S, S);
+    try { return g.getImageData(0, 0, S, S); } catch (e) { return null; }
+  },
+
+  /* ---------- dessin d'une dalle ---------- */
+  async draw(t, co, r) {
+    const z = co.z, n = 2 ** z, S = 256 * r;
+    const g = t.getContext('2d');
+    const tok = (t._tok = (t._tok || 0) + 1);
+    const im = await this.photo(z, co.x, co.y);
+    if (t._tok !== tok) return; // une recomposition plus récente est en cours
+    // conversions monde → pixels de la dalle
+    const X = (mx) => (mx * n - co.x) * S, Y = (my) => (my * n - co.y) * S;
+    const mpp = (G.mpu || 1) / (n * S); // mètres par pixel
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    // 1. sol
+    const gr = im ? this.ground(im) : null;
+    if (gr) { g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(gr, 0, 0, S, S); }
+    else { g.fillStyle = `rgb(${DS.paper.join(',')})`; g.fillRect(0, 0, S, S); }
+    if (!G.w || z < 12) return;
+    const bx0 = co.x / n, by0 = co.y / n, bx1 = (co.x + 1) / n, by1 = (co.y + 1) / n;
+    const pad = meters(40);
+    const inT = (x1, y1, x2, y2) => !(Math.max(x1, x2) < bx0 - pad || Math.min(x1, x2) > bx1 + pad || Math.max(y1, y2) < by0 - pad || Math.min(y1, y2) > by1 + pad);
+    // 2. eau et rail
+    this.lines(g, G.w.water, inT, X, Y, (e, net) => Math.max(z >= 15 ? 3 : 1.5, (net.cls[e] >= 2 ? 25 : 10) / mpp), DS.water, 'round');
+    if (z >= 13) this.rails(g, inT, X, Y, mpp, z, r);
+    // 3. routes
+    if (z >= 13) this.roads(g, inT, X, Y, mpp, z, r, bx0, by0, bx1, by1);
+    // 4. bâtiments (à partir du zoom 16, chargés par carrés de 600 m)
+    if (z >= 16) {
+      const px = im ? this.pixels(im, S) : null;
+      const k = 2 ** (z - 16), bxk = Math.floor(co.x / k), byk = Math.floor(co.y / k);
+      const bats = await this.batFor(bxk, byk);
+      if (t._tok !== tok) return;
+      if (bats) this.buildings(g, bats, X, Y, px, S, r, z);
+    }
+  },
+  /** tronçons d'un réseau dans la dalle (grille spatiale des nœuds) */
+  edgesIn(net, x0, y0, x1, y1) {
+    const out = [], seen = new Set();
+    const cx0 = Math.floor(x0 / GCELL) - 1, cx1 = Math.floor(x1 / GCELL) + 1, cy0 = Math.floor(y0 / GCELL) - 1, cy1 = Math.floor(y1 / GCELL) + 1;
+    if ((cx1 - cx0) * (cy1 - cy0) > 40000) { for (let e = 0; e < net.nE; e++) out.push(e); return out; }
+    for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) {
+      const c = net.grid.get(cx + ',' + cy); if (!c) continue;
+      for (const i of c) for (const e of net.adj[i]) if (!seen.has(e)) { seen.add(e); out.push(e); }
+    }
+    return out;
+  },
+  lines(g, net, inT, X, Y, wFn, col, cap) {
+    if (!net || !net.nE) return;
+    g.strokeStyle = col; g.lineCap = cap; g.lineJoin = 'round';
+    for (let e = 0; e < net.nE; e++) {
+      const a = net.ea[e], b = net.eb[e];
+      if (!inT(net.x[a], net.y[a], net.x[b], net.y[b])) continue;
+      g.lineWidth = wFn(e, net);
+      g.beginPath(); g.moveTo(X(net.x[a]), Y(net.y[a])); g.lineTo(X(net.x[b]), Y(net.y[b])); g.stroke();
+    }
+  },
+  rails(g, inT, X, Y, mpp, z, r) {
+    const net = G.w.rail; if (!net || !net.nE) return;
+    const w = Math.max(2 * r, 4.5 / mpp);
+    g.lineCap = 'butt';
+    const segs = [];
+    for (let e = 0; e < net.nE; e++) { const a = net.ea[e], b = net.eb[e]; if (inT(net.x[a], net.y[a], net.x[b], net.y[b])) segs.push([X(net.x[a]), Y(net.y[a]), X(net.x[b]), Y(net.y[b])]); }
+    const pass = (lw, col, dash) => { g.lineWidth = lw; g.strokeStyle = col; g.setLineDash(dash || []); g.beginPath(); for (const s of segs) { g.moveTo(s[0], s[1]); g.lineTo(s[2], s[3]); } g.stroke(); };
+    pass(w, DS.rail);
+    if (z >= 16) pass(w * 0.8, 'rgba(70,60,50,.55)', [0.5 / mpp, 0.6 / mpp]); // traverses
+    pass(Math.max(0.8, 0.25 / mpp), 'rgba(40,40,40,.8)'); // rails (vus de loin : une ligne)
+    g.setLineDash([]);
+  },
+  roads(g, inT, X, Y, mpp, z, r, x0, y0, x1, y1) {
+    const net = G.w.road; if (!net || !net.nE) return;
+    const maxCls = z >= 15 ? 4 : z >= 14 ? 3 : 2;
+    const pad = meters(40);
+    const es = this.edgesIn(net, x0 - pad, y0 - pad, x1 + pad, y1 + pad);
+    // couloirs de bus achetés par le joueur (en plus de ceux de l'IGN)
+    const own = new Set();
+    for (const l of G.s.lines) if (l.busLane && l.mode === 'bus' && l.segEs) for (const se of l.segEs) if (se) for (const e of se) if (e >= 0) own.add(e);
+    const L = [];
+    for (const e of es) {
+      const c = net.cls[e]; if (c > maxCls) continue;
+      const a = net.ea[e], b = net.eb[e];
+      if (!inT(net.x[a], net.y[a], net.x[b], net.y[b])) continue;
+      const lanes = net.lanes[e] || (c <= 1 ? (net.ow[e] ? 2 : 4) : c === 4 ? (net.ow[e] ? 1 : 2) : 2);
+      const wm = net.wid[e] || Math.max(DS.defW[c], lanes * 3.1);
+      const wp = Math.max(DS.minPx[c] * r, wm / mpp);
+      L.push({ e, c, a, b, ax: X(net.x[a]), ay: Y(net.y[a]), bx: X(net.x[b]), by: Y(net.y[b]), wp, lanes, ow: net.ow[e], bl: net.bl[e] || own.has(e) });
+    }
+    // des petites rues aux grands axes : les grands passent dessus aux carrefours
+    L.sort((p, q) => q.c - p.c);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const stroke = (sel, wf, col) => { for (const s of L) if (sel(s)) { g.lineWidth = wf(s); g.strokeStyle = col(s); g.beginPath(); g.moveTo(s.ax, s.ay); g.lineTo(s.bx, s.by); g.stroke(); } };
+    // bordures puis asphalte
+    stroke(() => true, (s) => s.wp + Math.max(1.2 * r, 1.4 / mpp), () => DS.casing);
+    stroke(() => true, (s) => s.wp, (s) => DS.asph[s.c]);
+    if (z < 16) return;
+    // couloirs de bus : bande rouge côté droit
+    g.lineCap = 'butt';
+    for (const s of L) if (s.bl) {
+      const dx = s.bx - s.ax, dy = s.by - s.ay, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l, o = s.wp / 2 - 1.6 / mpp;
+      g.lineWidth = Math.max(1, 3.2 / mpp); g.strokeStyle = DS.bus;
+      g.beginPath(); g.moveTo(s.ax + nx * o, s.ay + ny * o); g.lineTo(s.bx + nx * o, s.by + ny * o); g.stroke();
+      if (z >= 18 && l > 30 / mpp) { // « BUS » peint au sol
+        g.save(); g.translate((s.ax + s.bx) / 2 + nx * o, (s.ay + s.by) / 2 + ny * o); let a = Math.atan2(dy, dx); if (a > Math.PI / 2 || a < -Math.PI / 2) a += Math.PI; g.rotate(a);
+        g.fillStyle = DS.mark; g.font = `700 ${Math.max(7, 1.8 / mpp)}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('BUS', 0, 0); g.restore();
+      }
+    }
+    // marquages
+    const dash = [3 / mpp, 6 / mpp];
+    const off = (s, o, w, d) => {
+      const dx = s.bx - s.ax, dy = s.by - s.ay, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+      g.lineWidth = w; g.setLineDash(d || []); g.beginPath(); g.moveTo(s.ax + nx * o, s.ay + ny * o); g.lineTo(s.bx + nx * o, s.by + ny * o); g.stroke();
+    };
+    g.strokeStyle = DS.mark;
+    const mw = Math.max(0.8, 0.15 / mpp);
+    for (const s of L) {
+      if (s.c === 4 && z < 17) continue;
+      if (s.wp < 6 * r) continue;
+      const lw = s.wp / s.lanes;
+      // séparations de voies (ligne médiane comprise) en pointillés ; double sens à 4 voies et plus : ligne médiane continue
+      for (let k = 1; k < s.lanes; k++) {
+        const o = -s.wp / 2 + k * lw;
+        const mid = !s.ow && k === s.lanes / 2;
+        off(s, o, mw, mid && s.lanes >= 4 ? [] : dash);
+      }
+      if (z >= 17 && s.c <= 2) { off(s, s.wp / 2 - 0.3 / mpp, mw); off(s, -s.wp / 2 + 0.3 / mpp, mw); } // lignes de rive
+    }
+    g.setLineDash([]);
+    // passages piétons et lignes d'arrêt aux feux
+    if (z >= 17) this.crossings(g, net, L, X, Y, mpp, x0, y0, x1, y1);
+  },
+  crossings(g, net, L, X, Y, mpp, x0, y0, x1, y1) {
+    const w = G.w; if (!w.signals || !w.signals.length) return;
+    const byNode = new Map(); for (const s of L) { (byNode.get(s.a) || byNode.set(s.a, []).get(s.a)).push(s); (byNode.get(s.b) || byNode.set(s.b, []).get(s.b)).push(s); }
+    const pad = meters(20);
+    for (const sg of w.signals) {
+      if (sg.t !== 'sig' || sg.mx < x0 - pad || sg.mx > x1 + pad || sg.my < y0 - pad || sg.my > y1 + pad) continue;
+      const i = net.nearest(sg.mx, sg.my, 18); if (i < 0) continue;
+      for (const s of byNode.get(i) || []) {
+        // direction depuis le carrefour vers l'autre bout du tronçon
+        const from = s.a === i, px = from ? s.ax : s.bx, py = from ? s.ay : s.by, qx = from ? s.bx : s.ax, qy = from ? s.by : s.ay;
+        const dx = qx - px, dy = qy - py, l = Math.hypot(dx, dy); if (l < 9 / mpp) continue;
+        const ux = dx / l, uy = dy / l, nx = -uy, ny = ux;
+        const half = s.wp / 2 - 0.5 / mpp;
+        // zébras : bandes de 0,5 m parallèles à la rue, sur 3 m de large, à 4 m du carrefour
+        const c0 = 4 / mpp + s.wp * 0.3, len = 3 / mpp;
+        g.strokeStyle = DS.mark; g.lineWidth = Math.max(1, 0.5 / mpp); g.lineCap = 'butt';
+        g.beginPath();
+        for (let o = -half; o <= half; o += 1 / mpp) { const sx = px + ux * c0 + nx * o, sy = py + uy * c0 + ny * o; g.moveTo(sx, sy); g.lineTo(sx + ux * len, sy + uy * len); }
+        g.stroke();
+        // ligne d'arrêt (côté entrant : à droite dans le sens vers le carrefour)
+        const c1 = c0 + len + 1.5 / mpp;
+        g.lineWidth = Math.max(1, 0.4 / mpp);
+        g.beginPath(); g.moveTo(px + ux * c1, py + uy * c1); g.lineTo(px + ux * c1 - nx * half, py + uy * c1 - ny * half); g.stroke();
+      }
+    }
+  },
+
+  /* ---------- bâtiments ---------- */
+  /** bâtiments d'un carré de zoom 16 (≈ 600 m) : cache mémoire, puis IndexedDB, puis IGN (4 requêtes à la fois) */
+  batFor(x, y) {
+    const k = x + ':' + y;
+    if (this.bat.has(k)) return Promise.resolve(this.bat.get(k));
+    if (this.batP.has(k)) return this.batP.get(k);
+    const p = (async () => {
+      let d = await Cache.get('bat:' + k);
+      if (!d) {
+        while (this.batRun >= 4) await sleep(150);
+        this.batRun++;
+        try {
+          const n = 2 ** 16, lon0 = x / n * 360 - 180, lon1 = (x + 1) / n * 360 - 180;
+          const lat = (yy) => myToLat(yy / n);
+          const fc = await API.wfsAll('BDTOPO_V3:batiment', { w: lon0, e: lon1, n: lat(y), s: lat(y + 1) }, 'geometrie,hauteur');
+          d = [];
+          for (const f of fc.features) {
+            const gm = f.geometry; if (!gm) continue;
+            const polys = gm.type === 'Polygon' ? [gm.coordinates] : gm.type === 'MultiPolygon' ? gm.coordinates : [];
+            for (const pl of polys) { const ring = pl[0]; if (!ring || ring.length < 4) continue; const a = []; for (const c of ring) a.push(lonToMx(c[0]), latToMy(c[1])); d.push({ h: +(f.properties && f.properties.hauteur) || 0, p: a }); }
+          }
+          Cache.set('bat:' + k, d);
+        } catch (e) { d = null; } finally { this.batRun--; }
+      }
+      if (d) { this.bat.set(k, d); if (this.bat.size > 400) this.bat.delete(this.bat.keys().next().value); }
+      this.batP.delete(k);
+      return d;
+    })();
+    this.batP.set(k, p);
+    return p;
+  },
+  buildings(g, bats, X, Y, px, S, r, z) {
+    const sh = Math.max(1, 1.2 * r * 2 ** (z - 17)); // petite ombre portée, plus haute pour les grands bâtiments
+    const col = (pts, bb) => {
+      if (!px) return [214, 205, 190];
+      const dd = px.data; let rr = 0, gg = 0, b = 0, n = 0;
+      const sx = (bb[2] - bb[0]) / 5, sy = (bb[3] - bb[1]) / 5;
+      for (let i = 0.5; i < 5; i++) for (let j = 0.5; j < 5; j++) {
+        const x = bb[0] + sx * i, y = bb[1] + sy * j;
+        if (x < 0 || y < 0 || x >= S || y >= S || !pip(pts, x, y)) continue;
+        const o = ((y | 0) * S + (x | 0)) * 4; rr += dd[o]; gg += dd[o + 1]; b += dd[o + 2]; n++;
+      }
+      if (!n) { const x = clamp((bb[0] + bb[2]) / 2, 0, S - 1) | 0, y = clamp((bb[1] + bb[3]) / 2, 0, S - 1) | 0, o = (y * S + x) * 4; return [dd[o], dd[o + 1], dd[o + 2]]; }
+      return [rr / n, gg / n, b / n];
+    };
+    const list = [];
+    for (const bt of bats) {
+      const p = bt.p, pts = [];
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i < p.length; i += 2) { const x = X(p[i]), y = Y(p[i + 1]); pts.push(x, y); if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < -4 || y1 < -4 || x0 > S + 4 || y0 > S + 4) continue;
+      list.push({ pts, bb: [x0, y0, x1, y1], h: bt.h });
+    }
+    const path = (pts, dx, dy) => { g.beginPath(); g.moveTo(pts[0] + dx, pts[1] + dy); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i] + dx, pts[i + 1] + dy); g.closePath(); };
+    // ombres d'abord (toutes), puis les toits
+    g.fillStyle = 'rgba(30,30,40,.22)';
+    for (const b of list) { const o = sh * Math.min(3, 0.6 + b.h / 12); path(b.pts, o, o); g.fill(); }
+    g.lineJoin = 'round'; g.lineWidth = Math.max(0.8, 0.6 * r * 2 ** (z - 17));
+    for (const b of list) {
+      let [cr, cg, cb] = col(b.pts, b.bb);
+      // toits : couleur moyenne, éclaircie et légèrement ravivée, arrondie à une palette (rendu « dessiné »)
+      const m = (cr + cg + cb) / 3;
+      cr = m + (cr - m) * 1.25; cg = m + (cg - m) * 1.25; cb = m + (cb - m) * 1.25;
+      const q = (v) => clamp(Math.round((v * 0.8 + 48) / 12) * 12, 0, 255);
+      cr = q(cr); cg = q(cg); cb = q(cb);
+      path(b.pts, 0, 0);
+      g.fillStyle = `rgb(${cr},${cg},${cb})`; g.fill();
+      g.strokeStyle = `rgb(${cr * 0.62 | 0},${cg * 0.62 | 0},${cb * 0.62 | 0})`; g.stroke();
+    }
+  },
+};
+/** point dans un polygone (coordonnées à plat : x0, y0, x1, y1…) */
+function pip(p, x, y) {
+  let ins = false;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    const xi = p[i], yi = p[i + 1], xj = p[j], yj = p[j + 1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) ins = !ins;
+  }
+  return ins;
+}
+
+'use strict';
+/* =====================================================================
    TRANSITOPIA — lieux d'intérêt + construction ferroviaire
    (gares orientables, voies ferrées en longues courbes)
    ===================================================================== */
@@ -6336,9 +6687,11 @@ const Render = {
         const arr = buckets[c * 5 + bk]; if (!arr.length) continue;
         ctx.beginPath();
         for (let i = 0; i < arr.length; i += 4) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i + 2], arr[i + 3]); }
-        ctx.lineWidth = baseW[c] * zf;
+        // carte dessinée : les rues y sont déjà peintes, le trafic n'est qu'un fin liseré central
+        const dz = G.s.settings.base === 'dessin';
+        ctx.lineWidth = baseW[c] * zf * (dz ? 0.4 : 1);
         ctx.strokeStyle = TR_COL[bk];
-        ctx.globalAlpha = (c === 4 ? 0.6 : 0.85) * (1 - 0.55 * (this.nf || 0));
+        ctx.globalAlpha = (c === 4 ? 0.6 : 0.85) * (dz ? 0.8 : 1) * (1 - 0.55 * (this.nf || 0));
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -7424,8 +7777,7 @@ const UI = {
     const p = G.map.getPane('tilePane');
     if (!p) return;
     const k = zoomDark ? 1 - 0.8 * nf : 1;
-    if (G.s.settings.base === 'pale') p.style.filter = `grayscale(1) sepia(.18) contrast(.62) brightness(${(1.28 * k).toFixed(2)})`;
-    else p.style.filter = k < 1 ? `brightness(${k.toFixed(2)}) saturate(${(1 - 0.4 * nf).toFixed(2)})` : 'none';
+    p.style.filter = k < 1 ? `brightness(${k.toFixed(2)}) saturate(${(1 - 0.4 * nf).toFixed(2)})` : 'none';
     if (Math.abs(nf - (this.lastNf ?? -1)) > 0.01) { this.lastNf = nf; Render.dirty = true; }
   },
 
@@ -7991,7 +8343,7 @@ const SHEETS = {
       title: `Menu <small class="ver">version ${APP_VERSION}</small>`,
       html: `${section('Sauvegardes')}<p class="sub">Sauvegarde automatique chaque nuit de jeu et à la fermeture, dans l’emplacement ${s.slot}.</p>${slots}
       ${section('Affichage')}
-      <div class="vrow stack"><div><b>Fond de carte</b></div><div class="seg">${[['pale', 'Épurée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
+      <div class="vrow stack"><div><b>Fond de carte</b></div><div class="seg">${[['dessin', 'Dessinée'], ['photo', 'Photo'], ['plan', 'Plan IGN']].map(([v, l]) => `<button class="${s.settings.base === v ? 'on' : ''}" data-act="base" data-arg="${v}">${l}</button>`).join('')}</div></div>
       ${tg('pois', 'Lieux (gares, hôpitaux, mairies…)')}${tg('lights', 'Éclairage de nuit (lampadaires, phares)')}${tg('traffic', 'Trafic routier coloré')}${tg('zones', 'Zones et prix')}${tg('fill', 'Remplissage des véhicules')}${tg('names', 'Noms des arrêts')}
       <div class="vrow stack"><div><b>Carte de chaleur</b><small>Colore les arrêts ou les lignes selon un indicateur du jour</small></div><div class="seg">${[['', 'Aucune'], ['pax', 'Affluence'], ['mec', 'Mécontents'], ['profit', 'Rentabilité']].map(([v, l]) => `<button class="${(s.settings.heat || '') === v ? 'on' : ''}" data-act="heat" data-arg="${v}">${l}</button>`).join('')}</div></div>
       <div class="vrow stack"><div><b>Pause automatique</b><small>Le jeu s’arrête à l’arrivée d’une notification de ce niveau</small></div><div class="seg">${[['choices', 'Choix'], ['major', 'Importantes'], ['all', 'Toutes']].map(([v, l]) => `<button class="${(s.settings.notifPause || 'choices') === v ? 'on' : ''}" data-act="notifPause" data-arg="${v}">${l}</button>`).join('')}</div></div>
@@ -8468,7 +8820,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.18.0';
+const APP_VERSION = '1.19.0';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
@@ -8592,7 +8944,7 @@ const ACT = {
     const cost = Math.round(km * 90000 * G.s.costMul / 1000) * 1000;
     UX.confirmSpend(cost, `Couloirs de bus sur la ligne ${Lines.label(l)}`, () => {
       if (Eco.spend(cost, 'capex')) {
-        l.busLane = true; l.laneKm = km; Sim.lineQuality(l);
+        l.busLane = true; l.laneKm = km; Sim.lineQuality(l); Dessin.refresh();
         UX.undo('Couloirs de bus aménagés sur la ligne ' + Lines.label(l) + '.', () => { l.busLane = false; UX.refund(cost, 'capex'); Sim.lineQuality(l); UI.refreshSheet(); });
       }
       UI.refreshSheet();
@@ -8873,18 +9225,35 @@ const Game = {
   initMap() {
     if (G.map) return;
     G.map = L.map('map', { zoomControl: false, zoomSnap: 0.5, zoomDelta: 0.5, maxZoom: 19.5, minZoom: 6, maxBounds: [[40.8, -6.5], [52, 10.5]], maxBoundsViscosity: 0.8, tap: true });
-    this.baseLayers.photo = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', { maxNativeZoom: 19, maxZoom: 20, attribution: '© IGN Géoplateforme · © contributeurs OpenStreetMap' });
-    this.baseLayers.plan = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', { maxNativeZoom: 18, maxZoom: 20, attribution: '© IGN Géoplateforme · © contributeurs OpenStreetMap' });
+    const ORTHO = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+    const PLAN = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+    const at = '© IGN Géoplateforme · © contributeurs OpenStreetMap';
+    // keepBuffer : les dalles autour de la vue restent en mémoire (6 rangées au lieu de 2)
+    const opt = { maxZoom: 20, attribution: at, keepBuffer: 6, updateWhenZooming: false };
+    this.baseLayers.photo = L.tileLayer(ORTHO, { ...opt, maxNativeZoom: 19 });
+    this.baseLayers.plan = L.tileLayer(PLAN, { ...opt, maxNativeZoom: 18 });
+    // sous-couches « de secours » : la même carte en basse définition (peu de dalles couvrent une grande surface),
+    // affichée sous la carte nette : en dézoomant, les bords sont flous le temps du chargement au lieu d'être blancs
+    const under = { maxZoom: 20, maxNativeZoom: 11, keepBuffer: 4, updateWhenZooming: false, className: 'tl-under' };
+    this.underLayers = { photo: L.tileLayer(ORTHO, under), plan: L.tileLayer(PLAN, under) };
+    this.baseLayers.dessin = Dessin.make(); // carte dessinée à partir de la photo et des données IGN
     G.map.attributionControl.setPrefix(false);
     G.map.on('click', (e) => this.onTap(e));
     Render.init();
   },
   setBase() {
-    const want = G.s.settings.base === 'plan' ? 'plan' : 'photo';
+    const want = G.s.settings.base === 'plan' ? 'plan' : G.s.settings.base === 'dessin' ? 'dessin' : 'photo';
+    const uw = want === 'plan' ? 'plan' : 'photo';
+    for (const [k, lay] of Object.entries(this.underLayers)) {
+      if (k === uw && !G.map.hasLayer(lay)) { lay.addTo(G.map); lay.setZIndex(0); }
+      if (k !== uw && G.map.hasLayer(lay)) G.map.removeLayer(lay);
+    }
     for (const [k, lay] of Object.entries(this.baseLayers)) {
-      if (k === want && !G.map.hasLayer(lay)) lay.addTo(G.map);
+      if (k === want && !G.map.hasLayer(lay)) { lay.addTo(G.map); lay.setZIndex(1); }
       if (k !== want && G.map.hasLayer(lay)) G.map.removeLayer(lay);
     }
+    // fond de la carte sous les dalles : teinte moyenne de la photo, ou papier pour le plan
+    $('#map').classList.toggle('bg-photo', want !== 'plan');
   },
   onTap(e) {
     if (!G.ready) return;
@@ -9001,6 +9370,7 @@ const Game = {
     else G.map.setView([G.s.city.lat, G.s.city.lon], 14.5, { animate: false });
     if (!G.s.rail) G.s.rail = { stations: [], tracks: [] };
     Tuto.normalize(isNew);
+    if (G.s.settings.base === 'pale') G.s.settings.base = 'dessin'; // l'ancien fond « épuré » devient le fond dessiné
     if (G.s.settings.pois === undefined) G.s.settings.pois = true;
     if (G.s.settings.lights === undefined) G.s.settings.lights = true;
     if (!G.s.settings.notif) G.s.settings.notif = 'all';

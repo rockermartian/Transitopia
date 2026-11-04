@@ -6061,8 +6061,8 @@ const Render = {
           if (z >= 12) { ctx.strokeStyle = nf > 0.3 ? 'rgba(255,236,200,.22)' : 'rgba(35,35,35,.16)'; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke(); }
           if (works.has(zn.code)) { ctx.strokeStyle = EV_COL.works; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]); }
         } else {
-          const zr = Math.round(244 - 236 * nf), zg = Math.round(242 - 230 * nf), zb = Math.round(236 - 206 * nf);
-          ctx.fillStyle = `rgba(${zr},${zg},${zb},${((buyable ? 0.42 : 0.7) * (1 - 0.35 * nf)).toFixed(3)})`;
+          // voile blanc, visible aussi de nuit (un peu plus léger pour ne pas éblouir)
+          ctx.fillStyle = `rgba(244,242,236,${((buyable ? 0.42 : 0.7) * (1 - 0.45 * nf)).toFixed(3)})`;
           ctx.fill('evenodd');
           if (buyable) {
             ctx.strokeStyle = nf > 0.3 ? 'rgba(255,214,120,.7)' : 'rgba(35,35,35,.45)'; ctx.lineWidth = nf > 0.3 ? 1.6 : 1.3; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
@@ -8225,7 +8225,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.17.1';
+const APP_VERSION = '1.17.2';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();

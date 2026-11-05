@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=Patrick+Hand&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -25,8 +25,8 @@
   --paper:#FFF6E3; --panel:#FFFCF4; --panel-2:#F6ECD6; --panel-3:#EADCBC;
   --ink:#1D2240; --ink-2:#4A4E6E; --muted:#8C8AA0; --line:rgba(29,34,64,.10);
   --accent:#FFC21A; --ok:#3FA34D; --warn:#F28C28; --bad:#EF3E36;
-  --f-display:"Jost","Futura","Century Gothic","Trebuchet MS",sans-serif;
-  --f-body:"Jost","Futura","Century Gothic","Trebuchet MS",sans-serif;
+  --f-display:"Outfit","Jost","Futura","Century Gothic","Trebuchet MS",sans-serif;
+  --f-body:"Outfit","Jost","Futura","Century Gothic","Trebuchet MS",sans-serif;
   --r:12px; --nav-h:62px;
   --shadow:0 2px 10px rgba(29,34,64,.10),0 1px 2px rgba(29,34,64,.08);
   --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
@@ -367,14 +367,13 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
 .timeline i{display:block;height:100%;background:var(--ink);border-radius:3px}
 /* ===== thème « ligne claire » : uniquement avec le fond de carte Dessinée =====
    encre fine et régulière, aplats francs, ombres hachurées cernées, rehauts blancs, lettrage à la main */
-body.th-bd{--f-display:"Patrick Hand","Comic Sans MS",cursive;--f-body:"Patrick Hand","Comic Sans MS",cursive;font-synthesis:none;--r:7px;--line:rgba(29,34,64,.24);--shadow:none;
-  --bd-sh:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Cdefs%3E%3CclipPath id='c'%3E%3Cpath d='M12 5H17V17H5V12H12Z'/%3E%3C/clipPath%3E%3C/defs%3E%3Cpath clip-path='url(%23c)' d='M3 0L0 3 M6 0L0 6 M9 0L0 9 M12 0L0 12 M15 0L0 15 M18 0L0 18 M21 0L0 21 M24 0L0 24 M27 0L0 27 M30 0L0 30 M33 0L0 33 M36 0L0 36 M39 0L0 39' stroke='%231D2240' stroke-width='.75' fill='none'/%3E%3Cpath d='M12 5H17.4V17.4H5V12' stroke='%231D2240' stroke-width='1.3' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E");--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .11 0 0 0 0 .13 0 0 0 0 .25 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");--hl:inset 3px 3px 0 rgba(255,255,255,.6);--cap:#FFE9A6;font-size:16.5px}
+body.th-bd{--r:7px;--line:rgba(29,34,64,.24);--shadow:none;
+  --bd-sh:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Cdefs%3E%3CclipPath id='c'%3E%3Cpath d='M12 5H17V17H5V12H12Z'/%3E%3C/clipPath%3E%3C/defs%3E%3Cpath clip-path='url(%23c)' d='M3 0L0 3 M6 0L0 6 M9 0L0 9 M12 0L0 12 M15 0L0 15 M18 0L0 18 M21 0L0 21 M24 0L0 24 M27 0L0 27 M30 0L0 30 M33 0L0 33 M36 0L0 36 M39 0L0 39' stroke='%231D2240' stroke-width='.75' fill='none'/%3E%3Cpath d='M12 5H17.4V17.4H5V12' stroke='%231D2240' stroke-width='1.3' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E");--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .11 0 0 0 0 .13 0 0 0 0 .25 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");--hl:inset 3px 3px 0 rgba(255,255,255,.6);--cap:#FFE9A6}
 body.th-bd :is(.tplate,#top .icon-b,#card,#buildbar,#chip,#toasts .toast,.nban,#speedMenu,#heatChip,#snacks .toast){
   border-style:solid;border-color:transparent;border-width:0 6px 6px 0;border-image:var(--bd-sh) 6 / 6px round;background-clip:padding-box;
   background-color:var(--panel);background-image:var(--grain);box-shadow:inset 0 0 0 2px var(--ink);border-radius:6px}
 body.th-bd #top .icon-b{border-radius:8px}
 body.th-bd :is(#cash,#clock).on{box-shadow:inset 0 0 0 3.5px var(--ink)}
-body.th-bd .tplate b{font-size:20px;line-height:1.1}
 body.th-bd .tplate{padding-top:4px}
 body.th-bd .nban{box-shadow:inset 0 0 0 2px var(--ink),inset 7px 0 0 var(--nc,#999)}
 body.th-bd #buildbar{border-radius:10px}
@@ -388,12 +387,11 @@ body.th-bd #tuto.tuto-top::after{top:100%;left:37px;border-width:9px 9px 0 0;bor
 body.th-bd #tuto.tuto-bottom::before{bottom:100%;border-width:0 14px 14px 0;border-bottom-color:var(--ink)}
 body.th-bd #tuto.tuto-bottom::after{bottom:100%;left:37px;border-width:0 9px 9px 0;border-bottom-color:#FFFDF5;margin-bottom:-1px}
 body.th-bd #tuto .tuto-h b,body.th-bd #tuto p b,body.th-bd #tuto .tuto-hint{color:var(--ink);background:linear-gradient(transparent 58%,#FFD75E 58%,#FFD75E 92%,transparent 92%)}
-body.th-bd #tuto .tuto-h b{font-size:18px}
 body.th-bd #tuto .btn.ghost{color:var(--ink-2)}
 body.th-bd #tuto .btn.primary{background:var(--accent);color:var(--ink)}
 /* panneaux du bas */
 body.th-bd #nav{background:var(--panel) var(--grain);box-shadow:0 -2.5px 0 var(--ink)}
-body.th-bd .nav-b{font-size:13px;color:var(--ink-2)}
+body.th-bd .nav-b{color:var(--ink-2)}
 body.th-bd .nav-b.on .ic{box-shadow:inset 2px 2px 0 rgba(255,255,255,.35)}
 body.th-bd .nav-build .ic{box-shadow:inset 0 0 0 2px var(--ink),var(--hl)}
 body.th-bd .dot{box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px var(--ink)}
@@ -432,6 +430,11 @@ body.th-bd .sec::after{content:"";display:block;width:42px;border-top:2px solid 
 body.th-bd .lrow-v b,body.th-bd .card-t b,body.th-bd .plate,body.th-bd .big-num,body.th-bd .modecard b,body.th-bd .staff-h b{font-weight:700}
 body.th-bd .nrow.unread{background:rgba(255,215,94,.28)}
 body.th-bd .sw.on{box-shadow:0 0 0 3px var(--panel),0 0 0 5px var(--ink)}
+/* Outfit : les petits textes prennent un cran de graisse pour rester lisibles */
+small,.tplate small,.nrow .nr-t,.tag,.credits,.cityrow .cr-p,.gauge small,.chnote,.sm-it small,.staff-h small,.staffc .nextlv,.nb-t small{font-weight:500}
+.sec,.lab,.tbl thead th{font-weight:600}
+.nav-b{font-weight:500}.nav-b.on{font-weight:600}
+.chart text{font-weight:600}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (min-width:700px){#sheet{left:auto;right:16px;width:440px;bottom:calc(var(--nav-h) + var(--sab) + 10px);border-radius:22px}}
 </style>
@@ -6477,8 +6480,10 @@ const RailBuild = {
    ===================================================================== */
 
 const TR_COL = ['#3FA34D', '#F28C28', '#F0583A', '#9C1F27'];
-let FONT = '"Jost", "Futura", "Century Gothic", sans-serif';
-function setFont(f) { FONT = f; }
+let FONT = '"Outfit", "Jost", "Futura", "Century Gothic", sans-serif';
+// les étiquettes dessinées sur la carte attendent la police Outfit : redessin dès qu'elle est chargée
+if (document.fonts && document.fonts.load) Promise.all(['500 12px Outfit', '600 12px Outfit', '700 12px Outfit'].map((f) => document.fonts.load(f)))
+  .then(() => { if (typeof G !== 'undefined' && G.ready) { Render.dirty = true; Render.drawStatic(); } }, () => {});
 const INK = '#1D2240';
 const EV_COL = { accident: '#F0583A', big: '#FFC21A', demo: '#7B5CD6', works: '#F28C28' };
 const EV_GLYPH = { accident: '!', big: '★', demo: '⚑', works: '⚒' };
@@ -9104,7 +9109,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.22.0';
+const APP_VERSION = '1.23.0';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
@@ -9410,7 +9415,7 @@ const CHG = {
 const StartScreen = {
   city: null, diff: 'normal', slot: 1, results: [], timer: null, q: '',
   render(view) {
-    document.body.classList.remove('th-bd'); setFont('"Jost", "Futura", "Century Gothic", sans-serif');
+    document.body.classList.remove('th-bd');
     const prev = this.view; this.view = view; this.lastView = prev;
     const box = $('#startBox');
     const last = +localStorage.getItem('corr.last');
@@ -9543,10 +9548,6 @@ const Game = {
     const bd = want === 'dessin';
     if (document.body.classList.contains('th-bd') !== bd) {
       document.body.classList.toggle('th-bd', bd);
-      setFont(bd ? '"Patrick Hand", "Comic Sans MS", cursive' : '"Jost", "Futura", "Century Gothic", sans-serif');
-      const redraw = () => { if (G.ready) { Render.dirty = true; Render.drawStatic(); } };
-      redraw();
-      if (bd && document.fonts && document.fonts.load) document.fonts.load('12px "Patrick Hand"').then(redraw, () => {});
     }
   },
   onTap(e) {

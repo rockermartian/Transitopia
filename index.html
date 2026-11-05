@@ -5646,6 +5646,30 @@ const Dessin = {
     return c;
   },
 
+  /** motifs à la plume, calés sur le monde (raccord entre dalles) : hachures diagonales, traits d'eau */
+  pat(g, kind, r, W) {
+    const key = kind + ':' + r;
+    this._pc = this._pc || {};
+    let c = this._pc[key];
+    if (!c) {
+      c = document.createElement('canvas'); const x = c.getContext('2d');
+      x.strokeStyle = DS.ink; x.lineCap = 'butt';
+      if (kind === 'hatch') {
+        const P = Math.round(4.5 * r); c.width = c.height = P; x.lineWidth = 0.7 * r; x.beginPath();
+        for (const o of [-P, 0, P]) { x.moveTo(o - 1, P + 1); x.lineTo(o + P + 1, -1); }
+        x.stroke();
+      } else { // eau : petits traits horizontaux en quinconce
+        const w = Math.round(26 * r), h = Math.round(11 * r); c.width = w; c.height = h;
+        x.strokeStyle = '#2C78C8'; x.lineWidth = 0.9 * r; x.lineCap = 'round'; x.beginPath();
+        x.moveTo(3 * r, 3 * r); x.lineTo(12 * r, 3 * r); x.moveTo(16 * r, 8.5 * r); x.lineTo(24 * r, 8.5 * r); x.stroke();
+      }
+      this._pc[key] = c;
+    }
+    const pt = g.createPattern(c, 'repeat');
+    if (pt.setTransform) pt.setTransform(new DOMMatrix([1, 0, 0, 1, -(W.ox % c.width), -(W.oy % c.height)]));
+    return pt;
+  },
+
   /* ---------- trait tremblé ---------- */
   /** chemin tremblé : chaque point est décalé selon le bruit du monde (amplitude en pixels, constante) */
   wob(g, pts, closed, W) {
@@ -5682,8 +5706,8 @@ const Dessin = {
     const tok = (t._tok = (t._tok || 0) + 1);
     const X = (mx) => (mx * n - co.x) * S, Y = (my) => (my * n - co.y) * S;
     const mpp = (G.mpu || 1) / (n * S);
-    // tremblement : coordonnées du monde à ce zoom (raccord entre dalles), amplitude ≈ 1,3 px
-    const W = { amp: 1.3 * r, f: 1 / (34 * r), ox: co.x * S, oy: co.y * S, step: 7 * r };
+    // ligne claire : trait fin et assuré, à peine vivant (coordonnées du monde : raccord entre dalles)
+    const W = { amp: 0.45 * r, f: 1 / (70 * r), ox: co.x * S, oy: co.y * S, step: 9 * r };
     const bx0 = co.x / n, by0 = co.y / n, bx1 = (co.x + 1) / n, by1 = (co.y + 1) / n;
     // données d'environnement (parcs, eau…) par carrés de zoom 14 ; bâtiments par carrés de zoom 16
     let env = null, bats = null;
@@ -5735,10 +5759,16 @@ const Dessin = {
       const col = f.k === 'eau' ? DS.water : f.k === 'bois' ? DS.forest : f.k === 'sport' ? DS.sport : f.k === 'cimetiere' ? DS.cem : DS.veg;
       poly(f);
       g.fillStyle = col; g.fill('evenodd');
-      g.strokeStyle = f.k === 'eau' ? DS.waterInk : 'rgba(29,34,64,.45)'; g.lineWidth = (f.k === 'eau' ? 1.4 : 1) * r; g.stroke();
-      // détails à la main
-      if (f.k === 'eau' && z >= 14) this.ripples(g, f, X, Y, S, r);
-      if ((f.k === 'bois' || f.k === 'veg') && z >= 15) this.trees(g, f, X, Y, S, r, z, mpp);
+      if (f.k === 'eau' && z >= 14) { g.globalAlpha = 0.6; g.fillStyle = this.pat(g, 'eau', r, W); g.fill('evenodd'); g.globalAlpha = 1; } // traits d'eau
+      g.strokeStyle = DS.ink; g.lineWidth = (f.k === 'eau' ? 1.1 : 0.9) * r; g.stroke();
+      // lignes blanches des terrains de sport (de près)
+      if (f.k === 'sport' && z >= 16) {
+        const b = f.b, cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+        g.beginPath(); for (const ring of f.r) { const pts = []; for (let i = 0; i < ring.length; i += 2) pts.push(X(cx + (ring[i] - cx) * 0.86), Y(cy + (ring[i + 1] - cy) * 0.86)); this.wob(g, pts, true, W); }
+        g.strokeStyle = '#FFFDF5'; g.lineWidth = 1.2 * r; g.stroke();
+        g.beginPath(); g.moveTo(X(cx), Y(b[3]) + (Y(b[1]) - Y(b[3])) * 0.07); g.lineTo(X(cx), Y(b[1]) - (Y(b[1]) - Y(b[3])) * 0.07); g.stroke();
+      }
+      if ((f.k === 'bois' || f.k === 'veg') && z >= 15) this.trees(g, f, X, Y, S, r, z, mpp, W);
     }
   },
   /** vaguelettes : petits arcs à l'encre bleue, répartis au hasard (mais toujours au même endroit) */
@@ -5755,7 +5785,7 @@ const Dessin = {
     }
   },
   /** arbres en bulles (cercles tremblés) : positions fixes dans le monde, densité selon le zoom */
-  trees(g, f, X, Y, S, r, z, mpp) {
+  trees(g, f, X, Y, S, r, z, mpp, W) {
     const cell = 14 / mpp * (f.k === 'bois' ? 0.8 : 1.3); // un arbre tous les ~14 m
     if (cell < 7 * r) return;
     const b = f.b;
@@ -5769,14 +5799,20 @@ const Dessin = {
       if (!rings.some((pts) => pip(pts, px, py))) continue;
       list.push([px, py, (3.5 + 3 * dsHash(gx, gy, 24)) / mpp, dsHash(gx, gy, 25)]);
     }
-    // ombre, feuillage, contour, petit reflet
-    for (const [x, y, rr] of list) { g.beginPath(); g.arc(x + rr * 0.25, y + rr * 0.3, rr, 0, 7); g.fillStyle = 'rgba(29,34,64,.16)'; g.fill(); }
+    // ombre hachée, feuillage, contour fin, petites boucles à la plume
+    g.beginPath(); for (const [x, y, rr] of list) { g.moveTo(x + rr * 1.3, y + rr * 0.35); g.arc(x + rr * 0.3, y + rr * 0.35, rr, 0, 7); }
+    g.fillStyle = this.pat(g, 'hatch', r, W); g.globalAlpha = 0.75; g.fill(); g.globalAlpha = 1;
     for (const [x, y, rr, hc] of list) {
       g.beginPath(); const pts = []; for (let a = 0; a < 9; a++) { const t = a / 9 * Math.PI * 2, k = 1 + 0.14 * dsHash(Math.round(hc * 1e6), a, 5); pts.push(x + Math.cos(t) * rr * k, y + Math.sin(t) * rr * k); }
       this.wob(g, pts, true, { amp: 0, f: 1, ox: 0, oy: 0, step: 1e9 });
       g.fillStyle = hc < 0.5 ? '#6DBE5A' : '#5AAE4E'; g.fill();
-      g.strokeStyle = 'rgba(29,34,64,.7)'; g.lineWidth = 1 * r; g.stroke();
-      g.beginPath(); g.arc(x - rr * 0.3, y - rr * 0.3, rr * 0.35, 0, 7); g.fillStyle = 'rgba(255,255,255,.28)'; g.fill();
+      g.strokeStyle = DS.ink; g.lineWidth = 0.9 * r; g.stroke();
+      if (rr > 6 * r) { // deux petites boucles de feuillage
+        g.lineWidth = 0.65 * r; g.beginPath();
+        g.arc(x - rr * 0.25, y - rr * 0.1, rr * 0.32, Math.PI * 0.9, Math.PI * 1.7);
+        g.moveTo(x + rr * 0.45, y + rr * 0.2); g.arc(x + rr * 0.2, y + rr * 0.25, rr * 0.25, Math.PI * 1.9, Math.PI * 0.6);
+        g.stroke();
+      }
     }
   },
   segsIn(net, x0, y0, x1, y1) {
@@ -5836,7 +5872,7 @@ const Dessin = {
     }
     L.sort((p, q) => q.c - p.c);
     g.lineCap = 'round'; g.lineJoin = 'round';
-    const ink = Math.max(1.3 * r, 0.9 / mpp);
+    const ink = (z >= 17 ? 1.35 : 1.1) * r; // ligne claire : même épaisseur d'encre partout
     // encre (bordure) de toutes les rues, puis remplissage : les carrefours se fondent proprement
     g.strokeStyle = DS.ink;
     for (const s of L) { g.lineWidth = s.wp + ink * 2; g.stroke(s.p); }
@@ -5888,17 +5924,17 @@ const Dessin = {
       list.push({ pts, h: bt.h, id: bt.i ?? bi });
     }
     const sc = 2 ** (z - 17);
-    const Wb = { ...W, amp: W.amp * 0.6 };
-    // ombre portée en aplat, puis aplat de couleur décalé du contour (comme une impression de BD), puis contour
-    g.fillStyle = 'rgba(29,34,64,.20)';
-    for (const b of list) { const o = r * sc * Math.min(4, 1 + b.h / 8); g.beginPath(); this.wob(g, b.pts.map((v, i) => v + o * (i % 2 ? 0.8 : 1)), true, Wb); g.fill(); }
+    const Wb = { ...W, amp: W.amp * 0.5 };
+    // ombre portée en hachures à la plume (plus longue pour les immeubles hauts), contour de l'ombre
+    g.beginPath();
+    for (const b of list) { const o = r * sc * Math.min(5, 1.2 + b.h / 6); this.wob(g, b.pts.map((v, i) => v + o * (i % 2 ? 0.75 : 1)), true, Wb); }
+    g.fillStyle = this.pat(g, 'hatch', r, W); g.globalAlpha = 0.8; g.fill(); g.globalAlpha = 1;
+    // aplat de couleur exactement dans le contour, puis contour d'encre régulier
     g.lineJoin = 'round';
     for (const b of list) {
       const p = new Path2D(); this.wob(p, b.pts, true, Wb);
-      g.save(); g.translate(0.9 * r, 0.9 * r);
       g.fillStyle = DS.bat[Math.floor(dsHash(b.id, b.pts.length, 31) * DS.bat.length)]; g.fill(p);
-      g.restore();
-      g.strokeStyle = DS.ink; g.lineWidth = Math.max(0.9, 1.1 * r * Math.min(1.4, sc)); g.stroke(p);
+      g.strokeStyle = DS.ink; g.lineWidth = (z >= 18 ? 1.3 : 1.05) * r; g.stroke(p);
     }
   },
 
@@ -8893,7 +8929,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.20.0';
+const APP_VERSION = '1.21.0';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();

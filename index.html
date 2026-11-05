@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -365,6 +365,73 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
 .evcard-ic{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;flex:none;background:#fff;box-shadow:inset 0 0 0 3px var(--c,#1D2240);font:700 20px/1 var(--f-display)}
 .timeline{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;margin:8px 0 2px}
 .timeline i{display:block;height:100%;background:var(--ink);border-radius:3px}
+/* ===== thème « ligne claire » : uniquement avec le fond de carte Dessinée =====
+   encre fine et régulière, aplats francs, ombres hachurées cernées, rehauts blancs, lettrage à la main */
+body.th-bd{--f-display:"Patrick Hand","Comic Sans MS",cursive;--f-body:"Patrick Hand","Comic Sans MS",cursive;font-synthesis:none;--r:7px;--line:rgba(29,34,64,.24);--shadow:none;
+  --bd-sh:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Cdefs%3E%3CclipPath id='c'%3E%3Cpath d='M12 5H17V17H5V12H12Z'/%3E%3C/clipPath%3E%3C/defs%3E%3Cpath clip-path='url(%23c)' d='M3 0L0 3 M6 0L0 6 M9 0L0 9 M12 0L0 12 M15 0L0 15 M18 0L0 18 M21 0L0 21 M24 0L0 24 M27 0L0 27 M30 0L0 30 M33 0L0 33 M36 0L0 36 M39 0L0 39' stroke='%231D2240' stroke-width='.75' fill='none'/%3E%3Cpath d='M12 5H17.4V17.4H5V12' stroke='%231D2240' stroke-width='1.3' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E");--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .11 0 0 0 0 .13 0 0 0 0 .25 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");--hl:inset 3px 3px 0 rgba(255,255,255,.6);--cap:#FFE9A6;font-size:16.5px}
+body.th-bd :is(.tplate,#top .icon-b,#card,#buildbar,#chip,#toasts .toast,.nban,#speedMenu,#heatChip,#snacks .toast){
+  border-style:solid;border-color:transparent;border-width:0 6px 6px 0;border-image:var(--bd-sh) 6 / 6px round;background-clip:padding-box;
+  background-color:var(--panel);background-image:var(--grain);box-shadow:inset 0 0 0 2px var(--ink);border-radius:6px}
+body.th-bd #top .icon-b{border-radius:8px}
+body.th-bd :is(#cash,#clock).on{box-shadow:inset 0 0 0 3.5px var(--ink)}
+body.th-bd .tplate b{font-size:20px;line-height:1.1}
+body.th-bd .tplate{padding-top:4px}
+body.th-bd .nban{box-shadow:inset 0 0 0 2px var(--ink),inset 7px 0 0 var(--nc,#999)}
+body.th-bd #buildbar{border-radius:10px}
+/* bulles et récitatifs */
+body.th-bd #snacks .toast{background-color:var(--cap);color:var(--ink);border-radius:3px}
+body.th-bd .snack-a{color:var(--ink);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+body.th-bd #tuto{background:#FFFDF5 var(--grain);color:var(--ink);border:2.5px solid var(--ink);border-radius:22px;box-shadow:5px 5px 0 rgba(29,34,64,.18)}
+body.th-bd #tuto::before,body.th-bd #tuto::after{content:"";position:absolute;left:34px;border:solid transparent}
+body.th-bd #tuto.tuto-top::before{top:100%;border-width:14px 14px 0 0;border-top-color:var(--ink);margin-top:0}
+body.th-bd #tuto.tuto-top::after{top:100%;left:37px;border-width:9px 9px 0 0;border-top-color:#FFFDF5;margin-top:-1px}
+body.th-bd #tuto.tuto-bottom::before{bottom:100%;border-width:0 14px 14px 0;border-bottom-color:var(--ink)}
+body.th-bd #tuto.tuto-bottom::after{bottom:100%;left:37px;border-width:0 9px 9px 0;border-bottom-color:#FFFDF5;margin-bottom:-1px}
+body.th-bd #tuto .tuto-h b,body.th-bd #tuto p b,body.th-bd #tuto .tuto-hint{color:var(--ink);background:linear-gradient(transparent 58%,#FFD75E 58%,#FFD75E 92%,transparent 92%)}
+body.th-bd #tuto .tuto-h b{font-size:18px}
+body.th-bd #tuto .btn.ghost{color:var(--ink-2)}
+body.th-bd #tuto .btn.primary{background:var(--accent);color:var(--ink)}
+/* panneaux du bas */
+body.th-bd #nav{background:var(--panel) var(--grain);box-shadow:0 -2.5px 0 var(--ink)}
+body.th-bd .nav-b{font-size:13px;color:var(--ink-2)}
+body.th-bd .nav-b.on .ic{box-shadow:inset 2px 2px 0 rgba(255,255,255,.35)}
+body.th-bd .nav-build .ic{box-shadow:inset 0 0 0 2px var(--ink),var(--hl)}
+body.th-bd .dot{box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px var(--ink)}
+body.th-bd #sheet{background:var(--panel) var(--grain);border:2.5px solid var(--ink);border-bottom:0;border-radius:10px 10px 0 0;box-shadow:none}
+body.th-bd .sheet-h{padding-top:16px}
+body.th-bd .sheet-h::before{background:var(--ink);opacity:.55}
+body.th-bd .sheet-h h2{flex:0 1 auto;margin-right:auto;background:var(--cap);box-shadow:inset 0 0 0 2px var(--ink),var(--hl);padding:5px 12px 3px;border-radius:3px;font-weight:700;transform:rotate(-.6deg)}
+body.th-bd .modal-box{background:var(--panel) var(--grain);border:2.5px solid var(--ink);border-bottom:0;border-radius:12px 12px 0 0}
+body.th-bd #modal{background:repeating-linear-gradient(-45deg,rgba(29,34,64,.22) 0 1px,transparent 1px 5px),rgba(29,34,64,.28)}
+body.th-bd #plan{background:var(--paper) var(--grain)}
+/* boutons : encre + rehaut blanc côté lumière */
+body.th-bd .btn{border-radius:9px;box-shadow:inset 0 0 0 2px var(--ink),var(--hl);font-weight:700}
+body.th-bd .btn.primary{box-shadow:inset 0 0 0 2px var(--ink),inset 3px 3px 0 rgba(255,255,255,.25)}
+body.th-bd .btn.danger{box-shadow:inset 0 0 0 2px var(--bad)}
+body.th-bd .btn.on{box-shadow:inset 0 0 0 3.5px var(--ink),var(--hl)}
+body.th-bd .btn.big{border-radius:12px}
+body.th-bd .btn:active:not(:disabled){transform:translate(1px,1px)}
+body.th-bd .icon-b:active{transform:translate(1px,1px)}
+body.th-bd .spd{border-radius:7px;box-shadow:inset 2px 2px 0 rgba(255,255,255,.3)}
+body.th-bd .spd.pz{box-shadow:inset 0 0 0 1.5px var(--ink)}
+body.th-bd .seg{border-radius:9px;box-shadow:inset 0 0 0 1.5px var(--ink)}
+body.th-bd .seg button{border-radius:6px;font-weight:700}
+body.th-bd .seg button.on{box-shadow:inset 2px 2px 0 rgba(255,255,255,.3)}
+body.th-bd .stepper{border-radius:9px;box-shadow:inset 0 0 0 1.5px var(--ink)}
+body.th-bd :is(.kpis>div,.catrow,.modecard,.staffc,.note,.wxbig,.chart,.cityrow){border-radius:8px;box-shadow:inset 0 0 0 1.5px var(--ink),var(--hl);background-image:var(--grain)}
+body.th-bd .catrow.on{box-shadow:inset 0 0 0 3.5px var(--ink)}
+body.th-bd .kpis b{font-weight:700}
+body.th-bd .tag{box-shadow:inset 0 0 0 1px currentColor}
+body.th-bd :is(.fillbar,.timeline){box-shadow:inset 0 0 0 1px var(--ink)}
+body.th-bd .gauge .gbar{box-shadow:inset 0 0 0 1.5px var(--ink)}
+body.th-bd .tgl input{box-shadow:inset 0 0 0 1.5px var(--ink)}
+body.th-bd .tgl input::after{box-shadow:0 0 0 1.5px var(--ink)}
+body.th-bd select,body.th-bd .inp{border-radius:7px;box-shadow:inset 0 0 0 1.5px var(--ink)}
+body.th-bd .sec{color:var(--ink-2);font-weight:700;letter-spacing:.1em}
+body.th-bd .sec::after{content:"";display:block;width:42px;border-top:2px solid var(--ink);margin-top:5px}
+body.th-bd .lrow-v b,body.th-bd .card-t b,body.th-bd .plate,body.th-bd .big-num,body.th-bd .modecard b,body.th-bd .staff-h b{font-weight:700}
+body.th-bd .nrow.unread{background:rgba(255,215,94,.28)}
+body.th-bd .sw.on{box-shadow:0 0 0 3px var(--panel),0 0 0 5px var(--ink)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (min-width:700px){#sheet{left:auto;right:16px;width:440px;bottom:calc(var(--nav-h) + var(--sab) + 10px);border-radius:22px}}
 </style>
@@ -5654,8 +5721,8 @@ const Dessin = {
     if (!c) {
       c = document.createElement('canvas'); const x = c.getContext('2d');
       x.strokeStyle = DS.ink; x.lineCap = 'butt';
-      if (kind === 'hatch') {
-        const P = Math.round(4.5 * r); c.width = c.height = P; x.lineWidth = 0.7 * r; x.beginPath();
+      if (kind === 'hatch' || kind === 'hatch2') { // hatch2 : ombres, hachures serrées
+        const P = Math.max(3, Math.round((kind === 'hatch2' ? 3.1 : 4.5) * r)); c.width = c.height = P; x.lineWidth = (kind === 'hatch2' ? 0.6 : 0.7) * r; x.beginPath();
         for (const o of [-P, 0, P]) { x.moveTo(o - 1, P + 1); x.lineTo(o + P + 1, -1); }
         x.stroke();
       } else { // eau : petits traits horizontaux en quinconce
@@ -5668,6 +5735,31 @@ const Dessin = {
     const pt = g.createPattern(c, 'repeat');
     if (pt.setTransform) pt.setTransform(new DOMMatrix([1, 0, 0, 1, -(W.ox % c.width), -(W.oy % c.height)]));
     return pt;
+  },
+
+  /** ombre à la plume sur un calque à part : hachures serrées + contour d'encre autour de la silhouette réunie */
+  shade(g, S, r, W, add, bb) {
+    const c = this._sh || (this._sh = document.createElement('canvas'));
+    if (c.width !== S) { c.width = c.height = S; }
+    const x = c.getContext('2d');
+    const x0 = Math.max(0, Math.floor(bb[0] - 3 * r)), y0 = Math.max(0, Math.floor(bb[1] - 3 * r)), x1 = Math.min(S, Math.ceil(bb[2] + 3 * r)), y1 = Math.min(S, Math.ceil(bb[3] + 3 * r));
+    if (x1 <= x0 || y1 <= y0) return;
+    x.clearRect(x0, y0, x1 - x0, y1 - y0);
+    x.save(); x.beginPath(); x.rect(x0, y0, x1 - x0, y1 - y0); x.clip();
+    x.beginPath(); add(x);
+    x.lineJoin = 'round'; x.strokeStyle = DS.ink; x.lineWidth = 1.7 * r; x.stroke(); // seule la moitié extérieure restera
+    x.globalCompositeOperation = 'destination-out'; x.fill();
+    x.globalCompositeOperation = 'source-over'; x.fillStyle = this.pat(x, 'hatch2', r, W); x.fill();
+    x.restore();
+    g.drawImage(c, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
+  },
+  /** ajoute un polygone toujours dans le même sens (les silhouettes se réunissent sans trou) */
+  addP(x, pts) {
+    let a = 0; const n = pts.length;
+    for (let i = 0; i < n; i += 2) { const j = (i + 2) % n; a += pts[i] * pts[j + 1] - pts[j] * pts[i + 1]; }
+    if (a >= 0) { x.moveTo(pts[0], pts[1]); for (let i = 2; i < n; i += 2) x.lineTo(pts[i], pts[i + 1]); }
+    else { x.moveTo(pts[n - 2], pts[n - 1]); for (let i = n - 4; i >= 0; i -= 2) x.lineTo(pts[i], pts[i + 1]); }
+    x.closePath();
   },
 
   /* ---------- trait tremblé ---------- */
@@ -5800,13 +5892,19 @@ const Dessin = {
       list.push([px, py, (3.5 + 3 * dsHash(gx, gy, 24)) / mpp, dsHash(gx, gy, 25)]);
     }
     // ombre hachée, feuillage, contour fin, petites boucles à la plume
-    g.beginPath(); for (const [x, y, rr] of list) { g.moveTo(x + rr * 1.3, y + rr * 0.35); g.arc(x + rr * 0.3, y + rr * 0.35, rr, 0, 7); }
-    g.fillStyle = this.pat(g, 'hatch', r, W); g.globalAlpha = 0.75; g.fill(); g.globalAlpha = 1;
+    if (!list.length) return;
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const [x, y, rr] of list) { bx0 = Math.min(bx0, x - rr); by0 = Math.min(by0, y - rr); bx1 = Math.max(bx1, x + rr * 1.7); by1 = Math.max(by1, y + rr * 1.5); }
+    this.shade(g, S, r, W, (x) => { for (const [px, py, rr] of list) { x.moveTo(px + rr * 1.45, py + rr * 0.45); x.arc(px + rr * 0.45, py + rr * 0.45, rr, 0, Math.PI * 2); } }, [bx0, by0, bx1, by1]);
     for (const [x, y, rr, hc] of list) {
       g.beginPath(); const pts = []; for (let a = 0; a < 9; a++) { const t = a / 9 * Math.PI * 2, k = 1 + 0.14 * dsHash(Math.round(hc * 1e6), a, 5); pts.push(x + Math.cos(t) * rr * k, y + Math.sin(t) * rr * k); }
       this.wob(g, pts, true, { amp: 0, f: 1, ox: 0, oy: 0, step: 1e9 });
       g.fillStyle = hc < 0.5 ? '#6DBE5A' : '#5AAE4E'; g.fill();
       g.strokeStyle = DS.ink; g.lineWidth = 0.9 * r; g.stroke();
+      if (rr > 4 * r) { // rehaut blanc doux côté lumière
+        g.beginPath(); g.arc(x, y, rr * 0.66, Math.PI * 1.02, Math.PI * 1.42);
+        g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineCap = 'round'; g.lineWidth = 1.1 * r; g.stroke(); g.strokeStyle = DS.ink;
+      }
       if (rr > 6 * r) { // deux petites boucles de feuillage
         g.lineWidth = 0.65 * r; g.beginPath();
         g.arc(x - rr * 0.25, y - rr * 0.1, rr * 0.32, Math.PI * 0.9, Math.PI * 1.7);
@@ -5925,17 +6023,93 @@ const Dessin = {
     }
     const sc = 2 ** (z - 17);
     const Wb = { ...W, amp: W.amp * 0.5 };
-    // ombre portée en hachures à la plume (plus longue pour les immeubles hauts), contour de l'ombre
-    g.beginPath();
-    for (const b of list) { const o = r * sc * Math.min(5, 1.2 + b.h / 6); this.wob(g, b.pts.map((v, i) => v + o * (i % 2 ? 0.75 : 1)), true, Wb); }
-    g.fillStyle = this.pat(g, 'hatch', r, W); g.globalAlpha = 0.8; g.fill(); g.globalAlpha = 1;
-    // aplat de couleur exactement dans le contour, puis contour d'encre régulier
+    // ombre portée : silhouette balayée par la lumière (bords à l'ombre + bâtiment décalé), hachures serrées cernées d'encre
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const b of list) {
+      const L = r * sc * Math.min(5, 1.2 + b.h / 6); b.ox = L; b.oy = L * 0.75;
+      let a = 0; const P = b.pts, n = P.length;
+      for (let i = 0; i < n; i += 2) { const j = (i + 2) % n; a += P[i] * P[j + 1] - P[j] * P[i + 1]; if (P[i] < bx0) bx0 = P[i]; if (P[i] > bx1) bx1 = P[i]; if (P[i + 1] < by0) by0 = P[i + 1]; if (P[i + 1] > by1) by1 = P[i + 1]; }
+      b.sg = a >= 0 ? 1 : -1;
+    }
+    let om = 0; for (const b of list) om = Math.max(om, b.ox);
+    if (list.length) this.shade(g, S, r, W, (x) => {
+      for (const b of list) {
+        const P = b.pts, n = P.length, ox = b.ox, oy = b.oy;
+        this.addP(x, P.map((v, i) => v + (i % 2 ? oy : ox)));
+        for (let i = 0; i < n; i += 2) {
+          const j = (i + 2) % n, dx = P[j] - P[i], dy = P[j + 1] - P[i + 1];
+          if (b.sg * (dy * ox - dx * oy) > 0) this.addP(x, [P[i], P[i + 1], P[j], P[j + 1], P[j] + ox, P[j + 1] + oy, P[i] + ox, P[i + 1] + oy]);
+        }
+      }
+    }, [bx0, by0, bx1 + om, by1 + om]);
+    // aplat de couleur exactement dans le contour, rehauts blancs côté lumière, accidents à l'encre, contour régulier
     g.lineJoin = 'round';
     for (const b of list) {
       const p = new Path2D(); this.wob(p, b.pts, true, Wb);
       g.fillStyle = DS.bat[Math.floor(dsHash(b.id, b.pts.length, 31) * DS.bat.length)]; g.fill(p);
+      if (z >= 16) this.marks(g, p, b, r, z, sc);
       g.strokeStyle = DS.ink; g.lineWidth = (z >= 18 ? 1.3 : 1.05) * r; g.stroke(p);
     }
+  },
+  /** rehauts blancs sur les arêtes éclairées, puis (de près) fissures, joints de pierre et éclats à l'encre noire */
+  marks(g, p, b, r, z, sc) {
+    const P = b.pts, n = P.length, sg = b.sg, lx = -0.8, ly = -0.6; // lumière venant du haut à gauche
+    const edges = [];
+    for (let i = 0; i < n; i += 2) {
+      const j = (i + 2) % n, dx = P[j] - P[i], dy = P[j + 1] - P[i + 1], len = Math.hypot(dx, dy); if (len < 1e-6) continue;
+      const nx = sg * dy / len, ny = -sg * dx / len; // normale extérieure
+      edges.push({ ax: P[i], ay: P[i + 1], ux: dx / len, uy: dy / len, nx, ny, len, lit: nx * lx + ny * ly });
+    }
+    g.save(); g.clip(p); g.lineCap = 'round';
+    // rehauts : trait blanc doux juste à l'intérieur des arêtes tournées vers la lumière
+    g.strokeStyle = 'rgba(255,255,255,.82)'; g.lineWidth = 1.2 * r; g.beginPath();
+    for (const e of edges) {
+      if (e.lit < 0.3 || e.len < 7 * r) continue;
+      const ins = 1.9 * r, cut = Math.min(e.len * 0.2, 2.5 * r), k = Math.min(1, e.lit * 1.4);
+      const sx = e.ax - e.nx * ins + e.ux * cut, sy = e.ay - e.ny * ins + e.uy * cut, L = (e.len - 2 * cut) * k;
+      g.moveTo(sx, sy); g.lineTo(sx + e.ux * L, sy + e.uy * L);
+    }
+    g.stroke();
+    if (z >= 17) {
+      const H = (k) => dsHash(b.id, k, 77), u = r * Math.min(2.4, Math.max(0.8, sc));
+      let bw = Infinity; for (const e of edges) bw = Math.min(bw, e.len);
+      g.strokeStyle = DS.ink; g.lineWidth = 0.6 * r; g.beginPath();
+      if (edges.length && bw > 10 * r) {
+        // fissure : part d'un bord, avance en zigzag vers l'intérieur, une petite branche
+        if (H(1) < 0.35) {
+          const e = edges[Math.floor(H(2) * edges.length)], t = 0.25 + 0.5 * H(3);
+          let x = e.ax + e.ux * e.len * t, y = e.ay + e.uy * e.len * t, ang = Math.atan2(-e.ny, -e.nx) + (H(4) - 0.5) * 0.8;
+          g.moveTo(x, y);
+          for (let s = 0; s < 4; s++) {
+            ang += (H(10 + s) - 0.5) * 1.3; const l = (2.5 + 2.5 * H(20 + s)) * u;
+            x += Math.cos(ang) * l; y += Math.sin(ang) * l; g.lineTo(x, y);
+            if (s === 1) { const ba = ang + (H(30) < 0.5 ? 0.9 : -0.9), bl = 3 * u; g.moveTo(x, y); g.lineTo(x + Math.cos(ba) * bl, y + Math.sin(ba) * bl); g.moveTo(x, y); }
+          }
+        }
+        // joints de pierre : deux rangées de petits traits décalés le long d'un bord
+        if (H(5) < 0.4) {
+          const e = edges[Math.floor(H(6) * edges.length)];
+          if (e.len > 14 * r) {
+            const st = 3.4 * u, gap = 1.3 * u, t0 = e.len * (0.15 + 0.3 * H(7));
+            for (let row = 0; row < 2; row++) {
+              const ins = (2.6 + row * 2.4) * u; let t = t0 + (row ? (st + gap) / 2 : 0);
+              for (let c = 0; c < 3 - row && t + st < e.len - 2 * u; c++, t += st + gap) {
+                const sx = e.ax + e.ux * t - e.nx * ins, sy = e.ay + e.uy * t - e.ny * ins;
+                g.moveTo(sx, sy); g.lineTo(sx + e.ux * st, sy + e.uy * st);
+                if (c === 0 || H(40 + c + row * 3) < 0.6) { g.moveTo(sx, sy); g.lineTo(sx - e.nx * 2 * u, sy - e.ny * 2 * u); } // joint vertical
+              }
+            }
+          }
+        }
+        // éclats : petites encoches aux coins
+        if (H(8) < 0.35) {
+          const e = edges[Math.floor(H(9) * edges.length)], cx = e.ax, cy = e.ay, l = 2.2 * u;
+          g.moveTo(cx + e.ux * l * 1.4, cy + e.uy * l * 1.4); g.lineTo(cx + e.ux * l * 0.6 - e.nx * l, cy + e.uy * l * 0.6 - e.ny * l); g.lineTo(cx - e.nx * l * 0.3 + e.ux * 0.2 * l, cy - e.ny * l * 0.3 + e.uy * 0.2 * l);
+        }
+      }
+      g.stroke();
+    }
+    g.restore();
   },
 
   /* ---------- données ---------- */
@@ -6303,7 +6477,8 @@ const RailBuild = {
    ===================================================================== */
 
 const TR_COL = ['#3FA34D', '#F28C28', '#F0583A', '#9C1F27'];
-const FONT = '"Jost", "Futura", "Century Gothic", sans-serif';
+let FONT = '"Jost", "Futura", "Century Gothic", sans-serif';
+function setFont(f) { FONT = f; }
 const INK = '#1D2240';
 const EV_COL = { accident: '#F0583A', big: '#FFC21A', demo: '#7B5CD6', works: '#F28C28' };
 const EV_GLYPH = { accident: '!', big: '★', demo: '⚑', works: '⚒' };
@@ -8929,7 +9104,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.21.0';
+const APP_VERSION = '1.22.0';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
@@ -9235,6 +9410,7 @@ const CHG = {
 const StartScreen = {
   city: null, diff: 'normal', slot: 1, results: [], timer: null, q: '',
   render(view) {
+    document.body.classList.remove('th-bd'); setFont('"Jost", "Futura", "Century Gothic", sans-serif');
     const prev = this.view; this.view = view; this.lastView = prev;
     const box = $('#startBox');
     const last = +localStorage.getItem('corr.last');
@@ -9363,6 +9539,15 @@ const Game = {
     }
     // fond de la carte sous les dalles : teinte moyenne de la photo, ou papier pour le plan
     $('#map').classList.toggle('bg-photo', want === 'photo');
+    // interface « ligne claire » avec la carte dessinée (lettrage à la main jusque sur la carte)
+    const bd = want === 'dessin';
+    if (document.body.classList.contains('th-bd') !== bd) {
+      document.body.classList.toggle('th-bd', bd);
+      setFont(bd ? '"Patrick Hand", "Comic Sans MS", cursive' : '"Jost", "Futura", "Century Gothic", sans-serif');
+      const redraw = () => { if (G.ready) { Render.dirty = true; Render.drawStatic(); } };
+      redraw();
+      if (bd && document.fonts && document.fonts.load) document.fonts.load('12px "Patrick Hand"').then(redraw, () => {});
+    }
   },
   onTap(e) {
     if (!G.ready) return;

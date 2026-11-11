@@ -332,6 +332,17 @@ select{font:inherit;color:var(--ink);background:var(--panel-2);border:0;border-r
 .stops span{display:inline-flex;align-items:center}
 .stops i{display:inline-block;width:14px;height:3px;border-radius:2px;background:var(--ink-2);margin:0 6px}
 .modecard{display:flex;gap:14px;align-items:flex-start;width:100%;text-align:left;padding:14px;margin:8px 0;border-radius:18px;background:var(--panel-2)}
+.modecard.locked{opacity:.55;filter:grayscale(.8)}
+.lfeu{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;margin:2px 0 10px;border-radius:14px;background:var(--panel-2)}
+.lfeu i{flex:none;width:14px;height:14px;margin-top:3px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(63,163,77,.2)}
+.lfeu.warn i{background:var(--warn);box-shadow:0 0 0 3px rgba(242,140,40,.2)}.lfeu.bad i{background:var(--bad);box-shadow:0 0 0 3px rgba(239,62,54,.2)}
+.lfeu b{display:block}.lfeu small{color:var(--ink-2)}
+.palier{padding:10px 12px;border-radius:14px;background:var(--panel-2);margin:6px 0}.palier>b{display:block;margin-bottom:6px}.palier small{color:var(--ink-2)}
+.pbar{height:8px;border-radius:6px;background:var(--panel-3);overflow:hidden;margin-bottom:6px}.pbar i{display:block;height:100%;background:var(--accent)}
+.mandat{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.mstar{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;background:var(--panel-2)}
+.mstar>i{font-style:normal;font-size:22px;color:var(--panel-3)}.mstar.on>i{color:var(--accent)}
+.mstar span{flex:1}.mstar b{display:block}.mstar small{color:var(--ink-2)}
 .modecard .pict{margin-top:2px;width:auto;min-width:34px;height:30px}
 .modecard .pict-metro,.modecard .pict-boat{width:30px;min-width:30px}
 .modecard>span:last-child{display:flex;flex-direction:column;gap:3px}
@@ -1721,27 +1732,27 @@ function runTime(d, vc, a, b) {
 
 const CATALOG = {
   bus: [
-    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 14, acc: 1.2 , len: 8 },
-    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 24, acc: 1.0 , len: 12 },
-    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 15, acc: 1.25 , len: 12 },
-    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 28, acc: 0.85 , len: 12 },
-    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 32, acc: 0.9 , len: 18 },
-    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 40, acc: 0.85 , len: 24 },
+    { id: 'b22', name: 'Urbis Mini', desc: 'Minibus 8 m', cap: 22, kmh: 50, price: 95000, op: 28, acc: 1.2 , len: 8 },
+    { id: 'b12', name: 'Urbis 12', desc: 'Standard 12 m diesel', cap: 95, kmh: 50, price: 260000, op: 48, acc: 1.0 , len: 12 },
+    { id: 'b12e', name: 'Urbis 12 E', desc: 'Standard 12 m électrique', cap: 90, kmh: 50, price: 430000, op: 30, acc: 1.25 , len: 12 },
+    { id: 'bdd', name: 'Impériale', desc: 'Bus à étage', cap: 120, kmh: 50, price: 480000, op: 56, acc: 0.85 , len: 12 },
+    { id: 'b18', name: 'Urbis 18', desc: 'Articulé 18 m', cap: 145, kmh: 50, price: 420000, op: 64, acc: 0.9 , len: 18 },
+    { id: 'b24', name: 'Urbis 24', desc: 'BHNS bi-articulé 24 m', cap: 190, kmh: 55, price: 720000, op: 80, acc: 0.85 , len: 24 },
   ],
   metro: [
-    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 70, acc: 1.0 , len: 45 },
-    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 95, acc: 1.0 , len: 75 },
-    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 45, acc: 1.3 , len: 90 },
+    { id: 'm3', name: 'MV 3', desc: 'Rame 3 voitures', cap: 380, kmh: 70, price: 1.6e6, op: 140, acc: 1.0 , len: 45 },
+    { id: 'm5', name: 'MV 5', desc: 'Rame 5 voitures', cap: 650, kmh: 75, price: 2.6e6, op: 190, acc: 1.0 , len: 75 },
+    { id: 'm6a', name: 'MV 6 Auto', desc: 'Rame 6 voitures sans conducteur', cap: 760, kmh: 80, price: 3.8e6, op: 90, acc: 1.3 , len: 90 },
   ],
   ter: [
-    { id: 't1', name: 'Régio 1', desc: 'Autorail diesel 1 caisse', cap: 140, kmh: 100, price: 1.6e6, op: 90, acc: 0.5 , len: 27 },
-    { id: 't4', name: 'Régio 4', desc: 'Automotrice électrique 4 caisses', cap: 310, kmh: 100, price: 3.6e6, op: 140, acc: 0.75 , len: 72 },
-    { id: 'td', name: 'Régio Duplex', desc: 'Rame électrique à deux niveaux', cap: 560, kmh: 100, price: 5.8e6, op: 190, acc: 0.6 , len: 110 },
+    { id: 't1', name: 'Régio 1', desc: 'Autorail diesel 1 caisse', cap: 140, kmh: 100, price: 1.6e6, op: 180, acc: 0.5 , len: 27 },
+    { id: 't4', name: 'Régio 4', desc: 'Automotrice électrique 4 caisses', cap: 310, kmh: 100, price: 3.6e6, op: 280, acc: 0.75 , len: 72 },
+    { id: 'td', name: 'Régio Duplex', desc: 'Rame électrique à deux niveaux', cap: 560, kmh: 100, price: 5.8e6, op: 380, acc: 0.6 , len: 110 },
   ],
   boat: [
-    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 12, price: 320000, op: 22, acc: 0.3 , len: 16 },
-    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 14, price: 720000, op: 35, acc: 0.25 , len: 26 },
-    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 16, price: 1.3e6, op: 50, acc: 0.2 , len: 34 },
+    { id: 'n40', name: 'Navette 40', desc: 'Petite navette', cap: 40, kmh: 12, price: 320000, op: 44, acc: 0.3 , len: 16 },
+    { id: 'n90', name: 'Fluvio 90', desc: 'Bateau-bus', cap: 90, kmh: 14, price: 720000, op: 70, acc: 0.25 , len: 26 },
+    { id: 'n150', name: 'Catamaran 150', desc: 'Grand catamaran', cap: 150, kmh: 16, price: 1.3e6, op: 100, acc: 0.2 , len: 34 },
   ],
 };
 const MODEL = {};
@@ -1753,6 +1764,13 @@ const LINE_COLORS = ['#EF3E36', '#FFC21A', '#1F6FEB', '#3FA34D', '#FF8A3D', '#7B
 const PROF_WD = [0.05, 0.03, 0.02, 0.02, 0.04, 0.15, 0.45, 0.95, 1.0, 0.6, 0.45, 0.5, 0.6, 0.55, 0.5, 0.55, 0.75, 0.95, 0.9, 0.6, 0.4, 0.3, 0.2, 0.1];
 const PROF_WE = [0.08, 0.06, 0.04, 0.03, 0.03, 0.06, 0.12, 0.25, 0.4, 0.55, 0.65, 0.7, 0.7, 0.68, 0.65, 0.65, 0.68, 0.7, 0.65, 0.5, 0.4, 0.32, 0.22, 0.14];
 const SUM_WD = PROF_WD.reduce((a, b) => a + b, 0);
+/** réaction des voyageurs au prix : l'élasticité grandit avec le prix (0,55 au prix de référence, 1 à 1,5 fois ce prix)
+    — la recette est maximale vers 1,5 fois le prix de référence (+10 %, pour −26 % de voyageurs) */
+function priceFactor(price, ref) {
+  if (price <= 0.01) return 2.2;
+  const x = price / ref;
+  return x <= 1 ? Math.min(2.2, Math.pow(x, -0.55)) : Math.max(0.01, Math.pow(x, 0.35) * Math.exp(-0.9 * (x - 1)));
+}
 const SUM_WE = PROF_WE.reduce((a, b) => a + b, 0);
 const CLS_F = [1.0, 0.95, 0.85, 0.72, 0.38];
 
@@ -2154,12 +2172,13 @@ const Lines = {
   },
 
   /** estimation avant construction : voyageurs par jour de semaine (service correct, tarif de référence) */
-  estimate(mode, stops, path, loop) {
+  estimate(mode, stops, path, loop, skip) {
     if (!path || !path.cum || stops.length < 2) return null;
     const fake = { mode, stops, loop: !!loop, path, stopAt: path.stopPt.map((i) => path.cum[i]) };
     this.computeOD(fake);
     let sum = 0; for (const x of fake.od) sum += x;
-    return { pax: sum, pop: fake.catchPop };
+    const f = G.s ? Shares.estimateFactor(fake, fake.od, skip) : 1;
+    return { pax: sum * f, pop: fake.catchPop, shared: f < 0.97 ? 1 - f : 0 };
   },
   /** distance parcourue (km) entre deux arrêts d'une ligne */
   stopDist(line, i, j) {
@@ -2361,6 +2380,7 @@ const Transfers = {
       this.flows(B, A, used.map((c) => ({ ka: c.kb, kb: c.ka, walk: c.walk })));
     }
     this.hubs = hubs;
+    Shares.rebuild(); // demande partagée entre lignes qui desservent les mêmes trajets
   },
   flows(A, B, hubs) {
     if (!A.Pw || !B.Aw || !A.stopAt || !B.stopAt) return;
@@ -2496,31 +2516,32 @@ const Eco = {
     UI.toast(on ? 'Argent illimité activé. Construisez librement !' : 'Retour à la gestion normale, trésorerie : ' + fmtEur(G.s.money) + '.', 'ok');
     UI.refreshTop();
   },
-  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, evIn: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0, taxi: 0, taxiOps: 0 }; },
-  dayProfit(d) { return d.fares + d.ads + (d.evIn || 0) + (d.taxi || 0) - d.ops - d.maint - d.interest - d.events - (d.taxiOps || 0); },
+  blankDay() { return { fares: 0, ads: 0, sales: 0, ops: 0, maint: 0, interest: 0, capex: 0, zones: 0, events: 0, evIn: 0, loanIn: 0, repay: 0, pax: 0, mec: 0, xfer: 0, taxi: 0, taxiOps: 0, sub: 0, overhead: 0 }; },
+  dayProfit(d) { return d.fares + d.ads + (d.evIn || 0) + (d.taxi || 0) + (d.sub || 0) - d.ops - d.maint - d.interest - d.events - (d.taxiOps || 0) - (d.overhead || 0); },
   debt() { return G.s.loans.reduce((a, l) => a + l.amount, 0); },
   loanOffers() {
     const m = G.s.costMul;
     return [
-      { amount: 1e6 * m, rate: 0.04, label: 'Prêt relais' },
-      { amount: 3e6 * m, rate: 0.05, label: 'Prêt d’équipement' },
-      { amount: 8e6 * m, rate: 0.06, label: 'Grand emprunt' },
+      { amount: 1e6 * m, rate: Loans.rateFor(0.04), years: 5, label: 'Prêt relais' },
+      { amount: 3e6 * m, rate: Loans.rateFor(0.045), years: 10, label: 'Prêt d’équipement' },
+      { amount: 8e6 * m, rate: Loans.rateFor(0.05), years: 15, label: 'Grand emprunt' },
     ];
   },
-  maxDebt() { return 20e6 * G.s.costMul; },
+  maxDebt() { return Loans.maxDebt(); },
   borrow(o) {
     const s = G.s;
     if (s.unlimited) { UI.toast('Inutile d’emprunter en mode argent illimité.', 'info'); return; }
     if (this.debt() + o.amount > this.maxDebt()) { UI.toast('La banque refuse : endettement maximum atteint (' + fmtEur(this.maxDebt()) + ').', 'bad'); return; }
-    s.loans.push({ id: s.nextId++, amount: o.amount, rate: o.rate, taken: s.min });
+    s.loans.push({ id: s.nextId++, amount: o.amount, principal: o.amount, rate: o.rate, years: o.years, taken: s.min });
     s.money += o.amount; s.today.loanIn += o.amount;
-    UI.toast('Prêt accordé : +' + fmtEur(o.amount) + ' à ' + (o.rate * 100).toFixed(0) + ' %/an.', 'ok');
+    UI.toast('Prêt accordé : +' + fmtEur(o.amount) + ' sur ' + o.years + ' ans à ' + (o.rate * 100).toFixed(1).replace('.', ',') + ' %/an.', 'ok');
     UI.refreshTop();
   },
   repay(loan, part) {
     const s = G.s;
     const amt = Math.min(loan.amount, part);
     if (amt > s.money) { UI.toast('Pas assez de trésorerie pour rembourser.', 'bad'); return; }
+    if (loan.principal) loan.principal *= (loan.amount - amt) / loan.amount; // la mensualité baisse d'autant
     s.money -= amt; loan.amount -= amt; s.today.repay += amt;
     if (loan.amount < 1) s.loans = s.loans.filter((l) => l !== loan);
     UI.refreshTop();
@@ -2704,7 +2725,7 @@ const Sim = {
     const now = new Date();
     const startMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     return {
-      v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301,
+      v: 1, slot, city, diff, costMul: d.cost, money: d.money, loans: [], startMs, min: 300, sec: 300 * 60, nextMin: 301, t0: 300, palier: 0, stars: [false, false, false],
       owned: [], lines: [], nextId: 1, events: [], journal: [], weather: 'sun', rail: { stations: [], tracks: [] }, tuto: { main: 'pending', seen: {} },
       today: Eco.blankDay(), days: [], ads: { bus: 1, metro: 1, ter: 1, boat: 1 },
       settings: { idle: true, fill: true, traffic: true, zones: true, names: true, pois: true, lights: true, base: 'photo' },
@@ -2797,15 +2818,15 @@ const Sim = {
     if (!l.veh.length) return;
     // génération des voyageurs
     const h = Time.hour(m), we = Time.weekend(m);
-    const prof = we ? (PROF_WE[h] / SUM_WE) * (Time.sundayLike(m) ? 0.6 : 0.85) : PROF_WD[h] / SUM_WD;
+    const prof = we ? (PROF_WE[h] / SUM_WE) * (Time.sundayLike(m) ? 0.6 : 0.85) : PROF_WD[h] / SUM_WD * (PROF_WD[h] >= 0.9 ? rules().peak : 1);
     const price = Lines.price(l, m);
-    const pf = price <= 0.01 ? 2.2 : clamp(Math.pow(mode.ref / price, 0.55), 0.3, 2.2);
+    const pf = priceFactor(price, mode.ref);
     const base = (prof / 60) * l.qual * pf * l.rep * Events.demandFor(l) * ADS.demand[adLvl];
     if (base <= 0) return;
-    const od = l.od, em = l.evMul;
+    const od = l.od, em = l.evMul, sh = l.share && l.share.length === n * n ? l.share : null;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       if (i === j) continue;
-      const r = od[i * n + j] * base * Math.max(em[i], em[j]);
+      const r = od[i * n + j] * base * Math.max(em[i], em[j]) * (sh ? sh[i * n + j] : 1);
       if (l.loop || j > i) l.Wf[i * n + j] += r; else l.Wb[i * n + j] += r;
     }
     // trajets avec correspondance : on monte ici, on changera de ligne plus loin
@@ -3074,7 +3095,7 @@ const Sim = {
       l.today.fares += fare; l.today.ads += adPax; l.today.pax += take;
     }
     if (want - take > 0.5) {
-      const left = (want - take) * 0.3;
+      const left = (want - take) * 0.9;
       l.today.mec += left; s.today.mec += left; l.sm[k] += left;
     }
     l.today.loadSum += v.load / md.cap; l.today.loadN++;
@@ -3099,7 +3120,7 @@ const Sim = {
     for (const l of s.lines) {
       d.lines[l.id] = { pax: Math.round(l.today.pax), fares: Math.round(l.today.fares), ops: Math.round(l.today.ops), ads: Math.round(l.today.ads), mec: Math.round(l.today.mec), fill: l.today.loadN ? l.today.loadSum / l.today.loadN : 0, peak: l.today.loadMax || 0, xin: Math.round(l.today.xin || 0), xout: Math.round(l.today.xout || 0) };
       const ratio = l.today.mec / Math.max(1, l.today.pax) * Staff.mecRepMult();
-      l.rep = clamp(l.rep + 0.02 + (Staff.L('social') >= 3 ? 0.005 : 0) - ratio * 0.6, 0.6, 1.05);
+      l.rep = clamp(l.rep + 0.01 + (Staff.L('social') >= 3 ? 0.004 : 0) - ratio * 0.6 - ((l.today.loadMax || 0) > 0.98 ? 0.01 : 0), 0.6, 1.05);
       l.hist.unshift(d.lines[l.id]); if (l.hist.length > 30) l.hist.length = 30;
       l.today = Lines.blankStats();
       if (l.sb) { l.sb.fill(0); l.sm.fill(0); }
@@ -3109,7 +3130,8 @@ const Sim = {
     s.today = Eco.blankDay();
     const servedPop = this.servedPop();
     s.modalShift = Math.min(0.22, d.pax / Math.max(20000, servedPop * 2.8));
-    if (!s.unlimited && Eco.dayProfit(d) < 0 && s.money < 0) UI.toast('Trésorerie négative : pensez à un prêt ou à ajuster vos tarifs.', 'bad');
+    Bal.endOfDay(d);
+    Shares.rebuild();
     Save.auto();
   },
 
@@ -3403,7 +3425,8 @@ const EvCtx = {
     for (let k = 0; k < 40; k++) { const i = Math.floor(Math.random() * n.x.length); const z = G.w.zoneAt(n.x[i], n.y[i]); if (z && z.owned) return { mx: n.x[i], my: n.y[i] }; }
     return null;
   },
-  scale() { const v = G.s.lines.reduce((a, l) => a + l.veh.length, 0); return 1 + v / 15; },
+  /** échelle d'argent : proportionnée aux recettes du réseau (voir Bal.scale) */
+  scale() { return Bal.scale(); },
   day0() { const m = G.s.min; return m - Time.mod(m); },
   rint(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); },
   mec() { const d = G.s.days[0]; return d ? d.mec / Math.max(1, d.pax) : 0; },
@@ -3458,10 +3481,10 @@ const EVENTS = [
 
   /* ===== incidents sur le réseau ===== */
   { id: 'panne_bus', cat: 'vehicule', tone: -2, title: 'Bus en panne', w: 7, cd: 4, glyph: '×', when: () => EvCtx.lines((l) => l.mode === 'bus').length > 0,
-    make() { const l = EvCtx.line((x) => x.mode === 'bus'); const v = l && EvCtx.veh(l); if (!v) return null; const d = Rr(120, 360), cost = Rr(15, 60) * 100;
+    make() { const l = EvCtx.line((x) => x.mode === 'bus'); const v = l && EvCtx.veh(l); if (!v) return null; const d = Rr(120, 360), cost = Math.round(Rr(15, 60) * 100 * Bal.repairMult());
       return { dur: d, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'breakdown', min: 8 }, money: -cost, desc: `Un ${MODEL[v.model].name} de la ligne ${lab(l)} tombe en panne : immobilisé quelques minutes, puis remorqué au dépôt. Réparation : ${fmtEur(cost)}.` }; } },
   { id: 'panne_rame', cat: 'vehicule', tone: -2, title: 'Rame en panne', w: 3, cd: 12, glyph: '×', when: () => EvCtx.lines((l) => l.mode === 'metro' || l.mode === 'ter').length > 0,
-    make() { const l = EvCtx.line((x) => x.mode === 'metro' || x.mode === 'ter'); const v = l && EvCtx.veh(l); if (!v) return null; const cost = Rr(8, 30) * 1000;
+    make() { const l = EvCtx.line((x) => x.mode === 'metro' || x.mode === 'ter'); const v = l && EvCtx.veh(l); if (!v) return null; const cost = Math.round(Rr(8, 30) * 1000 * Bal.repairMult());
       return { dur: Rr(240, 480), lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'breakdown', min: Rr(10, 20) }, money: -cost, desc: `Une rame de la ligne ${lab(l)} est immobilisée en pleine voie : les rames suivantes attendent derrière, puis elle est évacuée. Réparation : ${fmtEur(cost)}.` }; } },
   { id: 'failure', cat: 'reseau', tone: -2, title: 'Panne de signalisation', w: 3, cd: 12, glyph: '!', when: () => EvCtx.lines((l) => l.mode === 'metro' || l.mode === 'ter').length > 0,
     make() { const l = EvCtx.line((x) => x.mode === 'metro' || x.mode === 'ter'); if (!l) return null; const d = Rr(30, 90);
@@ -3480,10 +3503,10 @@ const EVENTS = [
   { id: 'crue', cat: 'meteo', tone: -2, title: 'Crue', w: 2, cd: 120, glyph: '≈', when: () => Events.weather() === 'rain' && EvCtx.lines((l) => l.mode === 'boat').length > 0,
     make() { const n = Rr(1, 2); return { dur: n * 1440, halt: { mode: 'boat' }, desc: `Le niveau monte : la navigation est interdite pendant ${n} jour${n > 1 ? 's' : ''}.` }; } },
   { id: 'vandalisme', cat: 'vehicule', tone: -2, title: 'Véhicule vandalisé', w: 3, cd: 24, glyph: '×',
-    make() { const l = EvCtx.line(); const v = l && EvCtx.veh(l); if (!v) return null; const cost = Math.round(Rr(8, 25) * 1000 * (l.mode === 'bus' ? 1 : 2.5));
+    make() { const l = EvCtx.line(); const v = l && EvCtx.veh(l); if (!v) return null; const cost = Math.round(Rr(8, 25) * 1000 * (l.mode === 'bus' ? 1 : 2.5) * Bal.repairMult());
       return { dur: 1440, lineId: l.id, veh: { lineId: l.id, vehId: v.id, type: 'breakdown', min: 3 }, money: -cost, desc: `Vitres brisées et sièges lacérés sur un véhicule de la ligne ${lab(l)} : retiré du service pour 24 h. Remise en état : ${fmtEur(cost)}.` }; } },
   { id: 'tags', cat: 'vehicule', tone: -1, title: 'Graffitis', w: 4, cd: 24, glyph: '×',
-    make() { const l = EvCtx.line(); if (!l) return null; const cost = Rr(15, 60) * 100;
+    make() { const l = EvCtx.line(); if (!l) return null; const cost = Math.round(Rr(15, 60) * 100 * Bal.repairMult());
       return { dur: 60, lineId: l.id, money: -cost, desc: `Des véhicules et des arrêts de la ligne ${lab(l)} ont été tagués cette nuit. Nettoyage : ${fmtEur(cost)}.` }; } },
   { id: 'billettique', cat: 'reseau', tone: -2, title: 'Valideurs en panne', w: 3, cd: 24, glyph: '€',
     make() { const l = EvCtx.line(); if (!l) return null; const d = Rr(120, 240);
@@ -3600,7 +3623,7 @@ const EVENTS = [
     make() { const l = EvCtx.line(); if (!l) return null;
       return { dur: 60, lineId: l.id, rep: { lineId: l.id, delta: -0.05 }, desc: `Une vidéo de voyageurs entassés sur la ligne ${lab(l)} fait le tour des réseaux sociaux.` }; } },
   { id: 'mecene', cat: 'eco', tone: 1, title: 'Mécène', w: 2.5, cd: 96, glyph: '€',
-    make() { const amt = Rr(3, 8) * 10000;
+    make() { const amt = Math.max(2000, Math.round(Rr(3, 8) * 10000 * Bal.scale() / 100) * 100);
       return { dur: 60, money: amt, desc: `Une fondation locale finance la rénovation de vos abris voyageurs : ${fmtEur(amt)}.` }; } },
   { id: 'amende', cat: 'eco', tone: -2, title: 'Pénalités contractuelles', w: 2, cd: 168, glyph: '€', when: () => EvCtx.mec() > 0.12,
     make() { const amt = Math.round(Rr(2, 6) * 10000 * EvCtx.scale() / 1000) * 1000;
@@ -3799,7 +3822,9 @@ Object.assign(Events, {
     for (const e of s.events) if (!e.applied && !e.void && e.start <= m) {
       if (e.q && !e.decided) { // sans réponse : option prudente
         e.decided = true; const d = this.def(e);
-        if (d && d.choose) { d.choose(e, e.dflt ?? 1); e.auto = true; Events.log(e.title + ' (sans réponse) — ' + e.desc, e.kind); }
+        if (d && d.generic) ChoiceFX.neutral(e, d);
+        else if (d && d.choose) d.choose(e, e.dflt ?? 1);
+        if (d) { e.auto = true; Events.log(e.title + ' (sans réponse) — ' + e.desc, e.kind); }
         if (e.applied) continue;
       }
       this.apply(e);
@@ -3828,7 +3853,7 @@ Object.assign(Events, {
     for (const e of s.events) if (e.q && !e.decided && !e.dialogOpen && e.start > m) UI.choiceDialog(e);
     // rythme : 3 à 14 événements par jour selon la taille du réseau, surtout en journée
     const nL = s.lines.length, nV = s.lines.reduce((a, l) => a + l.veh.length, 0);
-    const perDay = nL ? Math.min(14, 4 + nL * 0.9 + nV * 0.06) : 1.5;
+    const perDay = (nL ? Math.min(6, 1.6 + nL * 0.35 + nV * 0.025) : 0.6) * rules().ev;
     const day = h >= 6 && h <= 22;
     const p = day ? perDay / 17 * 0.95 : perDay / 17 * 0.15;
     if (Math.random() < p) this.spawn();
@@ -3849,13 +3874,15 @@ Object.assign(Events, {
       return !s.events.some((e) => e.kind === d.id && e.end > s.min);
     });
     if (!forceId) {
-      // 80 % d'événements à choix (une décision en attente à la fois au plus), 20 % d'événements simples
+      // 45 % d'événements à choix (une décision en attente à la fois au plus), 55 % d'événements simples
+      // première semaine de jeu : ni question ni mauvaise nouvelle, le temps d'apprendre
+      const grace = Bal.grace();
       const pending = s.events.some((e) => e.q && !e.decided);
-      const choice = cands.filter((d) => d.choice), simple = cands.filter((d) => !d.choice);
-      let pool = !pending && choice.length && (Math.random() < 0.8 || !simple.length) ? choice : simple;
+      const choice = cands.filter((d) => d.choice), simple = cands.filter((d) => !d.choice && (!grace || d.tone >= 0));
+      let pool = !grace && !pending && choice.length && (Math.random() < 0.45 || !simple.length) ? choice : simple;
       if (pool === simple) {
         // puis la tonalité (≈ 50 % négatifs, 40 % positifs, 10 % mitigés)
-        const r = Math.random(), want = r < 0.5 ? -1 : r < 0.9 ? 1 : 0;
+        const r = Math.random(), want = grace ? 1 : r < 0.5 ? -1 : r < 0.9 ? 1 : 0;
         const sub = simple.filter((d) => Math.sign(d.tone) === want);
         if (sub.length) pool = sub;
       }
@@ -3900,9 +3927,9 @@ Object.assign(Events, {
     const modes = new Set(s.lines.map((l) => l.mode));
     const day0 = m - Time.mod(m);
     // grève (annoncée la veille, avec négociation possible)
-    if (Math.random() < 0.03 * Staff.strikeMult() * Gauges.strikeMult() && (modes.has('bus') || modes.has('metro'))) {
+    if (Math.random() < 0.018 * Staff.strikeMult() * Gauges.strikeMult() && (modes.has('bus') || modes.has('metro'))) {
       const mode = modes.has('metro') && Math.random() < 0.5 ? 'metro' : modes.has('bus') ? 'bus' : 'metro';
-      const cost = Math.round((40000 + s.lines.filter((l) => l.mode === mode).reduce((a, l) => a + l.veh.length, 0) * 6000) * s.costMul * Staff.negoMult());
+      const cost = Math.round(Math.max(8000, Bal.rev7() * 1.2) * s.costMul * Staff.negoMult() / 100) * 100;
       this.add({ kind: 'strike', cat: 'social', tone: -3, glyph: '⚑', mode, start: day0 + 1440 + 300, end: day0 + 2880, title: 'Préavis de grève', desc: 'les agents ' + (mode === 'bus' ? 'des bus' : 'du métro') + ' cesseront le travail demain.', cost, resolved: false, asked: false, announce: true });
     }
     // fêtes du calendrier (annoncées la veille)
@@ -4754,8 +4781,13 @@ const ChoiceFX = {
     return v;
   },
   /** coût affiché sur le bouton (sans dévoiler les autres conséquences) */
+  /** argent d'une option : proportionné au réseau, gains plafonnés à 3 jours de recettes */
+  money(fx, sc) {
+    const m = ((fx.m || 0) * sc + (fx.m0 || 0) * Math.min(1, sc * 4)) * 1000;
+    return m > 0 ? Math.min(m, Bal.gainCap()) : m;
+  },
   costLabel(fx, sc) {
-    const m = ((fx.m || 0) * sc + (fx.m0 || 0)) * 1000;
+    const m = this.money(fx, sc);
     if (Math.abs(m) < 500) return '';
     return ' · ' + (m > 0 ? '+' : '') + fmtEur(m);
   },
@@ -4769,11 +4801,20 @@ const ChoiceFX = {
     if (fx.h) t -= 2;
     return t > 2.5 ? 2 : t > 0.3 ? 1 : t < -2.5 ? -2 : t < -0.3 ? -1 : 0;
   },
+  /** sans réponse : la décision est prise sans vous — ni dépense ni gain, un peu de mécontentement */
+  neutral(e, d) {
+    const m = G.s.min;
+    e.start = m; e.end = m + 1; e.applied = false; e.moneyDone = false; e.decided = true;
+    if (d.cat === 'social') e.social = -0.01; else e.mairie = -0.01;
+    e.choice = 'Sans réponse'; e.desc = '« Sans réponse » — personne n’a tranché : ni dépense ni gain, mais un peu d’agacement.';
+    e.tone = -1; e.bad = true;
+    Notif.push({ title: e.title + ' : sans réponse', desc: 'Personne n’a tranché. Ni dépense ni gain, mais un peu d’agacement.', tone: -1, cat: d.cat, glyph: '?' }, 'now');
+  },
   /** applique les effets d'une option à l'événement (effets temporaires : à partir de maintenant) */
   apply(e, fx, v, sc) {
     const s = G.s, m = s.min;
     e.start = m; e.end = m + (fx.d || 60); e.applied = false; e.moneyDone = false;
-    const money = ((fx.m || 0) * sc + (fx.m0 || 0)) * 1000;
+    const money = this.money(fx, sc);
     if (money) e.money = Math.round(money / 100) * 100;
     const lid = v.line && v.line.id;
     if (fx.r && lid) e.rep = { lineId: lid, delta: fx.r }; else if (fx.r) e.rep = { all: true, delta: fx.r / 2 };
@@ -4796,10 +4837,10 @@ const ChoiceFX = {
     else if (fx.h === 'all') e.halt = { all: true };
     else if (fx.h) e.halt = { mode: fx.h };
     if (fx.sp) e.speed = { mode: fx.sp[0], mult: fx.sp[1] };
-    if (fx.so) e.social = fx.so;
+    if (fx.so) e.social = fx.so * 0.3; // les réponses donnent un coup de pouce ; le service rendu fait le reste
     if (fx.tx) e.taxi = { mult: fx.tx };
     if (fx.txr) e.taxiRep = fx.txr;
-    if (fx.ma) e.mairie = fx.ma;
+    if (fx.ma) e.mairie = fx.ma * 0.3;
     if (fx.add) e.addVeh = { model: fx.add[0], n: fx.add[1], lineId: lid };
     if (fx.lend && v.line) {
       const veh = EvCtx.veh(v.line);
@@ -4853,6 +4894,7 @@ const Gauges = {
     if (id === 'subvention' || id === 'mecene') return 1 + m;
     if (id === 'amende') return 1 - 0.5 * m;
     if (id === 'works') return 1 - 0.3 * m;
+    if (id === 'panne_bus' || id === 'panne_rame' || id === 'vandalisme' || id === 'clim') return clamp(1 - 0.4 * this.social(), 0.5, 1.5);
     return 1;
   },
   label(x) { return x >= 0.5 ? 'Excellent' : x >= 0.15 ? 'Bon' : x > -0.15 ? 'Neutre' : x > -0.5 ? 'Tendu' : 'Mauvais'; },
@@ -4869,8 +4911,398 @@ const Gauges = {
   /** texte d'aide pour les fiches */
   html() {
     const row = (lab, x, help) => `<div class="gauge"><span>${lab}</span><i class="gbar"><b style="left:${50 + x * 50}%"></b></i><em class="${this.tone(x)}">${this.label(x)}</em><small>${help}</small></div>`;
-    return row('Climat social', this.social(), 'Grèves plus ou moins probables, qualité de service')
-      + row('Relations avec la mairie', this.mairie(), 'Prix des quartiers, subventions, pénalités, travaux');
+    const t = G.s.gTarget, tend = (k) => t ? ' · tend vers « ' + this.label(t[k]) + ' »' : '';
+    return row('Climat social', this.social(), 'Grèves et pannes plus ou moins fréquentes. Suit la qualité de service, la formation « Dialogue social » et la santé des finances' + tend('social'))
+      + row('Relations avec la mairie', this.mairie(), 'Versement mobilité (0 à 30 % des recettes), prix des quartiers, travaux. Suit la couverture de vos quartiers, la qualité de service et le niveau des tarifs' + (t ? ' (couverture ' + Math.round(t.cov * 100) + ' %, tarifs à ' + Math.round(t.pr * 100) + ' % de la référence)' : '') + tend('mairie'))
+      + '<p class="sub">Les réponses aux questions donnent un coup de pouce ; c’est surtout le service rendu, jour après jour, qui fait bouger ces jauges.</p>';
+  },
+};
+
+'use strict';
+/* =====================================================================
+   TRANSITOPIA — équilibrage et progression
+   règles par difficulté, échelle des événements, jauges vivantes,
+   versement mobilité, demande partagée, paliers, mandat, redressement,
+   bilans et conseils
+   ===================================================================== */
+
+/** ce que change la difficulté, au-delà de l'argent de départ et des coûts */
+const RULES = {
+  facile: { ev: 0.5, endGame: false, gBias: 0.1, debtX: 5, peak: 1, sub: 1.2 },
+  normal: { ev: 1, endGame: true, gBias: 0, debtX: 4, peak: 1, sub: 1 },
+  difficile: { ev: 1.3, endGame: true, gBias: -0.1, debtX: 3, peak: 1.12, sub: 0.85 },
+};
+const rules = () => RULES[G.s.diff] || RULES.normal;
+
+const Bal = {
+  /** recettes moyennes par jour sur 7 jours (billets, publicité, taxis) */
+  rev7() {
+    const ds = G.s.days.filter((d) => !d.offline).slice(0, 7);
+    if (!ds.length) { const t = G.s.today, f = Time.mod(G.s.min) / 1440; return f > 0.25 ? (t.fares + t.ads + (t.taxi || 0)) / f : 0; }
+    return ds.reduce((a, d) => a + d.fares + d.ads + (d.taxi || 0), 0) / ds.length;
+  },
+  /** marge d'exploitation moyenne par jour (hors événements, intérêts et investissements) */
+  margin(n = 30) {
+    const ds = G.s.days.filter((d) => !d.offline).slice(0, n);
+    if (!ds.length) return 0;
+    return ds.reduce((a, d) => a + d.fares + d.ads + (d.sub || 0) + (d.taxi || 0) - d.ops - d.maint - (d.taxiOps || 0) - (d.overhead || 0), 0) / ds.length;
+  },
+  /** échelle d'argent des événements : proportionnée aux recettes du réseau (1 unité ≈ 1/88 de journée de recettes par k€) */
+  scale() { return clamp(this.rev7() / 88000, 0.05, 6) * (G.s.costMul || 1); },
+  /** un gain d'événement ne dépasse jamais 3 jours de recettes */
+  gainCap() { return 3 * Math.max(3000, this.rev7()); },
+  /** coût des réparations et petits incidents : réduit pour les petits réseaux */
+  repairMult() { return clamp(0.3 + this.scale() * 2, 0.3, 1); },
+  /** les 7 premiers jours : pas de question ni de mauvaise nouvelle */
+  grace() { const s = G.s; return s.t0 !== undefined && s.min - s.t0 < 7 * 1440; },
+  /** frais de siège : le réseau coûte un peu même sans ligne */
+  overhead() { return 700 * G.s.costMul; },
+
+  /** part de la population des quartiers possédés à portée d'un arrêt (0 à 1) */
+  coverage() {
+    const st = [];
+    for (const l of G.s.lines) if (l.status !== 'construction') for (const x of l.stops) st.push(x);
+    let tot = 0, cov = 0;
+    const r0 = meters(350), span = meters(600);
+    for (const z of G.w.zones.values()) {
+      if (!z.owned || !z.pop) continue;
+      let d = Infinity;
+      for (const x of st) { const dd = Math.hypot(x.mx - z.cx, x.my - z.cy); if (dd < d) d = dd; }
+      tot += z.pop; cov += z.pop * clamp(1 - (d - r0) / span, 0, 1);
+    }
+    return tot ? cov / tot : 0;
+  },
+  /** niveau de prix moyen, rapporté au prix de référence et pondéré par les voyageurs */
+  priceRatio() {
+    let w = 0, x = 0;
+    for (const l of G.s.lines) {
+      const h = l.hist[0], p = Math.max(1, h ? h.pax : 1);
+      x += p * (l.prices.week / MODES[l.mode].ref); w += p;
+    }
+    return w ? x / w : 1;
+  },
+
+  /* ---------- jauges vivantes ---------- */
+  /** valeur vers laquelle chaque jauge revient, selon le service rendu */
+  targets() {
+    const s = G.s, R = rules(), ds = s.days.slice(0, 7);
+    const pax = ds.reduce((a, d) => a + d.pax, 0), mec = ds.reduce((a, d) => a + d.mec, 0);
+    const mecR = Math.min(0.3, mec / Math.max(1, pax));
+    const ls = s.lines.filter((l) => l.status !== 'construction');
+    const rep = ls.length ? ls.reduce((a, l) => a + l.rep, 0) / ls.length : 0.9;
+    const cov = this.coverage(), pr = this.priceRatio();
+    const red = s.money < 0 && !s.unlimited;
+    const mairie = ls.length
+      ? -0.3 + 0.75 * cov + (rep - 0.95) * 3 - 2.5 * mecR - 0.8 * Math.max(0, pr - 1.25) + 0.2 * Math.max(0, 1 - pr) - (red ? 0.2 : 0)
+      : -0.35;
+    const social = 0.05 + 0.12 * Staff.L('social') + (rep - 0.95) * 2 - 2 * mecR - (red ? 0.35 : 0) - (s.strikes30 || 0) * 0.04;
+    return { mairie: clamp(mairie + R.gBias, -1, 1), social: clamp(social + R.gBias, -1, 1), cov, pr, mecR, rep };
+  },
+  /** chaque jour, les jauges se rapprochent de leur cible (demi-vie ≈ 17 jours) */
+  driftGauges() {
+    const s = G.s, t = this.targets();
+    s.mairie = clamp((s.mairie || 0) + (t.mairie - (s.mairie || 0)) * 0.04, -1, 1);
+    s.social = clamp((s.social || 0) + (t.social - (s.social || 0)) * 0.04, -1, 1);
+    s.gTarget = { mairie: t.mairie, social: t.social, cov: t.cov, pr: t.pr };
+  },
+  /** versement mobilité : de 0 à 30 % des recettes selon les relations avec la mairie */
+  subsidy(d) {
+    if (G.s.unlimited) return 0;
+    return Math.max(0, (d.fares + d.ads) * 0.15 * (1 + (G.s.mairie || 0)) * rules().sub);
+  },
+
+  /* ---------- fin de journée ---------- */
+  endOfDay(d) {
+    const s = G.s;
+    if (s.t0 === undefined) s.t0 = -1e9;
+    // versement mobilité et frais de siège
+    if (!s.unlimited) {
+      d.sub = Math.round(this.subsidy(d)); d.overhead = Math.round(this.overhead());
+      s.money += d.sub - d.overhead;
+    }
+    // prêts : mensualités et remboursement du capital
+    Loans.daily(d);
+    // découvert, redressement
+    Rescue.daily(d);
+    this.driftGauges();
+    Progress.daily(d);
+    Advice.daily(d);
+  },
+};
+
+/* ---------- prêts amortissables ---------- */
+const Loans = {
+  /** mensualité d'un prêt (annuités constantes) */
+  monthly(ln) {
+    const r = ln.rate / 12, n = Math.max(1, (ln.years || 15) * 12);
+    return ln.principal * r / (1 - Math.pow(1 + r, -n));
+  },
+  /** chaque jour : la part de capital de la mensualité est remboursée (les intérêts sont comptés à l'heure) */
+  daily(d) {
+    const s = G.s;
+    if (s.unlimited) return;
+    for (const ln of s.loans) {
+      if (!ln.years) { ln.years = 15; ln.principal = ln.amount; } // anciens prêts : 15 ans au même taux
+      if (!ln.principal) ln.principal = ln.amount;
+      const perDay = this.monthly(ln) * 12 / 365, interest = ln.amount * ln.rate / 365;
+      const cap = Math.min(ln.amount, Math.max(0, perDay - interest));
+      ln.amount -= cap; s.money -= cap; d.repay = (d.repay || 0) + cap;
+    }
+    s.loans = s.loans.filter((ln) => ln.amount >= 1);
+  },
+  /** plafond : 4 ans de marge (selon la difficulté), au moins 3 M€, plus avec les paliers */
+  maxDebt() {
+    const m = G.s.costMul, R = rules();
+    const base = Math.max(3e6 * m, Bal.margin(30) * 365 * R.debtX);
+    return base * (1 + 0.25 * Progress.level());
+  },
+  /** taux majoré selon l'endettement */
+  rateFor(base) {
+    const ratio = Eco.debt() / Math.max(1, this.maxDebt());
+    return base + 0.03 * clamp(ratio, 0, 1);
+  },
+};
+
+/* ---------- découvert, plan de redressement, fin de partie ---------- */
+const Rescue = {
+  daily(d) {
+    const s = G.s;
+    if (s.unlimited || s.gameOver) { s.redDays = 0; return; }
+    if (s.money >= 0) { if (s.redDays) s.redDays = 0; s.rescueStep = 0; return; }
+    // agios à 12 %/an
+    const agios = -s.money * 0.12 / 365;
+    s.money -= agios; d.interest += agios;
+    s.redDays = (s.redDays || 0) + 1;
+    const R = rules();
+    if (s.redDays === 1) Notif.push({ title: 'Trésorerie dans le rouge', desc: 'Les achats sont bloqués et la banque prélève des agios (12 %/an). Au bout de 30 jours, la mairie imposera un plan de redressement.', tone: -2, cat: 'eco', glyph: '€' }, 'now');
+    if (s.redDays === 30 && (s.rescueStep || 0) < 1) { s.rescueStep = 1; this.plan(); }
+    if (s.redDays === 60 && (s.rescueStep || 0) < 2) { s.rescueStep = 2; this.plan(true); }
+    if (s.redDays >= 90 && (s.rescueStep || 0) < 3) {
+      s.rescueStep = 3;
+      if (R.endGame) this.over();
+      else this.bailout();
+    }
+  },
+  /** plan de redressement : vente des véhicules en trop, image auprès de la mairie en baisse */
+  plan(second) {
+    const s = G.s;
+    s.mairie = clamp((s.mairie || 0) - 0.2, -1, 1);
+    let sold = 0, cash = 0;
+    const share = second ? 0.35 : 0.25;
+    const ls = s.lines.filter((l) => l.veh.length > 1).sort((a, b) => ((a.hist[0] || {}).fill || 0) - ((b.hist[0] || {}).fill || 0));
+    for (const l of ls) {
+      let k = Math.floor(l.veh.length * share);
+      const keep = Math.max(1, l.gift || 0);
+      while (k-- > 0 && l.veh.length > keep) {
+        // de préférence un véhicule au dépôt ; revente forcée à 35 % du prix
+        let i = l.veh.findIndex((v) => v.parked); if (i < 0) i = l.veh.length - 1;
+        const v = l.veh.splice(i, 1)[0];
+        const val = Math.round(MODEL[v.model].price * s.costMul * 0.35);
+        s.money += val; s.today.sales += val; cash += val; sold++;
+        if (G.ui && G.ui.follow === v) G.ui.follow = null;
+      }
+      if (l.active) Lines.adjustFleet(l, s.min);
+    }
+    const left = 90 - s.redDays;
+    UI.modal(`<h2>Plan de redressement</h2><p class="sub">Votre trésorerie est dans le rouge depuis ${s.redDays} jours. La mairie impose un plan : ${sold ? sold + ' véhicule' + (sold > 1 ? 's' : '') + ' revendu' + (sold > 1 ? 's' : '') + ' (' + fmtEur(cash) + ')' : 'aucun véhicule à revendre'}, et la confiance de la mairie baisse.</p>
+      <p class="note ${rules().endGame ? 'bad' : 'warn'}">${rules().endGame ? `Si la trésorerie reste négative encore ${left} jours, le réseau sera mis sous tutelle : fin de la partie.` : `En mode Facile, la mairie renflouera la caisse si la situation dure encore ${left} jours.`}</p>
+      <p class="sub">Pistes : retirer des véhicules peu remplis, monter un peu les tarifs, passer la grille horaire en « Économe », supprimer une ligne déficitaire.</p>
+      <button class="btn primary wide" data-act="closeModal">Compris</button>`);
+    Events.log('Plan de redressement imposé par la mairie.', 'eco');
+  },
+  bailout() {
+    const s = G.s;
+    s.mairie = clamp((s.mairie || 0) - 0.5, -1, 1);
+    const gift = -s.money; s.money = 0; s.today.evIn += gift; s.redDays = 0; s.rescueStep = 0;
+    UI.modal(`<h2>La mairie renfloue la caisse</h2><p class="sub">Après 90 jours dans le rouge, la mairie efface le découvert (${fmtEur(gift)}). La confiance en prend un coup : à vous de redresser le réseau.</p><button class="btn primary wide" data-act="closeModal">Compris</button>`);
+  },
+  over() {
+    const s = G.s;
+    s.gameOver = { t: s.min, stars: Progress.stars() };
+    G.paused = true; UI.refreshTop();
+    UI.modal(`<h2>Réseau mis sous tutelle</h2><p class="sub">Après 90 jours de trésorerie négative, l’autorité organisatrice reprend la main sur le réseau de ${esc(s.city.nom)}. La partie est terminée.</p>
+      ${Progress.starsHtml()}
+      <div class="row2"><button class="btn" data-act="goOverSandbox">Continuer en argent illimité</button><button class="btn primary" data-act="goOverMenu">Menu principal</button></div>`, { lock: true });
+  },
+};
+
+/* ---------- demande partagée entre lignes ---------- */
+const Shares = {
+  /** pour chaque ligne : part de la demande de chaque couple d'arrêts, selon les lignes concurrentes */
+  rebuild() {
+    const ls = G.s.lines;
+    for (const l of ls) l.share = this.forLine(l, ls, (m) => Math.max(0.05, m.qual || 0.5), Math.max(0.05, l.qual || 0.5));
+  },
+  /** arrêt de m le plus proche (dans le rayon), ou -1 */
+  near(m, mx, my, R) {
+    let best = -1, bd = R;
+    m.stops.forEach((st, k) => { const d = Math.hypot(st.mx - mx, st.my - my); if (d < bd) { bd = d; best = k; } });
+    return best;
+  },
+  forLine(l, others, q, ql) {
+    const n = l.stops.length; if (n < 2) return null;
+    let sh = null, qs = null, cnt = null;
+    for (const m of others) {
+      if (m === l || !m.stops || m.stops.length < 2 || (m.status === 'construction' && m !== l)) continue;
+      const R = meters(Math.min(MODES[l.mode].catch, MODES[m.mode].catch) * 0.75);
+      const nr = l.stops.map((st) => this.near(m, st.mx, st.my, R));
+      if (nr.filter((x) => x >= 0).length < 2) continue;
+      if (!qs) { qs = new Float32Array(n * n); cnt = new Uint8Array(n * n); }
+      const qm = q(m);
+      for (let i = 0; i < n; i++) if (nr[i] >= 0) for (let j = 0; j < n; j++) if (j !== i && nr[j] >= 0 && nr[j] !== nr[i]) { qs[i * n + j] += qm; cnt[i * n + j]++; }
+    }
+    if (!qs) return null;
+    sh = new Float32Array(n * n).fill(1);
+    for (let k = 0; k < n * n; k++) if (cnt[k]) sh[k] = (ql / (ql + qs[k])) * Math.min(1.25, 1 + 0.12 * cnt[k]);
+    return sh;
+  },
+  /** facteur moyen pour une estimation avant construction (qualité égale supposée) */
+  estimateFactor(fake, od, skip) {
+    const sh = this.forLine(fake, G.s.lines.filter((m) => m !== skip), () => 1, 1);
+    if (!sh) return 1;
+    let a = 0, b = 0; for (let k = 0; k < od.length; k++) { a += od[k] * sh[k]; b += od[k]; }
+    return b ? a / b : 1;
+  },
+};
+
+/* ---------- paliers, mandat et étoiles ---------- */
+const PALIERS = [
+  { pax: 0, name: 'Réseau en projet', unlock: ['bus', 'boat'] },
+  { pax: 2000, name: 'Réseau naissant', unlock: ['metro'], prime: 300000 },
+  { pax: 10000, name: 'Réseau urbain', unlock: ['ter'], prime: 1e6 },
+  { pax: 30000, name: 'Métropole', prime: 3e6 },
+  { pax: 80000, name: 'Capitale du transport', prime: 8e6 },
+];
+const MANDAT_YEARS = 6;
+const STARS = [
+  { name: 'Un réseau qui tient', txt: 'au moins 2 000 voyageurs par jour, sans mise sous tutelle' },
+  { name: 'Un réseau qui compte', txt: '10 000 voyageurs par jour et des relations avec la mairie au moins « Neutre »' },
+  { name: 'Un réseau modèle', txt: '50 000 voyageurs par jour, mairie et climat social « Bon », et une valeur nette (trésorerie − dette) au moins double du capital de départ' },
+];
+const Progress = {
+  /** voyageurs par jour (moyenne 7 jours) */
+  pax7() { const ds = G.s.days.filter((d) => !d.offline).slice(0, 7); return ds.length ? ds.reduce((a, d) => a + d.pax, 0) / ds.length : 0; },
+  level() { if (G.s.palier === undefined) this.daily(); return G.s.palier || 0; },
+  /** un mode est-il débloqué ? (tout l'est en argent illimité ou s'il a déjà des lignes) */
+  unlocked(mode) {
+    const s = G.s;
+    if (s.unlimited || s.allModes || this.dev()) return true;
+    if (s.lines.some((l) => l.mode === mode)) return true;
+    for (let k = 0; k <= this.level(); k++) if ((PALIERS[k].unlock || []).includes(mode)) return true;
+    return false;
+  },
+  /** banc d'essai : tous les modes ouverts */
+  dev() { if (this._dev === undefined) { try { this._dev = localStorage.getItem('corr.allModes') === '1'; } catch (e) { this._dev = false; } } return this._dev; },
+  /** palier qui débloque ce mode */
+  unlockAt(mode) { return PALIERS.find((p) => (p.unlock || []).includes(mode)); },
+  mandatEnd() { const s = G.s; return (s.t0 > -1e8 ? s.t0 : s.min) + MANDAT_YEARS * 365 * 1440; },
+  daily() {
+    const s = G.s;
+    if (s.palier === undefined) {
+      // parties en cours : palier atteint d'après la fréquentation actuelle, sans prime
+      s.palier = 0; const p = this.pax7();
+      while (s.palier + 1 < PALIERS.length && p >= PALIERS[s.palier + 1].pax) s.palier++;
+      s.stars = s.stars || [false, false, false];
+      if (s.mandatEnd === undefined) s.mandatEnd = s.t0 > -1e8 ? this.mandatEnd() : s.min + MANDAT_YEARS * 365 * 1440;
+      return;
+    }
+    if (s.mandatEnd === undefined) s.mandatEnd = this.mandatEnd();
+    const p = this.pax7();
+    while (s.palier + 1 < PALIERS.length && p >= PALIERS[s.palier + 1].pax) {
+      s.palier++;
+      const P = PALIERS[s.palier], prime = Math.round((P.prime || 0) * s.costMul);
+      if (prime && !s.unlimited) { s.money += prime; s.today.evIn += prime; }
+      const un = (P.unlock || []).map((m) => MODES[m].label).join(', ');
+      Notif.push({ title: 'Palier atteint : ' + P.name, desc: `${fmtInt(P.pax)} voyageurs par jour. ${prime ? 'Prime de l’autorité organisatrice : ' + fmtEur(prime) + '. ' : ''}${un ? 'Débloqué : ' + un + '. ' : ''}Le plafond d’emprunt augmente.`, tone: 2, cat: 'eco', glyph: '★' }, 'now');
+      if (G.ready) UI.toast('Palier atteint : ' + P.name + (un ? ' · ' + un + ' débloqué' : ''), 'ok');
+    }
+    // étoiles : vérifiées au 1er de chaque mois, tant que le mandat court
+    const date = Time.date(s.min);
+    if (date.getUTCDate() === 1 && s.min <= s.mandatEnd && !s.gameOver) this.checkStars();
+    if (s.min > s.mandatEnd && !s.mandatDone) {
+      s.mandatDone = true; this.checkStars();
+      UI.modal(`<h2>Fin du mandat</h2><p class="sub">Six ans à la tête du réseau de ${esc(s.city.nom)}. Voici votre bilan. La partie continue : le réseau reste à vous.</p>${this.starsHtml()}<button class="btn primary wide" data-act="closeModal">Continuer</button>`);
+    }
+  },
+  conds() {
+    const s = G.s, p = this.pax7(), net = s.money - Eco.debt();
+    return [
+      p >= 2000 && !s.gameOver,
+      p >= 10000 && (s.mairie || 0) >= -0.15,
+      p >= 50000 && (s.mairie || 0) >= 0.15 && (s.social || 0) >= 0.15 && net >= 2 * DIFF[s.diff].money,
+    ];
+  },
+  checkStars() {
+    const s = G.s; s.stars = s.stars || [false, false, false];
+    const c = this.conds();
+    c.forEach((ok, k) => {
+      if (ok && !s.stars[k] && (k === 0 || s.stars[k - 1] || c[k - 1])) {
+        s.stars[k] = true;
+        Notif.push({ title: 'Étoile gagnée : ' + STARS[k].name, desc: 'Objectif du mandat : ' + STARS[k].txt + '.', tone: 2, cat: 'eco', glyph: '★' }, 'now');
+        if (G.ready) UI.toast('★ ' + STARS[k].name, 'ok');
+      }
+    });
+  },
+  stars() { return (G.s.stars || []).filter(Boolean).length; },
+  starsHtml() {
+    const s = G.s, c = this.conds();
+    return `<div class="mandat">${STARS.map((x, k) => `<div class="mstar ${s.stars && s.stars[k] ? 'on' : ''}"><i>★</i><span><b>${x.name}</b><small>${x.txt}</small></span>${s.stars && s.stars[k] ? '<em class="tag ok">Obtenue</em>' : c[k] ? '<em class="tag">Le 1er du mois</em>' : ''}</div>`).join('')}</div>`;
+  },
+  /** encart pour les statistiques */
+  html() {
+    const s = G.s, p = this.pax7(), L = this.level(), next = PALIERS[L + 1];
+    const left = Math.max(0, Math.round((s.mandatEnd - s.min) / 1440 / 365 * 10) / 10);
+    const bar = next ? `<div class="pbar"><i style="width:${Math.min(100, (p - PALIERS[L].pax) / (next.pax - PALIERS[L].pax) * 100).toFixed(1)}%"></i></div><small>${fmtInt(p)} / ${fmtInt(next.pax)} voyageurs par jour (moyenne 7 jours) · prochain palier : <b>${next.name}</b>${(next.unlock || []).length ? ' · débloque ' + next.unlock.map((m) => MODES[m].label).join(', ') : ''}${next.prime ? ' · prime ' + fmtEur(next.prime * s.costMul) : ''}</small>` : '<small>Dernier palier atteint. Bravo !</small>';
+    return `<div class="palier"><b>${PALIERS[L].name}</b>${bar}</div>
+      <p class="sub">${s.mandatDone ? 'Mandat terminé' : 'Mandat : encore ' + String(left).replace('.', ',') + ' an' + (left >= 2 ? 's' : '')} · ${this.stars()} étoile${this.stars() > 1 ? 's' : ''} sur 3. Les objectifs sont vérifiés le 1er de chaque mois.</p>${this.starsHtml()}`;
+  },
+};
+
+/* ---------- lisibilité : feu par ligne, bilan mensuel, alerte de trésorerie ---------- */
+const Advice = {
+  /** feu de la ligne : vert, orange, rouge, et la cause principale */
+  line(l) {
+    const h = l.hist[0];
+    if (!h || l.status === 'construction') return null;
+    const md = MODES[l.mode], margin = h.fares + h.ads - h.ops;
+    const mecR = h.mec / Math.max(1, h.pax), x = l.prices.week / md.ref;
+    let tone = margin < 0 ? 'bad' : mecR > 0.05 || h.peak > 0.95 ? 'warn' : 'ok', why = '';
+    if (h.peak > 0.95 && mecR > 0.03) why = 'Véhicules pleins aux heures de pointe : ajoutez-en ou prenez plus grand.';
+    else if (x > 1.5) why = 'Tarif élevé : une partie des voyageurs renonce, et la mairie grince.';
+    else if (margin < 0 && h.fill < 0.12 && l.veh.length > 1) why = 'Trop de véhicules pour la demande : retirez-en ou passez la grille en « Économe ».';
+    else if (margin < 0 && (l.speedAvg || 0) < md.refKmh * 0.75) why = 'Trop lente : couloirs de bus, priorité aux feux ou tracé plus direct.';
+    else if (margin < 0) why = 'Peu de demande : prolongez-la vers des quartiers denses ou des lieux attractifs.';
+    else if (mecR > 0.05) why = 'Trop de voyageurs mécontents : attente longue ou véhicules saturés.';
+    else why = 'Ligne rentable et appréciée.';
+    return { tone, why, margin };
+  },
+  lineHtml(l) {
+    const a = this.line(l); if (!a) return '';
+    const lab = { ok: 'En forme', warn: 'À surveiller', bad: 'Déficitaire' }[a.tone];
+    return `<div class="lfeu ${a.tone}"><i></i><span><b>${lab}</b><small>${a.why}</small></span></div>`;
+  },
+  daily(d) {
+    const s = G.s;
+    if (s.unlimited) return;
+    // alerte : trésorerie épuisée dans moins de 30 jours au rythme de la semaine
+    const ds = s.days.slice(0, 7);
+    const flow = ds.length ? ds.reduce((a, x) => a + Eco.dayProfit(x) - (x.repay || 0), 0) / ds.length : 0;
+    if (flow < 0 && s.money > 0 && s.money / -flow < 30 && s.min - (s.runwayAt || -1e9) > 7 * 1440) {
+      s.runwayAt = s.min;
+      Notif.push({ title: 'Trésorerie : moins de 30 jours', desc: `Au rythme de la semaine (${fmtEur(flow)} par jour), la caisse sera vide dans ${Math.max(1, Math.round(s.money / -flow))} jours. Ouvrez la fiche Finances pour voir ce qui coûte.`, tone: -2, cat: 'eco', glyph: '€' }, 'now');
+      if (G.ready) UI.toast('Trésorerie : moins de 30 jours au rythme actuel.', 'warn');
+    }
+    // bilan du mois écoulé, le 1er
+    if (Time.date(s.min).getUTCDate() === 1 && s.days.length >= 20) {
+      const m = s.days.filter((x) => !x.offline).slice(0, 30);
+      const sum = (f) => m.reduce((a, x) => a + f(x), 0);
+      const lines = sum((x) => x.fares + x.ads + (x.taxi || 0) - x.ops - x.maint - (x.taxiOps || 0));
+      const sub = sum((x) => (x.sub || 0) - (x.overhead || 0));
+      const ev = sum((x) => (x.evIn || 0) - x.events), fin = sum((x) => x.interest + (x.repay || 0));
+      const worst = s.lines.map((l) => ({ l, a: this.line(l) })).filter((x) => x.a && x.a.tone === 'bad').sort((p, q) => p.a.margin - q.a.margin)[0];
+      const tip = worst ? `Ligne ${Lines.label(worst.l)} : ${worst.a.why}` : (s.mairie || 0) < 0 ? 'La mairie est mécontente : desservez mieux vos quartiers et gardez des tarifs raisonnables.' : 'Le réseau se porte bien : pensez au prochain palier.';
+      Notif.push({ title: 'Bilan du mois', desc: `Lignes : ${fmtEur(lines)} · versement mobilité et siège : ${fmtEur(sub)} · événements : ${fmtEur(ev)} · emprunts : −${fmtEur(fin)}. ${tip}`, tone: lines + sub + ev - fin >= 0 ? 1 : -1, cat: 'eco', glyph: '€' }, 'now');
+    }
   },
 };
 
@@ -8281,7 +8713,7 @@ const UI = {
     this.modal(`<div class="plate big"><span class="evcard-ic" style="--c:${c.col}">${esc(Events.glyph(e))}</span> ${esc(e.title)}</div>
       <p>${esc(e.q)}</p>
       ${e.v ? `<div class="chcol">${e.opts.map((o, i) => `<button class="btn" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>
-        <p class="sub chnote">Sans réponse d’ici ${Time.label(e.start).time} : « ${esc(e.opts[e.dflt ?? e.opts.length - 1].replace(/ · .*$/, ''))} ».</p>`
+        <p class="sub chnote">Sans réponse d’ici ${Time.label(e.start).time} : ${EVDEF[e.kind] && EVDEF[e.kind].generic ? 'personne ne tranche (ni dépense ni gain, un peu d’agacement)' : '« ' + esc(e.opts[e.dflt ?? e.opts.length - 1].replace(/ · .*$/, '')) + ' »'}.</p>`
       : `<div class="row2">${e.opts.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-act="evChoose" data-arg="${e.id}|${i}">${esc(o)}</button>`).join('')}</div>`}`, { pause: true, lock: true });
   },
   strikeDialog(e) {
@@ -8368,7 +8800,7 @@ const SHEETS = {
     const tab = ['sum', 'veh', 'tarif', 'amen'].includes(G.ui.lineTab) ? G.ui.lineTab : 'sum';
     const tabs = `<div class="seg ltabs">${[['sum', 'Résumé'], ['veh', 'Véhicules'], ['tarif', 'Tarifs et horaires'], ['amen', 'Aménagements']].map(([k, t]) => `<button class="${tab === k ? 'on' : ''}" data-act="lineTab" data-arg="${k}">${t}</button>`).join('')}</div>`;
     let body = '';
-    if (tab === 'sum') body = `
+    if (tab === 'sum') body = `${Advice.lineHtml(l)}
       <div class="stops">${l.stops.map((s2, i) => `<span>${i ? '<i></i>' : ''}${esc(s2.name)}</span>`).join('')}</div>
       <div class="kpis">
         <div><small>Voyageurs aujourd’hui</small><b>${fmtInt(t.pax)}</b></div>
@@ -8498,9 +8930,10 @@ const SHEETS = {
     const cards = MODE_ORDER.map((m) => {
       const hint = { bus: 'Suit les vraies routes, subit le trafic. ≈ 15-20 km/h. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. ≈ 30-35 km/h. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'De gare en gare sur les voies ferrées. Le plus rapide : jusqu’à 100 km/h, ≈ 40-75 km/h de moyenne selon l’écart entre gares.', boat: 'Sur les fleuves et canaux. Le plus lent : ≈ 10 km/h, mais apprécié des touristes. 60 k€ par ponton.' }[m];
       const cheapest = CATALOG[m][0];
+      if (!Progress.unlocked(m)) { const P = Progress.unlockAt(m); return `<button class="modecard locked" data-act="buildMode" data-arg="${m}">${pict(m)}<span><b>${MODES[m].label}</b><small>Débloqué au palier « ${P.name} » : ${fmtInt(P.pax)} voyageurs par jour (vous : ${fmtInt(Progress.pax7())}).</small></span></button>`; }
       return `<button class="modecard" data-act="buildMode" data-arg="${m}">${pict(m)}<span><b>${MODES[m].label}</b><small>${hint}</small><small>Véhicules dès ${fmtEur(cheapest.price * G.s.costMul)}</small></span></button>`;
     }).join('');
-    const infra = `<h3 class="sec">Infrastructures ferroviaires</h3>
+    const infra = !Progress.unlocked('ter') ? '' : `<h3 class="sec">Infrastructures ferroviaires</h3>
       <button class="modecard" data-act="railMode" data-arg="gare"><span class="pict pict-ter">GARE</span><span><b>Nouvelle gare</b><small>Posée sur une voie existante ou en pleine ville, orientable. ${fmtEur(Rail.stationCost())}.</small></span></button>
       <button class="modecard" data-act="railMode" data-arg="track"><span class="pict pict-ter">═</span><span><b>Nouvelle voie ferrée</b><small>Tracée en longues courbes, de gare en gare ou en se branchant sur les voies existantes. ${fmtEur(Rail.KM * G.s.costMul)}/km.</small></span></button>`;
     const T = Taxi.st();
@@ -8529,8 +8962,10 @@ const SHEETS = {
     const col = (x) => (x === undefined ? '—' : fmtEur(x));
     const row = (lab, a, b, neg) => `<tr><th>${lab}</th><td class="${neg ? 'neg' : ''}">${neg && a ? '−' : ''}${col(a)}</td><td class="${neg ? 'neg' : ''}">${y ? (neg && b ? '−' : '') + col(b) : '—'}</td></tr>`;
     const res = Eco.dayProfit(d), resY = y ? Eco.dayProfit(y) : undefined;
-    const loans = s.loans.map((ln) => `<div class="vrow"><div><b>${fmtEur(ln.amount)}</b><small>${(ln.rate * 100).toFixed(0)} %/an · ${fmtEur(ln.amount * ln.rate / 365)} d’intérêts/jour</small></div><div class="row2 tight"><button class="btn sm" data-act="repay" data-arg="${ln.id}|0.25">−25 %</button><button class="btn sm" data-act="repay" data-arg="${ln.id}|1">Solder</button></div></div>`).join('') || '<p class="note">Aucun emprunt en cours.</p>';
-    const offers = Eco.loanOffers().map((o, i) => `<button class="catrow" data-act="borrow" data-arg="${i}"><span><b>${o.label}</b><small>${(o.rate * 100).toFixed(0)} %/an · remboursable à tout moment</small></span><em>+${fmtEur(o.amount)}</em></button>`).join('');
+    const pct = (r) => (r * 100).toFixed(1).replace('.', ',') + ' %';
+    const loans = s.loans.map((ln) => { const mo = ln.principal ? Loans.monthly(ln) : 0; return `<div class="vrow"><div><b>${fmtEur(ln.amount)} restants</b><small>${pct(ln.rate)}/an · ${ln.years || 15} ans · mensualité ${fmtEur(mo)}</small></div><div class="row2 tight"><button class="btn sm" data-act="repay" data-arg="${ln.id}|0.25">−25 %</button><button class="btn sm" data-act="repay" data-arg="${ln.id}|1">Solder</button></div></div>`; }).join('') || '<p class="note">Aucun emprunt en cours.</p>';
+    const offers = Eco.loanOffers().map((o, i) => { const mo = Loans.monthly({ principal: o.amount, rate: o.rate, years: o.years }); return `<button class="catrow" data-act="borrow" data-arg="${i}"><span><b>${o.label}</b><small>${o.years} ans à ${pct(o.rate)} · mensualité ${fmtEur(mo)} · remboursable à tout moment</small></span><em>+${fmtEur(o.amount)}</em></button>`; }).join('');
+    const red = s.money < 0 ? `<p class="note bad">Trésorerie négative depuis ${s.redDays || 0} jour${(s.redDays || 0) > 1 ? 's' : ''} : achats bloqués, agios de 12 %/an. ${(s.redDays || 0) < 30 ? 'Plan de redressement au 30e jour.' : rules().endGame ? 'Mise sous tutelle au 90e jour.' : 'La mairie renflouera au 90e jour.'}</p>` : '';
     const ads = MODE_ORDER.map((m) => `<div class="vrow"><div><b>${MODES[m].label}</b><small>${ADS.label[s.ads[m]]}${s.ads[m] === 2 ? ' · −4 % de fréquentation' : ''}</small></div><div class="seg">${[0, 1, 2].map((k) => `<button class="${s.ads[m] === k ? 'on' : ''}" data-act="ads" data-arg="${m}|${k}">${ADS.label[k]}</button>`).join('')}</div></div>`).join('');
     const toggle = `<label class="tgl"><input type="checkbox" data-change="unlimited" ${s.unlimited ? 'checked' : ''}><span><b>Argent illimité</b><br><small>Construisez sans compter. Dépenses et recettes sont mises en pause tant que c’est activé ; votre trésorerie reprend telle quelle quand vous le désactivez.</small></span></label>`;
     if (s.unlimited) return {
@@ -8541,18 +8976,19 @@ const SHEETS = {
     };
     return {
       title: 'Finances',
-      html: `${toggle}<div class="kpis"><div><small>Trésorerie</small><b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b></div><div><small>Dette</small><b>${fmtEur(Eco.debt())}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div><div><small>Moy. 3 jours</small><b class="${Sim.avgDailyProfit() < 0 ? 'neg' : 'pos'}">${fmtEur(Sim.avgDailyProfit())}</b></div></div>
+      html: `${toggle}${red}<div class="kpis"><div><small>Trésorerie</small><b class="${s.money < 0 ? 'neg' : ''}">${fmtEur(s.money)}</b></div><div><small>Dette</small><b>${fmtEur(Eco.debt())}</b></div><div><small>Résultat du jour</small><b class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</b></div><div><small>Moy. 3 jours</small><b class="${Sim.avgDailyProfit() < 0 ? 'neg' : 'pos'}">${fmtEur(Sim.avgDailyProfit())}</b></div></div>
       ${section('Compte d’exploitation')}
       <div class="tblw"><table class="tbl"><thead><tr><th></th><th>Aujourd’hui</th><th>Hier</th></tr></thead><tbody>
       ${row('Billets', d.fares, y && y.fares)}${row('Publicité', d.ads, y && y.ads)}${s.taxi || d.taxi || (y && y.taxi) ? row('Courses de taxi', d.taxi || 0, y && (y.taxi || 0)) + row('Taxis : chauffeurs, carburant, dépôt', d.taxiOps || 0, y && (y.taxiOps || 0), true) : ''}
-      ${row('Exploitation véhicules', d.ops, y && y.ops, true)}${row('Maintenance', d.maint, y && y.maint, true)}${row('Intérêts', d.interest, y && y.interest, true)}${row('Événements (recettes)', d.evIn || 0, y && (y.evIn || 0))}${row('Événements et négociations', d.events, y && y.events, true)}
+      ${row('Versement mobilité (mairie)', d.sub || 0, y && (y.sub || 0))}${row('Exploitation véhicules', d.ops, y && y.ops, true)}${row('Maintenance', d.maint, y && y.maint, true)}${row('Frais de siège', d.overhead || 0, y && (y.overhead || 0), true)}${row('Intérêts et agios', d.interest, y && y.interest, true)}${row('Événements (recettes)', d.evIn || 0, y && (y.evIn || 0))}${row('Événements et négociations', d.events, y && y.events, true)}
       <tr class="tot"><th>Résultat</th><td class="${res < 0 ? 'neg' : 'pos'}">${fmtEur(res)}</td><td class="${resY < 0 ? 'neg' : 'pos'}">${col(resY)}</td></tr>
-      ${row('Investissements', d.capex + d.zones, y && y.capex + y.zones, true)}${row('Ventes de véhicules', d.sales, y && y.sales)}
+      ${row('Investissements', d.capex + d.zones, y && y.capex + y.zones, true)}${row('Remboursement du capital', d.repay || 0, y && (y.repay || 0), true)}${row('Ventes de véhicules', d.sales, y && y.sales)}
       </tbody></table></div>
       ${section('Résultat des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: Eco.dayProfit(x), l: Time.dayLabel(x.date) })))}
       ${section('Publicité')}<p class="sub">Panneaux dans les véhicules et les stations. Plus de pubs, plus de recettes, mais un peu moins de voyageurs.</p>${ads}
       ${section('Emprunts')}${loans}${section('Offres de la banque')}${offers}
-      <p class="note">Plafond d’endettement : ${fmtEur(Eco.maxDebt())}.</p>`,
+      <p class="note">Plafond d’endettement : ${fmtEur(Eco.maxDebt())} (${rules().debtX} ans de marge d’exploitation, au moins ${fmtEur(3e6 * s.costMul)}, plus à chaque palier). Le taux monte avec l’endettement.</p>
+      <p class="sub">Le versement mobilité est payé chaque jour par la mairie : de 0 à 30 % de vos recettes selon vos relations avec elle.</p>`,
     };
   },
 
@@ -8577,6 +9013,7 @@ const SHEETS = {
       <div><small>Pôles d’échange</small><b>${Transfers.hubs.length}</b></div>
       ${Taxi.st() ? `<div><small>Courses de taxi aujourd’hui</small><b>${fmtInt(Taxi.st().today.n)}</b></div><div><small>Taxis en circulation</small><b>${Taxi.count((t) => t.st !== 'depot' && t.st !== 'repair')} / ${Taxi.st().fleet.length}</b></div>` : ''}
     </div>
+    ${section('Paliers et mandat')}${Progress.html()}
     ${section('Relations')}${Gauges.html()}
     ${section('Voyageurs des 14 derniers jours')}${barChart(s.days.slice(0, 14).reverse().map((x) => ({ v: x.pax, l: Time.dayLabel(x.date) })), true)}
     <label class="tgl"><input type="checkbox" data-change="statsAdv" ${u.statsAdv ? 'checked' : ''}><span>Statistiques détaillées par ligne</span></label>`;
@@ -8949,7 +9386,7 @@ const Build = {
     const b = this.b;
     const path = b.segs.length ? Lines.assemble(b.stops, b.segs, b.loop) : null;
     const cost = this.editCost(path);
-    const est = path ? Lines.estimate(b.mode, b.stops, path, b.loop) : null, est0 = b.est0 ?? (b.est0 = (() => { const e0 = Lines.estimate(b.edit.mode, b.edit.stops, b.edit.path, b.edit.loop); return e0 ? e0.pax : 0; })());
+    const est = path ? Lines.estimate(b.mode, b.stops, path, b.loop, b.edit) : null, est0 = b.est0 ?? (b.est0 = (() => { const e0 = Lines.estimate(b.edit.mode, b.edit.stops, b.edit.path, b.edit.loop, b.edit); return e0 ? e0.pax : 0; })());
     const dEst = est ? est.pax - est0 : 0;
     const tools = [['add', 'Ajouter'], ['move', 'Déplacer'], ['remove', 'Retirer']].map(([k, t]) => `<button class="${b.tool === k ? 'on' : ''}" data-act="bTool" data-arg="${k}">${t}</button>`).join('');
     $('#buildbar').innerHTML = `<div class="seg bb-tools">${tools}</div>
@@ -9081,7 +9518,7 @@ const Build = {
       <h3 class="sec">Véhicules</h3>${cat}
       ${b.tuto ? `<p class="note ok">Ligne offerte par le tutoriel : 1 véhicule, passage toutes les ~${Math.max(1, Math.round(hw))} min. Vous pourrez en ajouter ensuite depuis la fiche de la ligne.</p>`
         : `<div class="vrow"><div><b>Nombre</b><small>passage toutes les ~${Math.max(1, Math.round(hw))} min</small></div><div class="stepper"><button data-act="bCount" data-arg="-1">−</button><b>${q.count}</b><button data-act="bCount" data-arg="1">+</button></div></div>`}
-      ${(() => { const est = Lines.estimate(b.mode, b.stops, q.path, b.loop); return est ? `<div class="kpis"><div><small>Voyageurs estimés</small><b>≈ ${fmtInt(Math.round(est.pax / 10) * 10)} / jour</b></div><div><small>Habitants et emplois desservis</small><b>${fmtInt(Math.round(est.pop / 100) * 100)}</b></div></div><p class="sub">Estimation un jour de semaine, avec un passage fréquent et le tarif de référence, hors correspondances.</p>` : ''; })()}
+      ${(() => { const est = Lines.estimate(b.mode, b.stops, q.path, b.loop); return est ? `<div class="kpis"><div><small>Voyageurs estimés</small><b>≈ ${fmtInt(Math.round(est.pax / 10) * 10)} / jour</b></div><div><small>Habitants et emplois desservis</small><b>${fmtInt(Math.round(est.pop / 100) * 100)}</b></div></div><p class="sub">Estimation un jour de semaine, avec un passage fréquent et le tarif de référence, hors correspondances.</p>${est.shared > 0.05 ? `<p class="note warn">Environ ${Math.round(est.shared * 100)} % de ces trajets sont déjà assurés par vos autres lignes : elles se partageront les voyageurs.</p>` : ''}` : ''; })()}
       <table class="tbl mini"><tbody><tr><th>Infrastructure</th><td>${fmtEur(q.infra)}</td></tr><tr><th>${q.count} × ${esc(md.name)}</th><td>${fmtEur(vehCost)}</td></tr><tr class="tot"><th>Total</th><td>${b.tuto ? 'offert' : fmtEur(total)}</td></tr>${b.tuto ? '' : Eco.free() ? '<tr><th>Argent illimité</th><td>gratuit</td></tr>' : `<tr><th>Trésorerie après</th><td class="${G.s.money - total < 0 ? 'neg' : ''}">${fmtEur(G.s.money - total)}</td></tr>`}</tbody></table>
       <div class="row2"><button class="btn" data-act="closeModal">Retour</button><button class="btn primary" data-act="bBuild" ${Eco.canAfford(total) ? '' : 'disabled'}>Construire</button></div>`);
   },
@@ -9109,7 +9546,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.23.0';
+const APP_VERSION = '1.24.0';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
@@ -9164,7 +9601,12 @@ const ACT = {
   taxiBuy(id) { if (Taxi.buy(id)) { Taxi.balance(Taxi.open(G.s.min)); UI.refreshSheet(); } },
   taxiSell(id) { Taxi.sell(id); UI.refreshSheet(); },
   taxiGoto() { const T = Taxi.st(); if (!T) return; UI.close(); G.map.setView([myToLat(T.depot.my), mxToLon(T.depot.mx)], 16.5); },
-  buildMode(m) { if (RailBuild.b) RailBuild.cancel(); if (Tuto.offerMode(m)) return; Build.start(m); },
+  buildMode(m) {
+    if (!Progress.unlocked(m)) { const P = Progress.unlockAt(m); UI.toast(MODES[m].label + ' : débloqué à ' + fmtInt(P.pax) + ' voyageurs par jour (palier « ' + P.name + ' »).', 'info'); return; }
+    if (RailBuild.b) RailBuild.cancel(); if (Tuto.offerMode(m)) return; Build.start(m);
+  },
+  goOverSandbox() { UI.closeModal(); Eco.setUnlimited(true); G.paused = false; UI.refreshTop(); },
+  goOverMenu() { UI.closeModal(); Save.auto(); UI.close(); Game.stop(); UI.showStart(); },
   tutoGo() { Tuto.goMain(); },
   tutoSkip() { if (!Tuto.cur) { UI.closeModal(); Tuto.st().main = Tuto.st().main === 'pending' ? 'skipped' : Tuto.st().main; return; } Tuto.skip(); },
   tutoNext() { Tuto.next(); },

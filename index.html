@@ -577,7 +577,7 @@ const nextFrame = () => new Promise((r) => { if (document.hidden) setTimeout(r, 
 const BD_KEEP = {
   roads: ['nature', 'importance', 'sens_de_circulation', 'reserve_aux_bus', 'vitesse_moyenne_vl', 'acces_vehicule_leger', 'urbain', 'nom_voie_ban_gauche', 'nom_collaboratif_gauche', 'position_par_rapport_au_sol', 'nombre_de_voies', 'largeur_de_chaussee'],
   rails: ['nature', 'etat_de_l_objet', 'vitesse_maximale', 'position_par_rapport_au_sol'],
-  water: ['navigabilite', 'classe_de_largeur', 'cpx_toponyme_de_cours_d_eau'],
+  water: ['navigabilite', 'classe_de_largeur', 'cpx_toponyme_de_cours_d_eau', 'nature', 'position_par_rapport_au_sol'],
   gares: ['nature', 'toponyme'], pois: ['categorie', 'nature', 'toponyme'],
 };
 function compactBD(d) {
@@ -736,7 +736,7 @@ const API = {
     const [roads, rails, water, gares, pois] = await Promise.all([
       this.wfsAll('BDTOPO_V3:troncon_de_route', b, 'geometrie,nature,importance,sens_de_circulation,reserve_aux_bus,vitesse_moyenne_vl,acces_vehicule_leger,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche,position_par_rapport_au_sol,nombre_de_voies,largeur_de_chaussee'),
       this.wfsAll('BDTOPO_V3:troncon_de_voie_ferree', b, 'geometrie,nature,etat_de_l_objet,vitesse_maximale,position_par_rapport_au_sol'),
-      this.wfsAll('BDTOPO_V3:troncon_hydrographique', b, 'geometrie,navigabilite,classe_de_largeur,cpx_toponyme_de_cours_d_eau'),
+      this.wfsAll('BDTOPO_V3:troncon_hydrographique', b, 'geometrie,navigabilite,classe_de_largeur,cpx_toponyme_de_cours_d_eau,nature,position_par_rapport_au_sol'),
       this.wfsAll('BDTOPO_V3:equipement_de_transport', b, 'geometrie,nature,toponyme'),
       this.wfsAll('BDTOPO_V3:zone_d_activite_ou_d_interet', b, 'geometrie,categorie,nature,toponyme'),
     ]);
@@ -757,7 +757,7 @@ const API = {
   async overpass(s, w, n, e) {
     const bb = [s, w, n, e].map((x) => x.toFixed(5)).join(',');
     const q = `[out:json][timeout:120][bbox:${bb}];
-(way[highway~"^(${HW})$"];way[railway=rail][!service];way[waterway~"^(river|canal)$"];)->.l;
+(way[highway~"^(${HW})$"];way[railway=rail][!service];way[waterway~"^(river|canal|stream|tidal_channel)$"][tunnel!~"."];)->.l;
 .l out body qt;
 .l >;
 out skel qt;
@@ -1153,7 +1153,7 @@ class World {
           if (t.usage === 'industrial' || t.usage === 'military' || t.usage === 'test') continue;
           net = this.rail; cls = 0; kmh = 120;
           const ms = parseInt(t.maxspeed, 10); if (ms > 20 && ms < 330) kmh = ms;
-        } else if (t.waterway) { net = this.water; cls = 0; kmh = 20; }
+        } else if (t.waterway) { if (t.tunnel) continue; net = this.water; cls = 0; kmh = t.waterway === 'stream' ? 10 : t.waterway === 'canal' ? 14 : 18; }
         if (!net) continue;
         const name = t.name || t.ref || '';
         // OpenStreetMap : un nœud partagé est un vrai carrefour (les ponts n'en partagent pas avec la route du dessous)
@@ -1250,11 +1250,15 @@ class World {
       for (const ln of lines(f.geometry)) addLine(this.rail, f.id, ln, 0, kmh, '', 0, 0, -1, level(p));
     }
     this.rail.version++;
-    /* fleuves et canaux navigables */
+    /* tous les cours d'eau à ciel ouvert : fleuves, rivières, canaux, ruisseaux
+       (sauf tronçons souterrains, conduites, buses et fossés) ; vitesse selon la largeur */
     for (const f of d.water.features || []) {
       const p = f.properties || {};
-      if (!(p.navigabilite === true || /50|15/.test(p.classe_de_largeur || ''))) continue;
-      for (const ln of lines(f.geometry)) addLine(this.water, f.id, ln, 0, 20, p.cpx_toponyme_de_cours_d_eau || '', 0, 0);
+      if (/foss|conduit|buse|aqueduc|souterrain/i.test(p.nature || '')) continue;
+      if (String(p.position_par_rapport_au_sol ?? '0').trim().startsWith('-')) continue;
+      const w = p.classe_de_largeur || '';
+      const kmh = /plus de 50/i.test(w) ? 20 : /15 et 50/i.test(w) ? 16 : p.navigabilite === true ? 14 : /0 et 15/i.test(w) ? 10 : 12;
+      for (const ln of lines(f.geometry)) addLine(this.water, f.id, ln, 0, kmh, p.cpx_toponyme_de_cours_d_eau || '', 0, 0);
     }
     this.water.version++;
     /* gares et lieux */
@@ -5894,7 +5898,7 @@ const TUTO_MODE_TXT = {
     done: 'Un métro demande un jour de chantier avant d’ouvrir. Rapide et capacitaire, il coûte cher au kilomètre : réservez-le aux quartiers denses.' },
   ter: { place: 'Touchez près de 2 gares reliées par une voie ferrée. Le TER ne s’arrête qu’en gare.',
     done: 'Le TER est le plus rapide sur les longues distances. Construire : « Nouvelle gare » et « Nouvelle voie ferrée » pour étendre le réseau ferré.' },
-  boat: { place: 'Touchez le fleuve ou le canal pour poser 2 pontons.',
+  boat: { place: 'Touchez un cours d’eau (surligné en bleu) pour poser 2 pontons.',
     done: 'La navette fluviale est lente mais appréciée des touristes, surtout l’été.' },
 };
 
@@ -7775,6 +7779,20 @@ const Render = {
     const b = Build.b;
     if (b) {
       const col = Build.color();
+      // navette fluviale : on montre tous les cours d'eau où poser un ponton
+      if (b.mode === 'boat' && G.w.water.nE) {
+        const wn = G.w.water;
+        ctx.beginPath();
+        for (let e = 0; e < wn.nE; e++) {
+          const a = wn.ea[e], b2 = wn.eb[e];
+          const x1 = X(wn.x[a]), y1 = Y(wn.y[a]), x2 = X(wn.x[b2]), y2 = Y(wn.y[b2]);
+          if ((x1 < -20 && x2 < -20) || (x1 > W + 20 && x2 > W + 20) || (y1 < -20 && y2 < -20) || (y1 > H + 20 && y2 > H + 20)) continue;
+          ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        }
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 9; ctx.stroke();
+        ctx.strokeStyle = 'rgba(31,111,235,.75)'; ctx.lineWidth = 4.5; ctx.stroke();
+      }
       // zone desservie autour de chaque arrêt (rayon d'attraction du mode)
       const rc = (MODES[b.mode].catch / G.mpu) * o.k;
       if (rc > 6) {
@@ -8928,7 +8946,7 @@ const SHEETS = {
 
   build() {
     const cards = MODE_ORDER.map((m) => {
-      const hint = { bus: 'Suit les vraies routes, subit le trafic. ≈ 15-20 km/h. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. ≈ 30-35 km/h. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'De gare en gare sur les voies ferrées. Le plus rapide : jusqu’à 100 km/h, ≈ 40-75 km/h de moyenne selon l’écart entre gares.', boat: 'Sur les fleuves et canaux. Le plus lent : ≈ 10 km/h, mais apprécié des touristes. 60 k€ par ponton.' }[m];
+      const hint = { bus: 'Suit les vraies routes, subit le trafic. ≈ 15-20 km/h. 8 k€ par arrêt.', metro: 'Souterrain, tracé libre. ≈ 30-35 km/h. 600 k€/km + 350 k€ par station. 1 à 2 jours de chantier.', ter: 'De gare en gare sur les voies ferrées. Le plus rapide : jusqu’à 100 km/h, ≈ 40-75 km/h de moyenne selon l’écart entre gares.', boat: 'Sur tous les cours d’eau : fleuves, rivières, canaux. Le plus lent : ≈ 10 km/h, mais apprécié des touristes. 60 k€ par ponton.' }[m];
       const cheapest = CATALOG[m][0];
       if (!Progress.unlocked(m)) { const P = Progress.unlockAt(m); return `<button class="modecard locked" data-act="buildMode" data-arg="${m}">${pict(m)}<span><b>${MODES[m].label}</b><small>Débloqué au palier « ${P.name} » : ${fmtInt(P.pax)} voyageurs par jour (vous : ${fmtInt(Progress.pax7())}).</small></span></button>`; }
       return `<button class="modecard" data-act="buildMode" data-arg="${m}">${pict(m)}<span><b>${MODES[m].label}</b><small>${hint}</small><small>Véhicules dès ${fmtEur(cheapest.price * G.s.costMul)}</small></span></button>`;
@@ -9143,12 +9161,12 @@ const Build = {
     const w = G.w;
     if (mode === 'bus' && !w.road.nE) { UI.toast('Les routes sont encore en chargement, patientez quelques secondes.', 'warn'); return; }
     if (mode === 'ter' && !w.rail.nE) { UI.toast('Aucune voie ferrée chargée dans votre territoire. Achetez des zones traversées par le train.', 'warn'); return; }
-    if (mode === 'boat' && !w.water.nE) { UI.toast('Aucun fleuve ni canal dans votre territoire pour l’instant.', 'warn'); return; }
+    if (mode === 'boat' && !w.water.nE) { UI.toast('Aucun cours d’eau dans votre territoire pour l’instant.', 'warn'); return; }
     UI.close(); UI.closeCard();
     this.b = { mode, stops: [], segs: [], loop: false, color: Lines.nextColor() };
     $('#buildbar').hidden = false; $('#nav').classList.add('dim');
     this.bar();
-    UI.toast({ bus: 'Touchez une rue pour placer chaque arrêt de bus.', metro: 'Touchez la carte pour placer les stations. Retouchez la 1re pour une ligne circulaire.', ter: 'Touchez près d’une gare pour l’ajouter.', boat: 'Touchez le fleuve pour placer les pontons.' }[mode], 'info');
+    UI.toast({ bus: 'Touchez une rue pour placer chaque arrêt de bus.', metro: 'Touchez la carte pour placer les stations. Retouchez la 1re pour une ligne circulaire.', ter: 'Touchez près d’une gare pour l’ajouter.', boat: 'Touchez un cours d’eau surligné en bleu pour placer les pontons.' }[mode], 'info');
   },
   bar() {
     const b = this.b; if (!b) return;
@@ -9227,7 +9245,7 @@ const Build = {
       st = { mx: w.rail.x[i], my: w.rail.y[i], node: i, nid: w.rail.ids[i], name: g.name || null, shared: !!ex };
     } else if (mode === 'boat') {
       const i = w.water.nearest(mx, my, 300);
-      if (i < 0) { UI.toast('Touchez directement le fleuve ou le canal.', 'warn'); return; }
+      if (i < 0) { UI.toast('Touchez directement un cours d’eau (surligné en bleu).', 'warn'); return; }
       st = { mx: w.water.x[i], my: w.water.y[i], node: i, nid: w.water.ids[i] };
     }
     const z = w.zoneAt(st.mx, st.my);
@@ -9296,7 +9314,7 @@ const Build = {
       st = { mx: w.rail.x[i], my: w.rail.y[i], node: i, nid: w.rail.ids[i], name: g.name || null };
     } else {
       const i = w.water.nearest(mx, my, 300);
-      if (i < 0) { UI.toast('Touchez directement le fleuve ou le canal.', 'warn'); return null; }
+      if (i < 0) { UI.toast('Touchez directement un cours d’eau (surligné en bleu).', 'warn'); return null; }
       st = { mx: w.water.x[i], my: w.water.y[i], node: i, nid: w.water.ids[i] };
     }
     const z = w.zoneAt(st.mx, st.my);
@@ -9546,7 +9564,7 @@ const Build = {
    ACTIONS
    ===================================================================== */
 const findLine = (id) => G.s.lines.find((l) => l.id === +id);
-const APP_VERSION = '1.24.0';
+const APP_VERSION = '1.24.1';
 const ACT = {
   nav(k) {
     if (G.ui.taxiPlace) ACT.taxiPlaceCancel();
